@@ -481,9 +481,11 @@ export const TabCosts: React.FC<TabCostsProps> = ({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as CostStatus)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
+                className={`w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs md:text-sm ${
+                  !status ? 'text-slate-500 italic' : 'text-slate-100'
+                }`}
               >
-                <option value="">-- Click để chọn --</option>
+                <option value="" disabled hidden>Click để chọn</option>
                 <option value="Chưa thực hiện">Chưa thực hiện</option>
                 <option value="Đang thực hiện">Đang thực hiện</option>
                 <option value="Hoàn thành">Hoàn thành</option>
@@ -494,9 +496,11 @@ export const TabCosts: React.FC<TabCostsProps> = ({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as CostCategory)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
+                className={`w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs md:text-sm ${
+                  !category ? 'text-slate-500 italic' : 'text-slate-100'
+                }`}
               >
-                <option value="">-- Click để chọn --</option>
+                <option value="" disabled hidden>Click để chọn</option>
                 <option value="TVXD">TVXD (Tư vấn XD)</option>
                 <option value="XD">XD (Xây lắp)</option>
                 <option value="K">K (Chi phí khác)</option>
@@ -535,7 +539,7 @@ export const TabCosts: React.FC<TabCostsProps> = ({
                 options={companyOptions}
                 value={contractor}
                 onChange={(val) => setContractor(val)}
-                placeholder="-- Click để chọn hoặc nhập tên nhà thầu --"
+                placeholder="Click để chọn hoặc nhập tên nhà thầu"
                 allowCustomInput={true}
               />
             </div>
@@ -560,18 +564,20 @@ export const TabCosts: React.FC<TabCostsProps> = ({
                 placeholder="0"
               />
               <div>
-                <label className="block text-slate-300 mb-1.5 font-medium text-xs md:text-sm">
-                  Tỷ lệ giảm thầu (%)
+                <label className={`block mb-1.5 font-medium text-xs md:text-sm ${isFee ? 'text-slate-500' : 'text-slate-300'}`}>
+                  Tỷ lệ giảm thầu (%) {isFee && <span className="text-[11px] text-slate-500 italic font-normal">(Không áp dụng)</span>}
                 </label>
-                <div
-                  className={`w-full border rounded-lg py-2 px-3 font-mono font-bold text-xs md:text-sm ${
+                <input
+                  type="text"
+                  disabled={true}
+                  value={isFee ? '' : (discountRate > 0 ? `${String(discountRate).replace('.', ',')}%` : '0%')}
+                  placeholder={isFee ? 'Không áp dụng đối với Phí' : '0%'}
+                  className={`w-full border rounded-lg px-3 py-2 font-mono font-bold text-xs md:text-sm placeholder:italic placeholder:text-slate-500 ${
                     isFee
-                      ? 'bg-slate-900/60 border-slate-800 text-slate-500 cursor-not-allowed'
+                      ? 'bg-slate-900/60 border-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
                       : 'bg-[#0b1222] border-[#232f4e] text-blue-400'
                   }`}
-                >
-                  {isFee ? '— (Không áp dụng)' : (discountRate > 0 ? `${String(discountRate).replace('.', ',')}%` : '0%')}
-                </div>
+                />
               </div>
             </div>
           </div>
@@ -601,11 +607,13 @@ export const TabCosts: React.FC<TabCostsProps> = ({
                 disabled={isFee}
                 value={isFee ? '' : biddingForm}
                 onChange={(e) => setBiddingForm(e.target.value as BiddingForm)}
-                className={`w-full border rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm ${
-                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                className={`w-full border rounded-lg px-3 py-2 text-xs md:text-sm ${
+                  isFee
+                    ? 'bg-slate-900/60 border-slate-800 text-slate-500 opacity-50 cursor-not-allowed italic'
+                    : (!biddingForm ? 'text-slate-500 italic bg-[#080d1a] border-[#232f4e]' : 'text-slate-100 bg-[#080d1a] border-[#232f4e]')
                 }`}
               >
-                <option value="">-- Click để chọn --</option>
+                <option value="" disabled hidden>{isFee ? 'Không áp dụng đối với Phí' : 'Click để chọn'}</option>
                 <option value="Chỉ định thầu rút gọn">Chỉ định thầu rút gọn</option>
                 <option value="Chỉ định thầu">Chỉ định thầu</option>
                 <option value="Đấu thầu rộng rãi">Đấu thầu rộng rãi</option>
@@ -619,11 +627,13 @@ export const TabCosts: React.FC<TabCostsProps> = ({
                 disabled={isFee}
                 value={isFee ? '' : biddingMethod}
                 onChange={(e) => setBiddingMethod(e.target.value as BiddingMethod)}
-                className={`w-full border rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm ${
-                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                className={`w-full border rounded-lg px-3 py-2 text-xs md:text-sm ${
+                  isFee
+                    ? 'bg-slate-900/60 border-slate-800 text-slate-500 opacity-50 cursor-not-allowed italic'
+                    : (!biddingMethod ? 'text-slate-500 italic bg-[#080d1a] border-[#232f4e]' : 'text-slate-100 bg-[#080d1a] border-[#232f4e]')
                 }`}
               >
-                <option value="">-- Click để chọn --</option>
+                <option value="" disabled hidden>{isFee ? 'Không áp dụng đối với Phí' : 'Click để chọn'}</option>
                 <option value="Không áp dụng">Không áp dụng</option>
                 <option value="01 giai đoạn 01 túi hồ sơ">01 giai đoạn 01 túi hồ sơ</option>
                 <option value="01 giai đoạn 02 túi hồ sơ">01 giai đoạn 02 túi hồ sơ</option>
@@ -671,14 +681,20 @@ export const TabCosts: React.FC<TabCostsProps> = ({
                 disabled={isFee}
                 value={isFee ? '' : contractType}
                 onChange={(e) => setContractType(e.target.value as ContractType)}
-                className={`w-full border rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm ${
-                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                className={`w-full border rounded-lg px-3 py-2 text-xs md:text-sm ${
+                  isFee
+                    ? 'bg-slate-900/60 border-slate-800 text-slate-500 opacity-50 cursor-not-allowed italic'
+                    : (!contractType ? 'text-slate-500 italic bg-[#080d1a] border-[#232f4e]' : 'text-slate-100 bg-[#080d1a] border-[#232f4e]')
                 }`}
               >
-                <option value="">-- Click để chọn --</option>
+                <option value="" disabled hidden>{isFee ? 'Không áp dụng đối với Phí' : 'Click để chọn'}</option>
                 <option value="Trọn gói">Trọn gói</option>
                 <option value="Đơn giá cố định">Đơn giá cố định</option>
                 <option value="Đơn giá điều chỉnh">Đơn giá điều chỉnh</option>
+                <option value="Thời gian">Thời gian</option>
+                <option value="Chi phí cộng phí">Chi phí cộng phí</option>
+                <option value="Hợp đồng theo tỷ lệ phần trăm">Hợp đồng theo tỷ lệ phần trăm</option>
+                <option value="Hợp đồng hỗn hợp">Hợp đồng hỗn hợp</option>
               </select>
             </div>
           </div>

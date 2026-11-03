@@ -527,9 +527,11 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
               <select
                 value={adjustmentType}
                 onChange={(e) => setAdjustmentType(e.target.value as AppendixAdjustmentType)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg px-3 py-2 text-slate-100 text-xs"
+                className={`w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg px-3 py-2 text-xs ${
+                  !adjustmentType ? 'text-slate-500 italic' : 'text-slate-100'
+                }`}
               >
-                <option value="">-- Click để chọn --</option>
+                <option value="" disabled hidden>Click để chọn</option>
                 <option value="Giá trị">Chỉ điều chỉnh Giá trị</option>
                 <option value="Tiến độ">Chỉ điều chỉnh Tiến độ</option>
                 <option value="Giá trị & Tiến độ">Điều chỉnh cả Giá trị & Tiến độ</option>

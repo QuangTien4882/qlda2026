@@ -78,7 +78,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
             setSearchTerm('');
           }}
           placeholder={placeholder}
-          className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg pl-3 pr-16 py-2 text-slate-100 text-xs md:text-sm leading-relaxed"
+          className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg pl-3 pr-16 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500 text-xs md:text-sm leading-relaxed"
         />
 
         <div className="absolute right-2 flex items-center gap-1 text-slate-400">

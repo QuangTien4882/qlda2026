@@ -366,7 +366,7 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
                 options={costPackageOptions}
                 value={packageName}
                 onChange={handleSelectPackage}
-                placeholder="-- Click để chọn hoặc gõ tìm kiếm nội dung chi phí --"
+                placeholder="Click để chọn hoặc gõ tìm kiếm nội dung chi phí"
                 allowCustomInput={true}
               />
             </div>

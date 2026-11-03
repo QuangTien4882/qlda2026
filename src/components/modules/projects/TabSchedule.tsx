@@ -546,9 +546,11 @@ export const TabSchedule: React.FC<TabScheduleProps> = ({
               <select
                 value={phase}
                 onChange={(e) => setPhase(e.target.value as PlanPhase)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
+                className={`w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs md:text-sm ${
+                  !phase ? 'text-slate-500 italic' : 'text-slate-100'
+                }`}
               >
-                <option value="">-- Click để chọn --</option>
+                <option value="" disabled hidden>Click để chọn</option>
                 <option value="Chuẩn bị đầu tư">Chuẩn bị đầu tư</option>
                 <option value="Thực hiện đầu tư">Thực hiện đầu tư</option>
                 <option value="Kết thúc xây dựng">Kết thúc xây dựng</option>
@@ -594,9 +596,11 @@ export const TabSchedule: React.FC<TabScheduleProps> = ({
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as PlanStatus)}
-              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
+              className={`w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs md:text-sm ${
+                !status ? 'text-slate-500 italic' : 'text-slate-100'
+              }`}
             >
-              <option value="">-- Click để chọn --</option>
+              <option value="" disabled hidden>Click để chọn</option>
               <option value="Chưa thực hiện">Chưa thực hiện</option>
               <option value="Đang thực hiện">Đang thực hiện</option>
               <option value="Hoàn thành">Hoàn thành</option>

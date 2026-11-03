@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   formatCustomVnDate,
   parseCustomVnDate,
@@ -37,7 +38,9 @@ export const VnDateInput: React.FC<VnDateInputProps> = ({
   inputClassName = '',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const [isOpenCalendar, setIsOpenCalendar] = useState(false);
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({});
 
   // Parse ngày ban đầu nếu có giá trị
   const initialDateObj = useMemo(() => {
@@ -63,21 +66,71 @@ export const VnDateInput: React.FC<VnDateInputProps> = ({
     }
   }, [initialDateObj]);
 
-  // Đóng lịch khi click ra ngoài
+  // Cập nhật vị trí Popup Datepicker thông minh (tự động mở lên trên nếu ở gần đáy màn hình/modal)
+  const updatePopupPosition = () => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const calendarWidth = 310;
+    const calendarHeight = 320;
+
+    let left = rect.left;
+    if (left + calendarWidth > window.innerWidth - 12) {
+      left = Math.max(12, rect.right - calendarWidth);
+    }
+    if (left < 12) left = 12;
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    let top: number;
+    // Nếu phía dưới không đủ chỗ (dưới 320px) và phía trên nhiều chỗ hơn -> Mở NGƯỢC LÊN TRÊN
+    if (spaceBelow < calendarHeight + 10 && spaceAbove > spaceBelow) {
+      top = Math.max(10, rect.top - calendarHeight - 6);
+    } else {
+      top = rect.bottom + 6;
+    }
+
+    setPopupStyle({
+      position: 'fixed',
+      top: `${top}px`,
+      left: `${left}px`,
+      zIndex: 99999,
+    });
+  };
+
+  // Lắng nghe sự kiện scroll, resize và click outside khi mở popup
   useEffect(() => {
+    if (!isOpenCalendar || disabled) return;
+
+    updatePopupPosition();
+
+    const handleScrollOrResize = () => {
+      updatePopupPosition();
+    };
+
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        popupRef.current &&
+        !popupRef.current.contains(target)
+      ) {
         setIsOpenCalendar(false);
       }
     };
 
-    if (isOpenCalendar) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
+
     return () => {
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isOpenCalendar]);
+  }, [isOpenCalendar, disabled]);
 
   // Điều hướng tháng trước / tháng sau
   const handlePrevMonth = () => {
@@ -171,7 +224,7 @@ export const VnDateInput: React.FC<VnDateInputProps> = ({
   return (
     <div ref={containerRef} className={`relative w-full ${className}`}>
       {label && (
-        <label className="block text-xs md:text-sm font-medium text-slate-300 mb-1.5">
+        <label className={`block text-xs md:text-sm font-medium mb-1.5 ${disabled ? 'text-slate-500' : 'text-slate-300'}`}>
           {label} {required && <span className="text-rose-400">*</span>}
         </label>
       )}
@@ -184,23 +237,26 @@ export const VnDateInput: React.FC<VnDateInputProps> = ({
           onChange={handleInputChange}
           onClick={() => !disabled && setIsOpenCalendar((prev) => !prev)}
           placeholder={placeholder}
-          className={`w-full bg-[#0b1222] border rounded-lg py-2 pl-3 pr-10 text-slate-100 placeholder:italic placeholder:text-slate-500 font-mono text-xs md:text-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+          className={`w-full bg-[#0b1222] border rounded-lg py-2 pl-3 ${
+            disabled ? 'pr-3' : 'pr-10'
+          } text-slate-100 placeholder:italic placeholder:text-slate-500 font-mono text-xs md:text-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
             error
               ? 'border-rose-500/80 focus:ring-rose-500'
               : 'border-[#232f4e] hover:border-slate-500 focus:border-blue-500'
-          } ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-900/60' : 'cursor-pointer'} ${inputClassName}`}
+          } ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-900/60 border-slate-800' : 'cursor-pointer'} ${inputClassName}`}
         />
 
-        {/* Nút icon lịch mở DatePicker */}
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => !disabled && setIsOpenCalendar((prev) => !prev)}
-          className="absolute right-2.5 p-1 text-slate-400 hover:text-blue-400 rounded transition-colors focus:outline-none"
-          title="Click để mở lịch chuẩn Việt Nam"
-        >
-          <CalendarIcon size={16} />
-        </button>
+        {/* Nút icon lịch mở DatePicker (ẩn khi disabled để đồng bộ với các ô text disabled khác) */}
+        {!disabled && (
+          <button
+            type="button"
+            onClick={() => setIsOpenCalendar((prev) => !prev)}
+            className="absolute right-2.5 p-1 text-slate-400 hover:text-blue-400 rounded transition-colors focus:outline-none"
+            title="Click để mở lịch chuẩn Việt Nam"
+          >
+            <CalendarIcon size={16} />
+          </button>
+        )}
       </div>
 
       {error ? (
@@ -209,10 +265,12 @@ export const VnDateInput: React.FC<VnDateInputProps> = ({
         <p className="mt-1 text-xs text-slate-400">{helperText}</p>
       ) : null}
 
-      {/* POPUP LỊCH CHUẨN TIẾNG VIỆT */}
-      {isOpenCalendar && !disabled && (
+      {/* POPUP LỊCH CHUẨN TIẾNG VIỆT - SỬ DỤNG PORTAL TRÁNH BỊ OVERFLOW/CUT-OFF */}
+      {isOpenCalendar && !disabled && createPortal(
         <div 
-          className="absolute z-[120] left-0 mt-1.5 p-3.5 bg-[#0d162b] border border-[#23355c] rounded-2xl shadow-2xl w-[290px] sm:w-[310px] animate-fadeIn select-none"
+          ref={popupRef}
+          style={popupStyle}
+          className="p-3.5 bg-[#0d162b] border border-[#23355c] rounded-2xl shadow-2xl w-[295px] sm:w-[310px] animate-fadeIn select-none"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header Datepicker: Nút chuyển tháng + Chọn nhanh Tháng + Chọn nhanh Năm */}
@@ -349,7 +407,8 @@ export const VnDateInput: React.FC<VnDateInputProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -470,9 +470,11 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
               <select
                 value={workType}
                 onChange={(e) => setWorkType(e.target.value as ProjectType)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
+                className={`w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs md:text-sm ${
+                  !workType ? 'text-slate-500 italic' : 'text-slate-100'
+                }`}
               >
-                <option value="">-- Click để chọn --</option>
+                <option value="" disabled hidden>Click để chọn</option>
                 <option value="Giao thông">Giao thông</option>
                 <option value="Hạ tầng kỹ thuật">Hạ tầng kỹ thuật</option>
                 <option value="Phục vụ NN & MT">Phục vụ NN & MT</option>
@@ -485,9 +487,11 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
               <select
                 value={workLevel}
                 onChange={(e) => setWorkLevel(e.target.value as ProjectLevel)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
+                className={`w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs md:text-sm ${
+                  !workLevel ? 'text-slate-500 italic' : 'text-slate-100'
+                }`}
               >
-                <option value="">-- Click để chọn --</option>
+                <option value="" disabled hidden>Click để chọn</option>
                 <option value="Cấp I">Cấp I</option>
                 <option value="Cấp II">Cấp II</option>
                 <option value="Cấp III">Cấp III</option>
