@@ -6,7 +6,10 @@ import { AppButton } from '../../common/AppButton';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { VnNumberInput } from '../../common/VnNumberInput';
 import { VnDateInput } from '../../common/VnDateInput';
+import { SearchableSelect, SearchableOption } from '../../common/SearchableSelect';
 import { formatVnNumber } from '../../../utils/numberUtils';
+import { useData } from '../../../context/DataContext';
+import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 interface TabInspectionsProps {
   inspections: InspectionItem[];
@@ -23,6 +26,9 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
   onUpdate,
   onDelete,
 }) => {
+  const { costPackages } = useData();
+  const projectPackages = costPackages[projectId] || [];
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InspectionItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<InspectionItem | null>(null);
@@ -30,6 +36,8 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
   // Form states
   const [stt, setStt] = useState(inspections.length + 1);
   const [packageName, setPackageName] = useState('');
+  const [costPackageId, setCostPackageId] = useState<string>('');
+  const [contractValue, setContractValue] = useState<number>(0);
   const [inspectionRound, setInspectionRound] = useState('Đợt 1');
   const [inspectionDate, setInspectionDate] = useState('18/01/2026');
   const [inspectionValue, setInspectionValue] = useState(0);
@@ -42,12 +50,49 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
       ? Number(((paymentValue / inspectionValue) * 100).toFixed(2))
       : 0;
 
+  // Danh mục gói thầu từ Tab 3: Chi phí để chọn nhanh
+  const costPackageOptions: SearchableOption[] = projectPackages.map((pkg) => ({
+    value: pkg.content,
+    label: pkg.content,
+    subLabel: `Giá trị HĐ: ${formatVnNumber(pkg.contractValue)} đ • Nhà thầu: ${pkg.contractor || 'Chưa chọn'}`,
+    badge: pkg.contractNumber ? `Số HĐ: ${pkg.contractNumber}` : pkg.category,
+    badgeColor: 'blue',
+    extraData: pkg,
+  }));
+
+  // Gói thầu đang được gắn với đợt nghiệm thu này
+  const targetPackage = projectPackages.find(
+    (p) => (costPackageId && p.id === costPackageId) || p.content.trim().toLowerCase() === packageName.trim().toLowerCase()
+  );
+  const activeContractValue = targetPackage?.contractValue || contractValue || 0;
+
+  // Lấy các đợt nghiệm thu khác của cùng gói thầu này (để tính cộng dồn)
+  const otherInspections = inspections.filter((i) => {
+    if (editingItem && i.id === editingItem.id) return false;
+    if (targetPackage && i.costPackageId === targetPackage.id) return true;
+    return i.packageName.trim().toLowerCase() === packageName.trim().toLowerCase();
+  });
+
+  const prevInspectionSum = otherInspections.reduce((sum, i) => sum + (Number(i.inspectionValue) || 0), 0);
+  const prevPaymentSum = otherInspections.reduce((sum, i) => sum + (Number(i.paymentValue) || 0), 0);
+
+  const totalProjectedInspection = prevInspectionSum + (Number(inspectionValue) || 0);
+  const totalProjectedPayment = prevPaymentSum + (Number(paymentValue) || 0);
+
+  const remainingInspectionQuota = Math.max(0, activeContractValue - prevInspectionSum);
+  const isOverContract = activeContractValue > 0 && totalProjectedInspection > activeContractValue;
+  const isOverContractPayment = activeContractValue > 0 && totalProjectedPayment > activeContractValue;
+  const excessInspectionAmount = totalProjectedInspection - activeContractValue;
+  const excessPaymentAmount = totalProjectedPayment - activeContractValue;
+
   const handleOpenAdd = () => {
     const nextStt =
       inspections.length > 0 ? Math.max(...inspections.map((i) => Number(i.stt) || 0)) + 1 : 1;
     setEditingItem(null);
     setStt(nextStt);
     setPackageName('');
+    setCostPackageId('');
+    setContractValue(0);
     setInspectionRound(`Đợt ${nextStt}`);
     setInspectionDate('18/01/2026');
     setInspectionValue(0);
@@ -60,12 +105,37 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
     setEditingItem(item);
     setStt(item.stt);
     setPackageName(item.packageName);
+    const matched = projectPackages.find(
+      (p) => p.id === item.costPackageId || p.content.trim().toLowerCase() === item.packageName.trim().toLowerCase()
+    );
+    setCostPackageId(item.costPackageId || matched?.id || '');
+    setContractValue(item.contractValue || matched?.contractValue || 0);
     setInspectionRound(item.inspectionRound);
     setInspectionDate(item.inspectionDate);
     setInspectionValue(item.inspectionValue);
     setPaymentValue(item.paymentValue);
     setNote(item.note || '');
     setModalOpen(true);
+  };
+
+  const handleSelectPackage = (value: string, selectedOption?: SearchableOption) => {
+    setPackageName(value);
+    if (selectedOption?.extraData) {
+      const pkg = selectedOption.extraData;
+      setCostPackageId(pkg.id);
+      setContractValue(pkg.contractValue || 0);
+    } else {
+      const matched = projectPackages.find(
+        (p) => p.content.trim().toLowerCase() === value.trim().toLowerCase()
+      );
+      if (matched) {
+        setCostPackageId(matched.id);
+        setContractValue(matched.contractValue || 0);
+      } else {
+        setCostPackageId('');
+        setContractValue(0);
+      }
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -77,6 +147,8 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
       projectId,
       stt,
       packageName: packageName.trim(),
+      costPackageId: costPackageId || targetPackage?.id,
+      contractValue: activeContractValue,
       inspectionRound: inspectionRound.trim(),
       inspectionDate: inspectionDate.trim(),
       inspectionValue,
@@ -93,7 +165,7 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
     setModalOpen(false);
   };
 
-  // Cấu hình các cột theo yêu cầu số 5
+  // Cấu hình các cột theo yêu cầu
   const columns: AdvancedColumn<InspectionItem>[] = [
     {
       id: 'stt',
@@ -107,10 +179,41 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
     {
       id: 'packageName',
       title: 'Tên gói thầu',
-      width: 320,
+      width: 340,
       minWidth: 25,
       pinned: true,
-      render: (item) => <span className="font-semibold text-slate-100">{item.packageName}</span>,
+      render: (item) => {
+        const matched = projectPackages.find(
+          (p) => p.id === item.costPackageId || p.content.trim().toLowerCase() === item.packageName.trim().toLowerCase()
+        );
+        const pkgVal = matched?.contractValue || item.contractValue || 0;
+
+        // Tổng các đợt nghiệm thu của gói thầu này trong danh sách
+        const allPkgInspections = inspections.filter(
+          (i) => (matched && i.costPackageId === matched.id) || i.packageName.trim().toLowerCase() === item.packageName.trim().toLowerCase()
+        );
+        const totalInspectionForPkg = allPkgInspections.reduce((s, i) => s + (Number(i.inspectionValue) || 0), 0);
+        const isPackageOver = pkgVal > 0 && totalInspectionForPkg > pkgVal;
+
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="font-semibold text-slate-100">{item.packageName}</span>
+            {pkgVal > 0 && (
+              <div className="flex items-center gap-1.5 text-[11px]">
+                {isPackageOver ? (
+                  <span className="inline-flex items-center gap-1 text-rose-400 font-medium bg-rose-950/60 px-1.5 py-0.2 rounded border border-rose-800/60 animate-pulse">
+                    ⚠️ Vượt HĐ (+{formatVnNumber(totalInspectionForPkg - pkgVal)} đ)
+                  </span>
+                ) : (
+                  <span className="text-emerald-400/90 font-mono text-[11px]">
+                    HĐ: {formatVnNumber(pkgVal)} đ ({((totalInspectionForPkg / pkgVal) * 100).toFixed(0)}%)
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: 'inspectionRound',
@@ -197,7 +300,7 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
         emptyMessage="Chưa có đợt nghiệm thu / thanh toán nào. Bấm 'Thêm mới' ở góc trên để tạo đợt nghiệm thu."
       />
 
-      {/* Modal Thêm / Sửa - Cấp 2 (Bằng 90% Cấp 1 theo yêu cầu 4) */}
+      {/* Modal Thêm / Sửa - Cấp 2 */}
       <AppModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -228,14 +331,16 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
             <div className="sm:col-span-3">
               <label className="block text-slate-300 mb-1">
                 Tên gói thầu <span className="text-rose-400">*</span>
+                <span className="text-slate-400 font-normal text-[11px] ml-2">
+                  (Liên kết từ tab 3. Nội dung chi phí)
+                </span>
               </label>
-              <input
-                type="text"
-                required
+              <SearchableSelect
+                options={costPackageOptions}
                 value={packageName}
-                onChange={(e) => setPackageName(e.target.value)}
-                placeholder="Ví dụ: Gói thầu số 18: Thi công xây lắp..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                onChange={handleSelectPackage}
+                placeholder="Chọn gói thầu hoặc gõ tìm kiếm..."
+                allowCustomInput={true}
               />
             </div>
           </div>
@@ -262,18 +367,98 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <VnNumberInput
-              label="Giá trị NT (đồng)"
+              label="Giá trị NT đợt này (đồng)"
               value={inspectionValue}
               onChange={(val) => setInspectionValue(val)}
               suffix="đồng"
             />
             <VnNumberInput
-              label="Giá trị TT (đồng)"
+              label="Giá trị TT đợt này (đồng)"
               value={paymentValue}
               onChange={(val) => setPaymentValue(val)}
               suffix="đồng"
             />
           </div>
+
+          {/* Hộp kiểm soát hợp đồng và cảnh báo vượt giá trị hợp đồng realtime */}
+          {activeContractValue > 0 && (
+            <div
+              className={`p-3 rounded-xl border transition-all ${
+                isOverContract
+                  ? 'bg-rose-950/40 border-rose-500/80 shadow-[0_0_15px_rgba(244,63,94,0.25)]'
+                  : 'bg-[#0b1222] border-[#232f4e]'
+              }`}
+            >
+              <div className="flex items-center justify-between text-xs mb-2">
+                <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+                  {isOverContract ? (
+                    <ShieldAlert size={15} className="text-rose-400 animate-pulse" />
+                  ) : (
+                    <CheckCircle2 size={15} className="text-emerald-400" />
+                  )}
+                  Kiểm soát Giá trị Hợp đồng:
+                </span>
+                <span className="font-mono font-bold text-blue-300">
+                  {formatVnNumber(activeContractValue)} đ
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="p-2 rounded bg-[#070d1a] border border-slate-800">
+                  <div className="text-[11px] text-slate-400">Đã NT các đợt trước:</div>
+                  <div className="font-mono text-slate-200 font-medium">
+                    {formatVnNumber(prevInspectionSum)} đ
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-[#070d1a] border border-slate-800">
+                  <div className="text-[11px] text-slate-400">Hạn mức NT còn lại:</div>
+                  <div className="font-mono text-emerald-400 font-semibold">
+                    {formatVnNumber(remainingInspectionQuota)} đ
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-[#070d1a] border border-slate-800 col-span-2 sm:col-span-1">
+                  <div className="text-[11px] text-slate-400">Tổng NT gồm đợt này:</div>
+                  <div
+                    className={`font-mono font-bold ${
+                      isOverContract ? 'text-rose-400' : 'text-slate-100'
+                    }`}
+                  >
+                    {formatVnNumber(totalProjectedInspection)} đ
+                  </div>
+                </div>
+              </div>
+
+              {isOverContract && (
+                <div className="mt-2.5 p-2 rounded bg-rose-950/60 border border-rose-600/70 text-rose-300 text-xs flex items-start gap-2">
+                  <AlertTriangle size={16} className="text-rose-400 shrink-0 mt-0.5 animate-bounce" />
+                  <div>
+                    <strong className="text-rose-200">CẢNH BÁO VƯỢT GIÁ TRỊ HỢP ĐỒNG:</strong> Tổng giá
+                    trị nghiệm thu ({formatVnNumber(totalProjectedInspection)} đ) đã VƯỢT giá trị hợp
+                    đồng ({formatVnNumber(activeContractValue)} đ) là{' '}
+                    <strong className="underline text-rose-100 font-mono">
+                      {formatVnNumber(excessInspectionAmount)} đ
+                    </strong>{' '}
+                    (+{((excessInspectionAmount / activeContractValue) * 100).toFixed(1)}%). Vui lòng
+                    kiểm tra lại số liệu!
+                  </div>
+                </div>
+              )}
+
+              {isOverContractPayment && !isOverContract && (
+                <div className="mt-2.5 p-2 rounded bg-amber-950/60 border border-amber-600/70 text-amber-300 text-xs flex items-start gap-2">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-amber-200">Lưu ý:</strong> Tổng giá trị thanh toán (
+                    {formatVnNumber(totalProjectedPayment)} đ) đã vượt giá trị hợp đồng là{' '}
+                    <strong className="font-mono text-amber-100">
+                      {formatVnNumber(excessPaymentAmount)} đ
+                    </strong>
+                    .
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-lg flex items-center justify-between">
             <span className="text-slate-300 font-medium">Tỷ lệ TT/NT (%):</span>

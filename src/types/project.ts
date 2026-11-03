@@ -112,13 +112,15 @@ export interface CostPackageItem {
 export interface InspectionItem {
   id: string;
   projectId: string;
+  costPackageId?: string; // ID gói thầu liên kết thuộc Tab Nội dung chi phí
+  contractValue?: number; // Giá trị hợp đồng của gói thầu (để kiểm soát vượt hạn mức)
   stt: number;
   packageName: string; // Tên gói thầu
   inspectionRound: string; // Đợt NT (Đợt 1, Đợt 2...)
   inspectionDate: string; // Ngày NT (chuẩn VN đặc thù)
   inspectionValue: number; // Giá trị NT (đồng)
   paymentValue: number; // Giá trị TT (đồng)
-  ratio: number; // Tỷ lệ NT/TT (%)
+  ratio: number; // Tỷ lệ TT/NT (%)
   note?: string; // Ghi chú
 }
 
@@ -192,6 +194,27 @@ export interface ContractorItem {
 }
 
 export type CompanyInfo = ContractorItem;
+
+// 9. Khoản mục chi tiết cấu thành 7 loại chi phí (Dự án & Dự toán)
+export type SevenCostCategory = 
+  | 'costCompensation' // CP BT, HT & TĐC
+  | 'costConstruction' // CP Xây dựng
+  | 'costEquipment'    // CP Thiết bị
+  | 'costManagement'   // CP QLDA
+  | 'costConsulting'   // CP TVĐTXD
+  | 'costOthers'       // CP Khác
+  | 'costContingency';  // CP Dự phòng
+
+export interface CostBreakdownItem {
+  id: string;
+  projectId: string;
+  parentId: string; // ID của ProjectDetail hoặc EstimateItem
+  costCategory: SevenCostCategory; // Thuộc loại chi phí nào trong 7 loại
+  stt: number;
+  name: string; // Tên khoản mục chi tiết
+  amount: number; // Giá trị thành tiền (đồng)
+  note?: string; // Ghi chú / Căn cứ định mức / Tỷ lệ %
+}
 
 // Menu chính
 export type MainMenuType = 'projects' | 'reports' | 'drafting' | 'companies';

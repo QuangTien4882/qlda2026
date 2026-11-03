@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { ProjectDetailItem, ProjectGroup, ProjectType, ProjectLevel, ProjectStatus } from '../../../types/project';
+import { ProjectDetailItem, ProjectGroup, ProjectType, ProjectLevel, ProjectStatus, SevenCostCategory } from '../../../types/project';
 import { AdvancedTable, AdvancedColumn } from '../../common/AdvancedTable';
 import { AppBadge } from '../../common/AppBadge';
 import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { VnNumberInput } from '../../common/VnNumberInput';
+import { CostBreakdownModal } from './CostBreakdownModal';
 import { formatVnNumber } from '../../../utils/numberUtils';
+import { Layers } from 'lucide-react';
 
 interface TabProjectInfoProps {
   projectDetail: ProjectDetailItem;
@@ -22,6 +24,61 @@ export const TabProjectInfo: React.FC<TabProjectInfoProps> = ({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [formData, setFormData] = useState<ProjectDetailItem>(projectDetail);
+
+  // Modal mở chi tiết cấu thành cho từng loại trong 7 chi phí
+  const [breakdownModal, setBreakdownModal] = useState<{
+    isOpen: boolean;
+    costCategory: SevenCostCategory;
+    costCategoryName: string;
+    currentCostAmount: number;
+    fromEditModal?: boolean;
+  }>({
+    isOpen: false,
+    costCategory: 'costConstruction',
+    costCategoryName: '',
+    currentCostAmount: 0,
+    fromEditModal: false,
+  });
+
+  const handleOpenBreakdown = (
+    costCategory: SevenCostCategory,
+    costCategoryName: string,
+    currentCostAmount: number,
+    fromEditModal = false
+  ) => {
+    setBreakdownModal({
+      isOpen: true,
+      costCategory,
+      costCategoryName,
+      currentCostAmount,
+      fromEditModal,
+    });
+  };
+
+  const handleApplyBreakdownTotal = (newTotal: number) => {
+    const { costCategory, fromEditModal } = breakdownModal;
+
+    if (fromEditModal) {
+      handleCostChange(costCategory, newTotal);
+    } else {
+      const updated = {
+        ...projectDetail,
+        [costCategory]: newTotal,
+      };
+      const sum =
+        (updated.costCompensation || 0) +
+        (updated.costConstruction || 0) +
+        (updated.costEquipment || 0) +
+        (updated.costManagement || 0) +
+        (updated.costConsulting || 0) +
+        (updated.costOthers || 0) +
+        (updated.costContingency || 0);
+
+      const finalDetail = { ...updated, totalInvestment: sum };
+      onUpdate(finalDetail);
+      setFormData(finalDetail);
+    }
+  };
 
   // Mở modal sửa
   const handleOpenEdit = () => {
@@ -143,64 +200,169 @@ export const TabProjectInfo: React.FC<TabProjectInfoProps> = ({
       id: 'costCompensation',
       title: 'CP BT, HT & TĐC',
       unit: '(đồng)',
-      width: 160,
+      width: 170,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costCompensation)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown('costCompensation', 'CP Bồi thường, HT & TĐC', item.costCompensation);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP Bồi thường, HT & TĐC"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costCompensation)}</span>
+        </div>
+      ),
     },
     {
       id: 'costConstruction',
       title: 'CP Xây dựng',
       unit: '(đồng)',
-      width: 170,
+      width: 180,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono font-medium">{formatVnNumber(item.costConstruction)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown('costConstruction', 'CP Xây dựng', item.costConstruction);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP Xây dựng"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono font-medium text-slate-100">{formatVnNumber(item.costConstruction)}</span>
+        </div>
+      ),
     },
     {
       id: 'costEquipment',
       title: 'CP Thiết bị',
       unit: '(đồng)',
-      width: 160,
+      width: 170,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costEquipment)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown('costEquipment', 'CP Thiết bị', item.costEquipment);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP Thiết bị"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costEquipment)}</span>
+        </div>
+      ),
     },
     {
       id: 'costManagement',
       title: 'CP QLDA',
       unit: '(đồng)',
-      width: 150,
+      width: 160,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costManagement)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown('costManagement', 'CP Quản lý dự án', item.costManagement);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP QLDA"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costManagement)}</span>
+        </div>
+      ),
     },
     {
       id: 'costConsulting',
       title: 'CP TVĐTXD',
       unit: '(đồng)',
-      width: 160,
+      width: 170,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costConsulting)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown('costConsulting', 'CP Tư vấn ĐTXD', item.costConsulting);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP TVĐTXD"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costConsulting)}</span>
+        </div>
+      ),
     },
     {
       id: 'costOthers',
       title: 'CP Khác',
       unit: '(đồng)',
-      width: 150,
+      width: 160,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costOthers)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown('costOthers', 'CP Khác', item.costOthers);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP Khác"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costOthers)}</span>
+        </div>
+      ),
     },
     {
       id: 'costContingency',
       title: 'CP Dự phòng',
       unit: '(đồng)',
-      width: 160,
+      width: 170,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costContingency)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown('costContingency', 'CP Dự phòng', item.costContingency);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP Dự phòng"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costContingency)}</span>
+        </div>
+      ),
     },
     {
       id: 'totalInvestment',
@@ -408,49 +570,175 @@ export const TabProjectInfo: React.FC<TabProjectInfoProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <VnNumberInput
-                label="1. CP BT, HT & TĐC"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>1. CP BT, HT & TĐC</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          'costCompensation',
+                          'CP Bồi thường, HT & TĐC',
+                          formData.costCompensation,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={formData.costCompensation}
                 onChange={(val) => handleCostChange('costCompensation', val)}
                 suffix="đồng"
               />
 
               <VnNumberInput
-                label="2. CP Xây dựng"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>2. CP Xây dựng</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          'costConstruction',
+                          'CP Xây dựng',
+                          formData.costConstruction,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={formData.costConstruction}
                 onChange={(val) => handleCostChange('costConstruction', val)}
                 suffix="đồng"
               />
 
               <VnNumberInput
-                label="3. CP Thiết bị"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>3. CP Thiết bị</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          'costEquipment',
+                          'CP Thiết bị',
+                          formData.costEquipment,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={formData.costEquipment}
                 onChange={(val) => handleCostChange('costEquipment', val)}
                 suffix="đồng"
               />
 
               <VnNumberInput
-                label="4. CP QLDA"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>4. CP QLDA</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          'costManagement',
+                          'CP Quản lý dự án',
+                          formData.costManagement,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={formData.costManagement}
                 onChange={(val) => handleCostChange('costManagement', val)}
                 suffix="đồng"
               />
 
               <VnNumberInput
-                label="5. CP TVĐTXD"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>5. CP TVĐTXD</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          'costConsulting',
+                          'CP Tư vấn ĐTXD',
+                          formData.costConsulting,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={formData.costConsulting}
                 onChange={(val) => handleCostChange('costConsulting', val)}
                 suffix="đồng"
               />
 
               <VnNumberInput
-                label="6. CP Khác"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>6. CP Khác</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          'costOthers',
+                          'CP Khác',
+                          formData.costOthers,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={formData.costOthers}
                 onChange={(val) => handleCostChange('costOthers', val)}
                 suffix="đồng"
               />
 
               <VnNumberInput
-                label="7. CP Dự phòng"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>7. CP Dự phòng</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          'costContingency',
+                          'CP Dự phòng',
+                          formData.costContingency,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={formData.costContingency}
                 onChange={(val) => handleCostChange('costContingency', val)}
                 suffix="đồng"
@@ -475,6 +763,19 @@ export const TabProjectInfo: React.FC<TabProjectInfoProps> = ({
         </form>
       </AppModal>
 
+      {/* Modal Cấp 2: Chi tiết cấu thành khoản mục chi phí */}
+      <CostBreakdownModal
+        isOpen={breakdownModal.isOpen}
+        onClose={() => setBreakdownModal((prev) => ({ ...prev, isOpen: false }))}
+        projectId={projectDetail.projectId || projectDetail.id}
+        parentId={projectDetail.id}
+        parentTitle={`${projectDetail.code} - ${projectDetail.name}`}
+        costCategory={breakdownModal.costCategory}
+        costCategoryName={breakdownModal.costCategoryName}
+        currentCostAmount={breakdownModal.currentCostAmount}
+        onApplyTotal={handleApplyBreakdownTotal}
+      />
+
       {/* Dialog xác nhận xóa dự án */}
       <ConfirmDialog
         isOpen={isDeleteDialogOpen}
@@ -486,13 +787,19 @@ export const TabProjectInfo: React.FC<TabProjectInfoProps> = ({
           }
         }}
         title="Xác nhận xóa dự án"
+        confirmLabel="Xóa toàn bộ dự án"
         message={
-          <div>
-            Bạn có chắc chắn muốn xóa dự án{' '}
-            <strong className="text-white">
-              {projectDetail.code} - {projectDetail.name}
-            </strong>
-            ? Toàn bộ các dữ liệu dự toán, hợp đồng, nghiệm thu và hồ sơ pháp lý liên quan sẽ bị xóa hoàn toàn.
+          <div className="space-y-2 text-xs md:text-sm">
+            <p>
+              Bạn có chắc chắn muốn xóa dự án{' '}
+              <strong className="text-white">
+                {projectDetail.code} - {projectDetail.name}
+              </strong>
+              ?
+            </p>
+            <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-600/70 text-rose-300 text-xs">
+              ⚠️ <strong>Lưu ý quan trọng:</strong> Toàn bộ dữ liệu dự toán, nội dung chi phí, nghiệm thu, hồ sơ pháp lý, kế hoạch và các khoản mục chi tiết cấu thành liên quan sẽ bị <strong>xóa vĩnh viễn</strong>.
+            </div>
           </div>
         }
       />

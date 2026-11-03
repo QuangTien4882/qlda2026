@@ -4,7 +4,7 @@ import { formatVnNumber, parseVnNumber } from '../../utils/numberUtils';
 interface VnNumberInputProps {
   value?: number | null;
   onChange?: (val: number, formattedStr: string) => void;
-  label?: string;
+  label?: React.ReactNode;
   placeholder?: string;
   suffix?: string;
   prefix?: string;

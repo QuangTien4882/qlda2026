@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { EstimateItem, ProjectType, ProjectLevel } from '../../../types/project';
+import { EstimateItem, ProjectType, ProjectLevel, SevenCostCategory } from '../../../types/project';
 import { AdvancedTable, AdvancedColumn } from '../../common/AdvancedTable';
 import { AppBadge } from '../../common/AppBadge';
 import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { VnNumberInput } from '../../common/VnNumberInput';
+import { CostBreakdownModal } from './CostBreakdownModal';
 import { formatVnNumber } from '../../../utils/numberUtils';
+import { Layers } from 'lucide-react';
 
 interface TabEstimatesProps {
   estimates: EstimateItem[];
@@ -26,6 +28,88 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<EstimateItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<EstimateItem | null>(null);
+
+  // Modal mở chi tiết cấu thành cho các loại chi phí dự toán
+  const [breakdownModal, setBreakdownModal] = useState<{
+    isOpen: boolean;
+    estimateId: string;
+    workName: string;
+    costCategory: SevenCostCategory;
+    costCategoryName: string;
+    currentCostAmount: number;
+    fromEditModal?: boolean;
+  }>({
+    isOpen: false,
+    estimateId: '',
+    workName: '',
+    costCategory: 'costConstruction',
+    costCategoryName: '',
+    currentCostAmount: 0,
+    fromEditModal: false,
+  });
+
+  const handleOpenBreakdown = (
+    estimateId: string,
+    workNameText: string,
+    costCategory: SevenCostCategory,
+    costCategoryName: string,
+    currentCostAmount: number,
+    fromEditModal = false
+  ) => {
+    setBreakdownModal({
+      isOpen: true,
+      estimateId,
+      workName: workNameText,
+      costCategory,
+      costCategoryName,
+      currentCostAmount,
+      fromEditModal,
+    });
+  };
+
+  const handleApplyBreakdownTotal = (newTotal: number) => {
+    const { estimateId, costCategory, fromEditModal } = breakdownModal;
+
+    if (fromEditModal) {
+      switch (costCategory) {
+        case 'costConstruction':
+          setCostConstruction(newTotal);
+          break;
+        case 'costEquipment':
+          setCostEquipment(newTotal);
+          break;
+        case 'costManagement':
+          setCostManagement(newTotal);
+          break;
+        case 'costConsulting':
+          setCostConsulting(newTotal);
+          break;
+        case 'costOthers':
+          setCostOthers(newTotal);
+          break;
+        case 'costContingency':
+          setCostContingency(newTotal);
+          break;
+      }
+    } else {
+      const targetEstimate = estimates.find((e) => e.id === estimateId);
+      if (targetEstimate) {
+        const updated = {
+          ...targetEstimate,
+          [costCategory]: newTotal,
+        };
+        const sum =
+          (updated.costConstruction || 0) +
+          (updated.costEquipment || 0) +
+          (updated.costManagement || 0) +
+          (updated.costConsulting || 0) +
+          (updated.costOthers || 0) +
+          (updated.costContingency || 0);
+
+        onUpdate({ ...updated, totalEstimate: sum });
+      }
+    }
+  };
 
   // Form state
   const [stt, setStt] = useState(estimates.length + 1);
@@ -154,55 +238,145 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
       id: 'costConstruction',
       title: 'CP Xây dựng',
       unit: '(đồng)',
-      width: 150,
+      width: 170,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costConstruction)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown(item.id, item.workName, 'costConstruction', 'CP Xây dựng', item.costConstruction);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP Xây dựng"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono font-medium text-slate-100">{formatVnNumber(item.costConstruction)}</span>
+        </div>
+      ),
     },
     {
       id: 'costEquipment',
       title: 'CP Thiết bị',
       unit: '(đồng)',
-      width: 150,
+      width: 160,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costEquipment)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown(item.id, item.workName, 'costEquipment', 'CP Thiết bị', item.costEquipment);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP Thiết bị"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costEquipment)}</span>
+        </div>
+      ),
     },
     {
       id: 'costManagement',
       title: 'CP QLDA',
       unit: '(đồng)',
-      width: 130,
+      width: 150,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costManagement)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown(item.id, item.workName, 'costManagement', 'CP Quản lý dự án', item.costManagement);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP QLDA"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costManagement)}</span>
+        </div>
+      ),
     },
     {
       id: 'costConsulting',
       title: 'CP TVĐTXD',
       unit: '(đồng)',
-      width: 140,
+      width: 160,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costConsulting)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown(item.id, item.workName, 'costConsulting', 'CP Tư vấn ĐTXD', item.costConsulting);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP TVĐTXD"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costConsulting)}</span>
+        </div>
+      ),
     },
     {
       id: 'costOthers',
       title: 'CP Khác',
       unit: '(đồng)',
-      width: 130,
+      width: 150,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costOthers)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown(item.id, item.workName, 'costOthers', 'CP Khác', item.costOthers);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP Khác"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costOthers)}</span>
+        </div>
+      ),
     },
     {
       id: 'costContingency',
       title: 'CP Dự phòng',
       unit: '(đồng)',
-      width: 140,
+      width: 160,
       minWidth: 25,
       align: 'right',
-      render: (item) => <span className="font-mono">{formatVnNumber(item.costContingency)}</span>,
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1.5 w-full">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenBreakdown(item.id, item.workName, 'costContingency', 'CP Dự phòng', item.costContingency);
+            }}
+            title="Xem & sửa nội dung chi tiết cấu thành CP Dự phòng"
+            className="p-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-900/40 transition-colors"
+          >
+            <Layers size={13} />
+          </button>
+          <span className="font-mono">{formatVnNumber(item.costContingency)}</span>
+        </div>
+      ),
     },
     {
       id: 'totalEstimate',
@@ -324,37 +498,162 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
             <h4 className="font-bold text-blue-400 uppercase text-xs">Các khoản chi phí dự toán (đồng)</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               <VnNumberInput
-                label="CP Xây dựng (đồng)"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>CP Xây dựng</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          editingItem?.id || 'temp-estimate',
+                          workName || 'Hạng mục mới',
+                          'costConstruction',
+                          'CP Xây dựng',
+                          costConstruction,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={costConstruction}
                 onChange={(val) => setCostConstruction(val)}
                 suffix="đồng"
               />
+
               <VnNumberInput
-                label="CP Thiết bị (đồng)"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>CP Thiết bị</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          editingItem?.id || 'temp-estimate',
+                          workName || 'Hạng mục mới',
+                          'costEquipment',
+                          'CP Thiết bị',
+                          costEquipment,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={costEquipment}
                 onChange={(val) => setCostEquipment(val)}
                 suffix="đồng"
               />
+
               <VnNumberInput
-                label="CP QLDA (đồng)"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>CP QLDA</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          editingItem?.id || 'temp-estimate',
+                          workName || 'Hạng mục mới',
+                          'costManagement',
+                          'CP Quản lý dự án',
+                          costManagement,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={costManagement}
                 onChange={(val) => setCostManagement(val)}
                 suffix="đồng"
               />
+
               <VnNumberInput
-                label="CP TVĐTXD (đồng)"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>CP TVĐTXD</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          editingItem?.id || 'temp-estimate',
+                          workName || 'Hạng mục mới',
+                          'costConsulting',
+                          'CP Tư vấn ĐTXD',
+                          costConsulting,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={costConsulting}
                 onChange={(val) => setCostConsulting(val)}
                 suffix="đồng"
               />
+
               <VnNumberInput
-                label="CP Khác (đồng)"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>CP Khác</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          editingItem?.id || 'temp-estimate',
+                          workName || 'Hạng mục mới',
+                          'costOthers',
+                          'CP Khác',
+                          costOthers,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={costOthers}
                 onChange={(val) => setCostOthers(val)}
                 suffix="đồng"
               />
+
               <VnNumberInput
-                label="CP Dự phòng (đồng)"
+                label={
+                  <div className="flex items-center justify-between">
+                    <span>CP Dự phòng</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenBreakdown(
+                          editingItem?.id || 'temp-estimate',
+                          workName || 'Hạng mục mới',
+                          'costContingency',
+                          'CP Dự phòng',
+                          costContingency,
+                          true
+                        )
+                      }
+                      className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                    >
+                      <Layers size={11} /> Chi tiết
+                    </button>
+                  </div>
+                }
                 value={costContingency}
                 onChange={(val) => setCostContingency(val)}
                 suffix="đồng"
@@ -393,6 +692,19 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
           </div>
         </form>
       </AppModal>
+
+      {/* Modal Cấp 2: Chi tiết cấu thành chi phí dự toán */}
+      <CostBreakdownModal
+        isOpen={breakdownModal.isOpen}
+        onClose={() => setBreakdownModal((prev) => ({ ...prev, isOpen: false }))}
+        projectId={projectId}
+        parentId={breakdownModal.estimateId}
+        parentTitle={breakdownModal.workName}
+        costCategory={breakdownModal.costCategory}
+        costCategoryName={breakdownModal.costCategoryName}
+        currentCostAmount={breakdownModal.currentCostAmount}
+        onApplyTotal={handleApplyBreakdownTotal}
+      />
 
       {/* Confirm xóa */}
       <ConfirmDialog

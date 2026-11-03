@@ -15,7 +15,9 @@ import { AppButton } from '../../common/AppButton';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { VnNumberInput } from '../../common/VnNumberInput';
 import { VnDateInput } from '../../common/VnDateInput';
+import { SearchableSelect, SearchableOption } from '../../common/SearchableSelect';
 import { formatVnNumber } from '../../../utils/numberUtils';
+import { useData } from '../../../context/DataContext';
 
 interface TabCostsProps {
   costPackages: CostPackageItem[];
@@ -32,6 +34,8 @@ export const TabCosts: React.FC<TabCostsProps> = ({
   onUpdate,
   onDelete,
 }) => {
+  const { companies, inspections } = useData();
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CostPackageItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CostPackageItem | null>(null);
@@ -54,6 +58,24 @@ export const TabCosts: React.FC<TabCostsProps> = ({
   const [executionTime, setExecutionTime] = useState('');
   const [contractAppendix, setContractAppendix] = useState('Không');
   const [note, setNote] = useState('');
+
+  // Danh mục nhà thầu để chọn nhanh
+  const companyOptions: SearchableOption[] = companies.map((c) => ({
+    value: c.name,
+    label: c.name,
+    subLabel: `MST: ${c.taxCode || '—'} • Đại diện: ${c.representative || '—'}`,
+    badge: c.shortName || undefined,
+    badgeColor: 'blue',
+    extraData: c,
+  }));
+
+  // Tìm các đợt nghiệm thu liên quan đến gói thầu đang muốn xóa
+  const relatedInspections = (inspections[projectId] || []).filter(
+    (insp) =>
+      insp.costPackageId === deletingItem?.id ||
+      (deletingItem?.content &&
+        insp.packageName?.trim().toLowerCase() === deletingItem?.content.trim().toLowerCase())
+  );
 
   // Tự động tính Tỷ lệ giảm thầu (%) = (Dự toán - Hợp đồng) / Dự toán * 100%
   const discountRate =
@@ -408,13 +430,16 @@ export const TabCosts: React.FC<TabCostsProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-slate-300 mb-1">Đơn vị thực hiện</label>
-              <input
-                type="text"
+              <label className="block text-slate-300 mb-1">
+                Đơn vị thực hiện
+                <span className="text-slate-400 font-normal text-[11px] ml-1.5">(Nhà thầu)</span>
+              </label>
+              <SearchableSelect
+                options={companyOptions}
                 value={contractor}
-                onChange={(e) => setContractor(e.target.value)}
-                placeholder="Tên nhà thầu..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                onChange={(val) => setContractor(val)}
+                placeholder="Chọn hoặc nhập tên nhà thầu..."
+                allowCustomInput={true}
               />
             </div>
           </div>
@@ -554,15 +579,49 @@ export const TabCosts: React.FC<TabCostsProps> = ({
         </form>
       </AppModal>
 
-      {/* Confirm xóa */}
+      {/* Confirm xóa kèm cảnh báo ràng buộc toàn vẹn xóa lan tỏa */}
       <ConfirmDialog
         isOpen={!!deletingItem}
         onClose={() => setDeletingItem(null)}
         onConfirm={() => {
           if (deletingItem) onDelete(deletingItem.id);
         }}
-        title="Xóa nội dung chi phí"
-        message={`Bạn có chắc muốn xóa gói thầu/nội dung "${deletingItem?.content}"?`}
+        title="Xóa nội dung chi phí & gói thầu"
+        confirmLabel={
+          relatedInspections.length > 0
+            ? `Xóa gói thầu & ${relatedInspections.length} đợt NT liên quan`
+            : 'Xác nhận xóa'
+        }
+        message={
+          relatedInspections.length > 0 ? (
+            <div className="space-y-3 text-xs md:text-sm">
+              <p className="text-slate-200">
+                Bạn có chắc chắn muốn xóa gói thầu/nội dung: <strong className="text-white">"{deletingItem?.content}"</strong>?
+              </p>
+              <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-600/70 text-rose-300 text-xs space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5 text-rose-200">
+                  ⚠️ CẢNH BÁO RÀNG BUỘC TOÀN VẸN:
+                </div>
+                <div>
+                  Gói thầu này hiện đang liên kết với{' '}
+                  <strong className="text-white underline font-semibold">
+                    {relatedInspections.length} đợt nghiệm thu/thanh toán
+                  </strong>{' '}
+                  bên tab <span className="font-bold text-rose-200">4. Nghiệm thu</span>.
+                </div>
+                <div>
+                  Khi xóa gói thầu này, hệ thống sẽ{' '}
+                  <strong className="text-rose-100 uppercase">
+                    tự động xóa toàn bộ các đợt nghiệm thu liên quan
+                  </strong>{' '}
+                  để đảm bảo không bị sai lệch số liệu!
+                </div>
+              </div>
+            </div>
+          ) : (
+            `Bạn có chắc muốn xóa gói thầu/nội dung "${deletingItem?.content}"?`
+          )
+        }
       />
     </div>
   );

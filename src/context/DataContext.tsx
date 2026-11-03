@@ -7,7 +7,9 @@ import {
   InspectionItem, 
   LegalDocItem, 
   CompanyInfo,
-  PlanTaskItem 
+  PlanTaskItem,
+  CostBreakdownItem,
+  SevenCostCategory
 } from '../types/project';
 import { AppDatabase } from '../types/database';
 
@@ -24,6 +26,7 @@ interface DataContextType {
   legalDocs: Record<string, LegalDocItem[]>;
   companies: CompanyInfo[];
   planTasks: Record<string, PlanTaskItem[]>;
+  costBreakdowns: Record<string, CostBreakdownItem[]>;
 
   // Trạng thái lưu trữ
   lastSavedTime: string;
@@ -40,6 +43,14 @@ interface DataContextType {
   addEstimate: (item: EstimateItem) => void;
   updateEstimate: (item: EstimateItem) => void;
   deleteEstimate: (projectId: string, id: string) => void;
+
+  // Thao tác Chi tiết cấu thành 7 loại chi phí (Tab 1 Dự án & Tab 2 Dự toán)
+  saveCostBreakdowns: (
+    projectId: string,
+    parentId: string,
+    costCategory: SevenCostCategory,
+    items: CostBreakdownItem[]
+  ) => number;
 
   // Thao tác Nội dung chi phí / Hợp đồng
   addCostPackage: (item: CostPackageItem) => void;
@@ -94,6 +105,7 @@ const getDefaultDatabase = (): AppDatabase => ({
   inspections: {},
   legalDocs: {},
   planTasks: {},
+  costBreakdowns: {},
   companies: [],
 });
 
@@ -128,6 +140,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             inspections: parsed.inspections || {},
             legalDocs: parsed.legalDocs || {},
             planTasks: parsed.planTasks || {},
+            costBreakdowns: parsed.costBreakdowns || {},
             companies: parsed.companies || [],
           };
         }
@@ -281,6 +294,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newPlanTasks = { ...(prev.planTasks || {}) };
       delete newPlanTasks[projectId];
 
+      const newCostBreakdowns = { ...(prev.costBreakdowns || {}) };
+      delete newCostBreakdowns[projectId];
+
       return {
         ...prev,
         projects: newProjects,
@@ -290,6 +306,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         inspections: newInspections,
         legalDocs: newLegal,
         planTasks: newPlanTasks,
+        costBreakdowns: newCostBreakdowns,
       };
     });
   };
@@ -364,14 +381,59 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteCostPackage = (projectId: string, id: string) => {
     setDatabase((prev) => {
       const currentList = prev.costPackages[projectId] || [];
+      const targetPackage = currentList.find((c) => c.id === id);
+      const targetName = targetPackage?.content.trim();
+
+      // Ràng buộc toàn vẹn: Tự động xóa luôn các đợt nghiệm thu liên quan đến gói thầu này
+      const currentInspections = prev.inspections[projectId] || [];
+      const updatedInspections = currentInspections.filter((insp) => {
+        if (insp.costPackageId && insp.costPackageId === id) return false;
+        if (targetName && insp.packageName?.trim() === targetName) return false;
+        return true;
+      });
+
       return {
         ...prev,
         costPackages: {
           ...prev.costPackages,
           [projectId]: currentList.filter((c) => c.id !== id),
         },
+        inspections: {
+          ...prev.inspections,
+          [projectId]: updatedInspections,
+        },
       };
     });
+  };
+
+  // ==================== CÁC HÀM THAO TÁC CHI TIẾT CẤU THÀNH 7 LOẠI CHI PHÍ ====================
+  const saveCostBreakdowns = (
+    projectId: string,
+    parentId: string,
+    costCategory: SevenCostCategory,
+    items: CostBreakdownItem[]
+  ): number => {
+    let totalSum = 0;
+    items.forEach((item) => {
+      totalSum += Number(item.amount) || 0;
+    });
+
+    setDatabase((prev) => {
+      const currentList = prev.costBreakdowns?.[projectId] || [];
+      // Lọc bỏ các khoản mục cũ của cùng parentId và cùng costCategory
+      const remaining = currentList.filter(
+        (b) => !(b.parentId === parentId && b.costCategory === costCategory)
+      );
+      return {
+        ...prev,
+        costBreakdowns: {
+          ...(prev.costBreakdowns || {}),
+          [projectId]: [...remaining, ...items],
+        },
+      };
+    });
+
+    return totalSum;
   };
 
   // ==================== CÁC HÀM THAO TÁC NGHIỆM THU ====================
@@ -796,6 +858,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         legalDocs: database.legalDocs,
         companies: database.companies,
         planTasks: database.planTasks || {},
+        costBreakdowns: database.costBreakdowns || {},
         lastSavedTime,
         storageSizeKb,
         isDirectFileConnected,
@@ -806,6 +869,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addEstimate,
         updateEstimate,
         deleteEstimate,
+        saveCostBreakdowns,
         addCostPackage,
         updateCostPackage,
         deleteCostPackage,

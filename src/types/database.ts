@@ -8,6 +8,7 @@ import {
   CompanyInfo,
   PlanTaskItem,
   ProjectTask,
+  CostBreakdownItem,
 } from './project';
 
 export interface DatabaseMetadata {
@@ -28,6 +29,7 @@ export interface AppDatabase {
   legalDocs: Record<string, LegalDocItem[]>;
   companies: CompanyInfo[];
   planTasks?: Record<string, PlanTaskItem[]>;
+  costBreakdowns?: Record<string, CostBreakdownItem[]>;
   tasks?: Record<string, ProjectTask[]>;
 }
 
