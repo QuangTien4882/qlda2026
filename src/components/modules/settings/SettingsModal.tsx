@@ -56,10 +56,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     disconnectDirectFile,
   } = useData();
 
-  const [activeTab, setActiveTab] = useState<'appearance' | 'drive' | 'rules'>('drive');
+  const [activeTab, setActiveTab] = useState<'appearance' | 'drive'>('drive');
   const [drivePath, setDrivePath] = useState(
     settings.googleDrivePath || 'D:\\Google Drive\\ProjectM\\du_lieu_du_an.json'
   );
+
+  React.useEffect(() => {
+    if (settings.googleDrivePath) {
+      setDrivePath(settings.googleDrivePath);
+    }
+  }, [settings.googleDrivePath]);
   const [savePathSuccess, setSavePathSuccess] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
@@ -181,16 +187,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             >
               <Type size={14} /> Giao diện & Font chữ
             </button>
-            <button
-              onClick={() => setActiveTab('rules')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                activeTab === 'rules'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#131e36]'
-              }`}
-            >
-              <ShieldCheck size={14} /> 7 Yêu cầu cốt lõi
-            </button>
           </div>
 
           {/* Toast thông báo nhanh */}
@@ -288,7 +284,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                       <input
                         type="text"
                         value={drivePath}
-                        onChange={(e) => setDrivePath(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDrivePath(val);
+                          updateGoogleDrivePath(val);
+                        }}
                         placeholder="Chọn thư mục hoặc nhập đường dẫn lưu file..."
                         className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
                       />
@@ -531,31 +531,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   </p>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Tab 3: Rules */}
-          {activeTab === 'rules' && (
-            <div className="space-y-2.5">
-              {[
-                { num: 1, title: 'Giao diện Tối (Dark Mode) 100%', desc: 'Dịu mắt, phù hợp làm việc lâu dài trong mọi điều kiện ánh sáng.' },
-                { num: 2, title: 'Phân rã Modul lớn thành các Task nhỏ', desc: 'Chia 3 giai đoạn và các task nhỏ độc lập.' },
-                { num: 3, title: 'Giao diện đồng bộ toàn diện', desc: 'Design system dùng chung: AdvancedTable, AppButton, AppModal...' },
-                { num: 4, title: 'Font Be Vietnam Pro mặc định; tùy chọn Roboto, Inter; cỡ 12-18pt', desc: 'Có thể thay đổi linh hoạt mọi lúc.' },
-                { num: 5, title: 'Ngày tháng chuẩn Việt Nam đặc thù', desc: 'Tháng 1, 2 có 0; Tháng 3-12 không 0; Ngày 1-9 có 0; Ngày 10+ không 0 (VD: 18/01/2026, 18/3/2026).' },
-                { num: 6, title: 'Dữ liệu số chuẩn VN & Realtime', desc: 'Chấm (.) phân cách hàng nghìn, phẩy (,) phân cách thập phân. Format realtime khi gõ.' },
-                { num: 7, title: 'Đa nền tảng PC & Mobile, 100% Offline', desc: 'Không cần server, tự động lưu file Google Drive.' },
-              ].map((r) => (
-                <div key={r.num} className="p-2.5 bg-[#0b1222] border border-[#232f4e] rounded-lg flex items-start gap-2.5">
-                  <span className="w-5 h-5 rounded-md bg-blue-900/50 text-blue-300 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
-                    {r.num}
-                  </span>
-                  <div>
-                    <h5 className="font-semibold text-slate-100 text-xs">{r.title}</h5>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{r.desc}</p>
-                  </div>
-                </div>
-              ))}
             </div>
           )}
         </div>

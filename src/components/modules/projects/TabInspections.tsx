@@ -290,6 +290,7 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
   return (
     <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden">
       <AdvancedTable
+        tableId="tab_inspections"
         columns={columns}
         data={inspections}
         keyExtractor={(item) => item.id}

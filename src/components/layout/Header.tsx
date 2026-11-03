@@ -40,9 +40,6 @@ export const Header: React.FC<HeaderProps> = ({
               <h1 className="font-bold text-slate-100 text-sm leading-none tracking-wide">
                 ProjectM
               </h1>
-              <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono font-medium hidden sm:inline-block">
-                OFFLINE V1.0
-              </span>
             </div>
             <p className="text-[10px] text-slate-400 mt-0.5 hidden md:block">
               Quản lý Dự án ĐTXD

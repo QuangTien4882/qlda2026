@@ -397,6 +397,7 @@ export const TabProjectInfo: React.FC<TabProjectInfoProps> = ({
     <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden">
       {/* Bảng hiển thị thông tin dự án & 7 chi phí (Có cả nút Sửa và Xóa theo yêu cầu 1) */}
       <AdvancedTable
+        tableId="tab_project_info"
         columns={columns}
         data={[projectDetail]}
         keyExtractor={(item) => item.id}

@@ -8,13 +8,11 @@ import { ReportsView } from './components/modules/reports/ReportsView';
 import { DraftingView } from './components/modules/drafting/DraftingView';
 import { CompaniesView } from './components/modules/companies/CompaniesView';
 import { SettingsModal } from './components/modules/settings/SettingsModal';
-import { RulesExplanationModal } from './components/modules/settings/RulesExplanationModal';
 
 export const AppContent: React.FC = () => {
   const [currentMenu, setCurrentMenu] = useState<MainMenuType>('projects');
   const [isOpenMobileMenu, setIsOpenMobileMenu] = useState(false);
   const [isOpenSettingsModal, setIsOpenSettingsModal] = useState(false);
-  const [isOpenRulesModal, setIsOpenRulesModal] = useState(false);
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#090d16] text-slate-100 flex flex-col select-none">
@@ -32,7 +30,6 @@ export const AppContent: React.FC = () => {
           onSelectMenu={setCurrentMenu}
           isOpenMobile={isOpenMobileMenu}
           onCloseMobile={() => setIsOpenMobileMenu(false)}
-          onOpenRulesModal={() => setIsOpenRulesModal(true)}
           onOpenSettings={() => setIsOpenSettingsModal(true)}
         />
 
@@ -54,16 +51,10 @@ export const AppContent: React.FC = () => {
         onOpenSettings={() => setIsOpenSettingsModal(true)}
       />
 
-      {/* Modal Cài đặt tổng hợp: Font, Cỡ chữ, File Drive & 7 Quy tắc */}
+      {/* Modal Cài đặt tổng hợp: Font, Cỡ chữ, File Drive */}
       <SettingsModal
         isOpen={isOpenSettingsModal}
         onClose={() => setIsOpenSettingsModal(false)}
-      />
-
-      {/* Modal 7 Yêu cầu bắt buộc */}
-      <RulesExplanationModal
-        isOpen={isOpenRulesModal}
-        onClose={() => setIsOpenRulesModal(false)}
       />
     </div>
   );

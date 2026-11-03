@@ -17,7 +17,7 @@ interface SidebarProps {
   onSelectMenu: (menu: MainMenuType) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
-  onOpenRulesModal: () => void;
+  onOpenRulesModal?: () => void;
   onOpenSettings: () => void;
 }
 
@@ -73,7 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar container */}
       <aside
-        className={`fixed lg:relative top-0 bottom-0 left-0 z-40 w-72 h-full bg-[#0a0f1d] border-r border-[#232f4e] flex flex-col justify-between shrink-0 overflow-y-auto transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed lg:relative top-0 bottom-0 left-0 z-40 w-72 lg:w-80 h-full bg-[#0a0f1d] border-r border-[#232f4e] flex flex-col justify-between shrink-0 overflow-y-auto transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -81,12 +81,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-4 space-y-6">
           {/* Section Label */}
           <div>
-            <div className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+            <div className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
               <span>HỆ THỐNG QUẢN LÝ</span>
-              <span className="text-[10px] text-blue-400 font-mono">4 PHÂN HỆ</span>
             </div>
 
-            <nav className="space-y-1.5">
+            <nav className="space-y-2">
               {menuItems.map((item) => {
                 const isActive = currentMenu === item.id;
                 return (
@@ -115,7 +114,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </span>
                         {isActive && <ChevronRight size={14} className="text-blue-400" />}
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1 leading-snug">
+                      {/* Yêu cầu 5: Hiển thị đầy đủ không bị cắt xén */}
+                      <p className="text-xs text-slate-400 mt-1 leading-relaxed break-words">
                         {item.desc}
                       </p>
                     </div>
@@ -124,28 +124,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               })}
             </nav>
           </div>
-
-          {/* Quick Rules Banner */}
-          <div className="p-3 bg-[#111a2e]/90 border border-[#232f4e] rounded-xl text-xs space-y-2">
-            <div className="flex items-center justify-between text-slate-300 font-semibold">
-              <span className="flex items-center gap-1.5 text-blue-400">
-                <ShieldCheck size={14} /> 7 Yêu Cầu Bắt Buộc
-              </span>
-              <button
-                onClick={onOpenRulesModal}
-                className="text-[11px] text-blue-400 hover:underline"
-              >
-                Chi tiết
-              </button>
-            </div>
-            <p className="text-slate-400 text-[11px] leading-relaxed">
-              Dark mode 100%, Font Be Vietnam Pro, format ngày & số realtime chuẩn Việt Nam.
-            </p>
-          </div>
         </div>
 
-        {/* Bottom: Settings button + Offline & Version Status */}
-        <div className="p-3 border-t border-[#1e2a4a] bg-[#0c1222] space-y-2">
+        {/* Bottom: Settings button */}
+        <div className="p-3 border-t border-[#1e2a4a] bg-[#0c1222]">
           {/* Nút Cài đặt gom Font, Cỡ chữ, File Drive */}
           <button
             onClick={onOpenSettings}
@@ -162,14 +144,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <ChevronRight size={14} className="text-slate-500 group-hover:text-blue-400" />
           </button>
-
-          <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
-            <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Chế độ Offline
-            </span>
-            <span className="font-mono text-slate-400">v1.0 (Desktop)</span>
-          </div>
         </div>
       </aside>
     </>

@@ -27,6 +27,7 @@ export interface AdvancedColumn<T> {
 }
 
 interface AdvancedTableProps<T> {
+  tableId?: string;
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
   columns: AdvancedColumn<T>[];
@@ -43,6 +44,7 @@ interface AdvancedTableProps<T> {
 }
 
 export function AdvancedTable<T>({
+  tableId,
   title,
   subtitle,
   columns: initialColumns,
@@ -60,14 +62,40 @@ export function AdvancedTable<T>({
   // Ref container cuộn của bảng
   const tableScrollRef = useRef<HTMLDivElement>(null);
 
-  // 1. Quản lý độ rộng từng cột (Resize độc lập)
+  // Khóa lưu độ rộng cột vào localStorage
+  const storageKey = useMemo(() => {
+    if (tableId) return `projectm_table_col_widths_${tableId}`;
+    const colSignature = initialColumns.map((c) => c.id).join('_');
+    return `projectm_table_col_widths_${colSignature}`;
+  }, [tableId, initialColumns]);
+
+  // 1. Quản lý độ rộng từng cột (Resize độc lập & Khôi phục từ localStorage)
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
     const map: Record<string, number> = {};
     initialColumns.forEach((c) => {
       map[c.id] = c.width;
     });
+    try {
+      const savedKey = tableId
+        ? `projectm_table_col_widths_${tableId}`
+        : `projectm_table_col_widths_${initialColumns.map((c) => c.id).join('_')}`;
+      const saved = localStorage.getItem(savedKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...map, ...parsed };
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi đọc colWidths từ localStorage:', e);
+    }
     return map;
   });
+
+  const latestColWidthsRef = useRef(colWidths);
+  useEffect(() => {
+    latestColWidthsRef.current = colWidths;
+  }, [colWidths]);
 
   // 2. Quản lý ghim cột lũy tiến (Freeze Panes chuẩn Excel: Ghim cột k thì ghim toàn bộ 0..k)
   const initialFreezeIndex = useMemo(() => {
@@ -118,10 +146,14 @@ export function AdvancedTable<T>({
       const minW = colDef?.minWidth !== undefined ? colDef.minWidth : 25;
       const newWidth = Math.max(minW, Math.max(20, startWidth + delta));
 
-      setColWidths((prev) => ({
-        ...prev,
-        [activeId]: newWidth,
-      }));
+      setColWidths((prev) => {
+        const next = {
+          ...prev,
+          [activeId]: newWidth,
+        };
+        latestColWidthsRef.current = next;
+        return next;
+      });
     };
 
     const handleMouseUp = () => {
@@ -130,6 +162,14 @@ export function AdvancedTable<T>({
       window.removeEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = 'default';
       document.body.style.userSelect = 'auto';
+
+      try {
+        if (storageKey) {
+          localStorage.setItem(storageKey, JSON.stringify(latestColWidthsRef.current));
+        }
+      } catch (err) {
+        console.error('Lỗi lưu colWidths vào localStorage:', err);
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -137,6 +177,27 @@ export function AdvancedTable<T>({
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   };
+
+  // Khôi phục độ rộng các cột về mặc định ban đầu
+  const handleResetWidths = () => {
+    const map: Record<string, number> = {};
+    initialColumns.forEach((c) => {
+      map[c.id] = c.width;
+    });
+    setColWidths(map);
+    latestColWidthsRef.current = map;
+    try {
+      localStorage.removeItem(storageKey);
+    } catch (err) {
+      console.error('Lỗi xóa colWidths khỏi localStorage:', err);
+    }
+  };
+
+  const hasCustomWidths = useMemo(() => {
+    return initialColumns.some(
+      (col) => colWidths[col.id] !== undefined && colWidths[col.id] !== col.width
+    );
+  }, [initialColumns, colWidths]);
 
   // 5. Tính toán vị trí offset `left` cho các cột ghim (Freeze Panes Offsets)
   const { pinnedOffsets, totalTableWidth } = useMemo(() => {
@@ -254,6 +315,18 @@ export function AdvancedTable<T>({
             >
               <RotateCcw size={12} />
               <span className="hidden xl:inline text-[11px]">Bỏ ghim</span>
+            </button>
+          )}
+
+          {/* Nút Khôi phục độ rộng mặc định */}
+          {hasCustomWidths && (
+            <button
+              onClick={handleResetWidths}
+              title="Khôi phục độ rộng các cột về mặc định ban đầu"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs transition-colors"
+            >
+              <RotateCcw size={12} />
+              <span className="hidden xl:inline text-[11px]">Độ rộng mặc định</span>
             </button>
           )}
 

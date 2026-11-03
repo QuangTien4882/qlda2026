@@ -149,6 +149,7 @@ export const ProjectListView: React.FC<ProjectListViewProps> = ({
     <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden">
       {/* Bảng Danh sách các dự án (Cấp 1) */}
       <AdvancedTable
+        tableId="projects_list"
         columns={columns}
         data={projects}
         keyExtractor={(item) => item.id}

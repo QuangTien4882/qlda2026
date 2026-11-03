@@ -265,6 +265,7 @@ export const TabLegal: React.FC<TabLegalProps> = ({
     <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden relative">
       {/* Bảng hồ sơ pháp lý */}
       <AdvancedTable
+        tableId="tab_legal"
         columns={columns}
         data={legalDocs}
         keyExtractor={(item) => item.id}

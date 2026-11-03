@@ -38,29 +38,27 @@ export const AppModal: React.FC<AppModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Cấu hình quy chuẩn kích thước theo tỷ lệ 90% cho từng cấp:
-  // - Cấp 1: 94vw, cao 88vh
-  // - Cấp 2: 90% Cấp 1 = 85vw, cao 80vh
-  // - Cấp 3: 90% Cấp 2 = 76vw, cao tối đa 72vh
-  // - Cấp 4: 90% Cấp 3 = 68vw, cao tối đa 64vh
+  // Cấu hình quy chuẩn kích thước theo yêu cầu:
+  // - Chiều cao: Giữ bằng chiều cao màn hình làm việc (92vh) cho các cấp
+  // - Chiều ngang: Cấp sau bằng 90% chiều ngang cấp trước (Cấp 1: 95vw -> Cấp 2: 85.5vw -> Cấp 3: 77vw -> Cấp 4: 69vw)
   const levelConfig: Record<number, { wrapperClass: string; zContainer: string; badgeLabel: string }> = {
     1: {
-      wrapperClass: 'w-[94vw] max-w-7xl h-[88vh]',
+      wrapperClass: 'w-[95vw] max-w-7xl h-[92vh]',
       zContainer: 'z-50',
       badgeLabel: 'Cấp 1',
     },
     2: {
-      wrapperClass: 'w-[85vw] max-w-6xl h-[80vh]',
+      wrapperClass: 'w-[85.5vw] max-w-6xl h-[92vh]',
       zContainer: 'z-[60]',
       badgeLabel: 'Cấp 2',
     },
     3: {
-      wrapperClass: 'w-[76vw] max-w-4xl max-h-[72vh]',
+      wrapperClass: 'w-[77vw] max-w-4xl h-[92vh]',
       zContainer: 'z-[70]',
       badgeLabel: 'Cấp 3',
     },
     4: {
-      wrapperClass: 'w-[68vw] max-w-2xl max-h-[64vh]',
+      wrapperClass: 'w-[69vw] max-w-2xl max-h-[92vh]',
       zContainer: 'z-[80]',
       badgeLabel: 'Cấp 4',
     },

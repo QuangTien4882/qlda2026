@@ -500,6 +500,7 @@ export const TabSchedule: React.FC<TabScheduleProps> = ({
       {/* Bảng Kế hoạch (AdvancedTable) */}
       <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden">
         <AdvancedTable
+          tableId="tab_schedule"
           columns={columns}
           data={planTasks}
           keyExtractor={(item) => item.id}

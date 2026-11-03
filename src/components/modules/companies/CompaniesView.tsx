@@ -176,6 +176,7 @@ export const CompaniesView: React.FC = () => {
     <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden">
       {/* Bảng Danh mục nhà thầu cao cấp: full chiều cao, kẻ khung sắc nét, ghim cột, resize, search out-of-order */}
       <AdvancedTable
+        tableId="companies_list"
         columns={columns}
         data={companies}
         keyExtractor={(item) => item.id}
