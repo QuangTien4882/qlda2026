@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-font-family: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+  --app-font-size: 14pt;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Ép buộc tất cả các phần tử kế thừa font family được người dùng lựa chọn */
+html,
+body,
+#root,
+table,
+th,
+td,
+input,
+select,
+textarea,
+button,
+span,
+div,
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+a,
+label {
+  font-family: var(--app-font-family) !important;
+}
+
+/* Đặt font-size trên thẻ html để toàn bộ các class Tailwind (rem) co giãn mượt mà theo cỡ chữ đã chọn */
+html {
+  font-size: var(--app-font-size) !important;
+}
+
+body {
+  background-color: #090d16;
+  color: #f1f5f9;
+  line-height: 1.5;
+}
+
+/* Custom Dark Scrollbar */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090e1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a3858;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f5482;
+}
+
+/* Bảng dữ liệu: border-separate border-spacing-0 để chống hoàn toàn rò rỉ khi cuộn sticky */
+table.table-data-grid {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+/* Đồng bộ 100% cỡ chữ cho toàn bộ nội dung trong các bảng dữ liệu */
+.table-data-grid,
+.table-data-grid th,
+.table-data-grid td,
+.table-data-grid th *,
+.table-data-grid td * {
+  font-size: 0.875rem !important;
+  line-height: 1.45 !important;
+}
+
+/* Đảm bảo badge bên trong bảng đồng bộ cỡ chữ */
+.table-data-grid .app-badge,
+.table-data-grid .app-badge span {
+  font-size: 0.875rem !important;
+}
+
+/* Riêng đơn vị đo lường ở header dòng 2 gọn gàng */
+.table-data-grid th .header-unit {
+  font-size: 0.75rem !important;
+  line-height: 1.2 !important;
+}
+
+* {
+  box-sizing: border-box;
+}

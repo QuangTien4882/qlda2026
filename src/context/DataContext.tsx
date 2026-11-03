@@ -1,0 +1,845 @@
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { 
+  ProjectListItem, 
+  ProjectDetailItem, 
+  EstimateItem, 
+  CostPackageItem, 
+  InspectionItem, 
+  LegalDocItem, 
+  CompanyInfo,
+  PlanTaskItem 
+} from '../types/project';
+import { AppDatabase } from '../types/database';
+
+const STORAGE_KEY = 'projectm_master_database_v3';
+const APP_VERSION = '1.0.0';
+
+interface DataContextType {
+  // Dữ liệu
+  projects: ProjectListItem[];
+  projectDetails: Record<string, ProjectDetailItem>;
+  estimates: Record<string, EstimateItem[]>;
+  costPackages: Record<string, CostPackageItem[]>;
+  inspections: Record<string, InspectionItem[]>;
+  legalDocs: Record<string, LegalDocItem[]>;
+  companies: CompanyInfo[];
+  planTasks: Record<string, PlanTaskItem[]>;
+
+  // Trạng thái lưu trữ
+  lastSavedTime: string;
+  storageSizeKb: number;
+  isDirectFileConnected: boolean;
+  connectedFileName: string;
+
+  // Thao tác Dự án
+  addProject: (project: ProjectListItem, detail?: ProjectDetailItem) => void;
+  updateProject: (project: ProjectListItem, detail?: ProjectDetailItem) => void;
+  deleteProject: (projectId: string) => void;
+
+  // Thao tác Dự toán
+  addEstimate: (item: EstimateItem) => void;
+  updateEstimate: (item: EstimateItem) => void;
+  deleteEstimate: (projectId: string, id: string) => void;
+
+  // Thao tác Nội dung chi phí / Hợp đồng
+  addCostPackage: (item: CostPackageItem) => void;
+  updateCostPackage: (item: CostPackageItem) => void;
+  deleteCostPackage: (projectId: string, id: string) => void;
+
+  // Thao tác Nghiệm thu
+  addInspection: (item: InspectionItem) => void;
+  updateInspection: (item: InspectionItem) => void;
+  deleteInspection: (projectId: string, id: string) => void;
+
+  // Thao tác Hồ sơ pháp lý
+  addLegalDoc: (item: LegalDocItem) => void;
+  updateLegalDoc: (item: LegalDocItem) => void;
+  deleteLegalDoc: (projectId: string, id: string) => void;
+
+  // Thao tác Kế hoạch dự án (Tab 6)
+  addPlanTask: (item: PlanTaskItem) => void;
+  updatePlanTask: (item: PlanTaskItem) => void;
+  deletePlanTask: (projectId: string, id: string) => void;
+
+  // Thao tác Danh mục công ty / Nhà thầu
+  addCompany: (item: CompanyInfo) => void;
+  updateCompany: (item: CompanyInfo) => void;
+  deleteCompany: (id: string) => void;
+
+  // Sao lưu / Phục hồi / File Google Drive
+  exportDatabaseToJson: (filename?: string) => void;
+  importDatabaseFromJson: (file: File) => Promise<{ success: boolean; message: string }>;
+  resetDatabaseToDefaults: () => void;
+  selectSaveDirectory: () => Promise<{ success: boolean; message: string; dirName?: string }>;
+  saveDatabaseAs: () => Promise<{ success: boolean; message: string; fileName?: string }>;
+  connectDirectFile: () => Promise<{ success: boolean; message: string }>;
+  disconnectDirectFile: () => void;
+}
+
+const DataContext = createContext<DataContextType | undefined>(undefined);
+
+// Dữ liệu trống hoàn toàn để người dùng test và làm việc bằng dữ liệu thật 100%
+const getDefaultDatabase = (): AppDatabase => ({
+  metadata: {
+    version: APP_VERSION,
+    appName: 'ProjectM - Phần mềm Quản lý Dự án ĐTXD',
+    exportedAt: new Date().toISOString(),
+    lastSavedAt: new Date().toISOString(),
+    totalProjects: 0,
+  },
+  projects: [],
+  projectDetails: {},
+  estimates: {},
+  costPackages: {},
+  inspections: {},
+  legalDocs: {},
+  planTasks: {},
+  companies: [],
+});
+
+export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Khởi tạo từ LocalStorage nếu có, tự động dọn sạch các cơ sở dữ liệu mẫu cũ
+  const [database, setDatabase] = useState<AppDatabase>(() => {
+    // 1. Dọn dẹp các key phiên bản cũ chứa dữ liệu mẫu
+    try {
+      localStorage.removeItem('projectm_master_database_v1');
+      localStorage.removeItem('projectm_master_database_v2');
+      localStorage.removeItem('projectm_database');
+    } catch {
+      // ignore
+    }
+
+    // 2. Kiểm tra dữ liệu trong key v3
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Kiểm tra nếu là dữ liệu mẫu cũ còn sót lại (có prj-01 hoặc CC1), dọn sạch để dùng dữ liệu thật
+        const hasSampleProjects = parsed.projects?.some((p: any) => p.id === 'prj-01' || p.code === 'DA-2026/01');
+        const hasSampleCompanies = parsed.companies?.some((c: any) => c.shortName === 'CC1');
+        
+        if (!hasSampleProjects && !hasSampleCompanies && parsed.projects && Array.isArray(parsed.projects)) {
+          return {
+            metadata: parsed.metadata || getDefaultDatabase().metadata,
+            projects: parsed.projects || [],
+            projectDetails: parsed.projectDetails || {},
+            estimates: parsed.estimates || {},
+            costPackages: parsed.costPackages || {},
+            inspections: parsed.inspections || {},
+            legalDocs: parsed.legalDocs || {},
+            planTasks: parsed.planTasks || {},
+            companies: parsed.companies || [],
+          };
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi nạp database từ localStorage:', e);
+    }
+
+    // Khởi tạo database hoàn toàn trắng, sẵn sàng cho dữ liệu thật
+    const emptyDb = getDefaultDatabase();
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyDb));
+    } catch {
+      // ignore
+    }
+    return emptyDb;
+  });
+
+  const [lastSavedTime, setLastSavedTime] = useState<string>('Vừa mới lưu');
+  const [storageSizeKb, setStorageSizeKb] = useState<number>(0);
+  const [isDirectFileConnected, setIsDirectFileConnected] = useState(false);
+  const [connectedFileName, setConnectedFileName] = useState('du_lieu_du_an.json');
+
+  // File Handle cho Web File System Access API
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fileHandleRef = useRef<any>(null);
+
+  // Tính dung lượng lưu trữ và cập nhật thời gian
+  const calculateStorage = useCallback((data: AppDatabase) => {
+    try {
+      const jsonStr = JSON.stringify(data);
+      const bytes = new Blob([jsonStr]).size;
+      setStorageSizeKb(Number((bytes / 1024).toFixed(1)));
+    } catch {
+      setStorageSizeKb(0);
+    }
+  }, []);
+
+  // Tự động lưu vào localStorage và File Handle (nếu đang kết nối trực tiếp)
+  const persistDatabase = useCallback(async (updated: AppDatabase) => {
+    try {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      
+      const dbWithMeta: AppDatabase = {
+        ...updated,
+        metadata: {
+          ...updated.metadata,
+          lastSavedAt: now.toISOString(),
+          totalProjects: updated.projects.length,
+        },
+      };
+
+      const jsonStr = JSON.stringify(dbWithMeta, null, 2);
+      localStorage.setItem(STORAGE_KEY, jsonStr);
+      setLastSavedTime(timeStr);
+      calculateStorage(dbWithMeta);
+
+      // Nếu người dùng đã cấp quyền ghi vào file trên máy tính (Google Drive)
+      if (fileHandleRef.current) {
+        try {
+          const writable = await fileHandleRef.current.createWritable();
+          await writable.write(jsonStr);
+          await writable.close();
+        } catch (fileErr) {
+          console.warn('Không thể ghi tự động vào file đĩa:', fileErr);
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi lưu trữ dữ liệu:', e);
+    }
+  }, [calculateStorage]);
+
+  // Lưu tự động mỗi khi database thay đổi
+  useEffect(() => {
+    persistDatabase(database);
+  }, [database, persistDatabase]);
+
+  // ==================== CÁC HÀM THAO TÁC DỰ ÁN ====================
+  const addProject = (project: ProjectListItem, detail?: ProjectDetailItem) => {
+    setDatabase((prev) => {
+      const newProjects = [...prev.projects, project];
+      const detailItem: ProjectDetailItem = detail || {
+        id: `dt-${project.id}`,
+        projectId: project.id,
+        stt: project.stt,
+        code: project.code,
+        name: project.name,
+        location: project.location,
+        scale: '',
+        status: project.status,
+        group: 'Nhóm B',
+        type: 'Dân dụng',
+        level: 'Cấp II',
+        costCompensation: 0,
+        costConstruction: project.totalInvestment,
+        costEquipment: 0,
+        costManagement: 0,
+        costConsulting: 0,
+        costOthers: 0,
+        costContingency: 0,
+        totalInvestment: project.totalInvestment,
+        approvalDecision: '',
+        note: project.note,
+      };
+
+      return {
+        ...prev,
+        projects: newProjects,
+        projectDetails: {
+          ...prev.projectDetails,
+          [project.id]: detailItem,
+        },
+      };
+    });
+  };
+
+  const updateProject = (project: ProjectListItem, detail?: ProjectDetailItem) => {
+    setDatabase((prev) => {
+      const newProjects = prev.projects.map((p) => (p.id === project.id ? project : p));
+      const newDetails = { ...prev.projectDetails };
+      if (detail) {
+        newDetails[project.id] = detail;
+      }
+      return {
+        ...prev,
+        projects: newProjects,
+        projectDetails: newDetails,
+      };
+    });
+  };
+
+  const deleteProject = (projectId: string) => {
+    setDatabase((prev) => {
+      const newProjects = prev.projects.filter((p) => p.id !== projectId);
+      const newDetails = { ...prev.projectDetails };
+      delete newDetails[projectId];
+
+      const newEstimates = { ...prev.estimates };
+      delete newEstimates[projectId];
+
+      const newCosts = { ...prev.costPackages };
+      delete newCosts[projectId];
+
+      const newInspections = { ...prev.inspections };
+      delete newInspections[projectId];
+
+      const newLegal = { ...prev.legalDocs };
+      delete newLegal[projectId];
+
+      const newPlanTasks = { ...(prev.planTasks || {}) };
+      delete newPlanTasks[projectId];
+
+      return {
+        ...prev,
+        projects: newProjects,
+        projectDetails: newDetails,
+        estimates: newEstimates,
+        costPackages: newCosts,
+        inspections: newInspections,
+        legalDocs: newLegal,
+        planTasks: newPlanTasks,
+      };
+    });
+  };
+
+  // ==================== CÁC HÀM THAO TÁC DỰ TOÁN ====================
+  const addEstimate = (item: EstimateItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.estimates[item.projectId] || [];
+      return {
+        ...prev,
+        estimates: {
+          ...prev.estimates,
+          [item.projectId]: [...currentList, item],
+        },
+      };
+    });
+  };
+
+  const updateEstimate = (item: EstimateItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.estimates[item.projectId] || [];
+      return {
+        ...prev,
+        estimates: {
+          ...prev.estimates,
+          [item.projectId]: currentList.map((e) => (e.id === item.id ? item : e)),
+        },
+      };
+    });
+  };
+
+  const deleteEstimate = (projectId: string, id: string) => {
+    setDatabase((prev) => {
+      const currentList = prev.estimates[projectId] || [];
+      return {
+        ...prev,
+        estimates: {
+          ...prev.estimates,
+          [projectId]: currentList.filter((e) => e.id !== id),
+        },
+      };
+    });
+  };
+
+  // ==================== CÁC HÀM THAO TÁC CHI PHÍ / HỢP ĐỒNG ====================
+  const addCostPackage = (item: CostPackageItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.costPackages[item.projectId] || [];
+      return {
+        ...prev,
+        costPackages: {
+          ...prev.costPackages,
+          [item.projectId]: [...currentList, item],
+        },
+      };
+    });
+  };
+
+  const updateCostPackage = (item: CostPackageItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.costPackages[item.projectId] || [];
+      return {
+        ...prev,
+        costPackages: {
+          ...prev.costPackages,
+          [item.projectId]: currentList.map((c) => (c.id === item.id ? item : c)),
+        },
+      };
+    });
+  };
+
+  const deleteCostPackage = (projectId: string, id: string) => {
+    setDatabase((prev) => {
+      const currentList = prev.costPackages[projectId] || [];
+      return {
+        ...prev,
+        costPackages: {
+          ...prev.costPackages,
+          [projectId]: currentList.filter((c) => c.id !== id),
+        },
+      };
+    });
+  };
+
+  // ==================== CÁC HÀM THAO TÁC NGHIỆM THU ====================
+  const addInspection = (item: InspectionItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.inspections[item.projectId] || [];
+      return {
+        ...prev,
+        inspections: {
+          ...prev.inspections,
+          [item.projectId]: [...currentList, item],
+        },
+      };
+    });
+  };
+
+  const updateInspection = (item: InspectionItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.inspections[item.projectId] || [];
+      return {
+        ...prev,
+        inspections: {
+          ...prev.inspections,
+          [item.projectId]: currentList.map((i) => (i.id === item.id ? item : i)),
+        },
+      };
+    });
+  };
+
+  const deleteInspection = (projectId: string, id: string) => {
+    setDatabase((prev) => {
+      const currentList = prev.inspections[projectId] || [];
+      return {
+        ...prev,
+        inspections: {
+          ...prev.inspections,
+          [projectId]: currentList.filter((i) => i.id !== id),
+        },
+      };
+    });
+  };
+
+  // ==================== CÁC HÀM THAO TÁC PHÁP LÝ ====================
+  const addLegalDoc = (item: LegalDocItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.legalDocs[item.projectId] || [];
+      return {
+        ...prev,
+        legalDocs: {
+          ...prev.legalDocs,
+          [item.projectId]: [...currentList, item],
+        },
+      };
+    });
+  };
+
+  const updateLegalDoc = (item: LegalDocItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.legalDocs[item.projectId] || [];
+      return {
+        ...prev,
+        legalDocs: {
+          ...prev.legalDocs,
+          [item.projectId]: currentList.map((l) => (l.id === item.id ? item : l)),
+        },
+      };
+    });
+  };
+
+  const deleteLegalDoc = (projectId: string, id: string) => {
+    setDatabase((prev) => {
+      const currentList = prev.legalDocs[projectId] || [];
+      return {
+        ...prev,
+        legalDocs: {
+          ...prev.legalDocs,
+          [projectId]: currentList.filter((l) => l.id !== id),
+        },
+      };
+    });
+  };
+
+  // ==================== CÁC HÀM THAO TÁC KẾ HOẠCH DỰ ÁN (TAB 6) ====================
+  const addPlanTask = (item: PlanTaskItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.planTasks?.[item.projectId] || [];
+      return {
+        ...prev,
+        planTasks: {
+          ...(prev.planTasks || {}),
+          [item.projectId]: [...currentList, item],
+        },
+      };
+    });
+  };
+
+  const updatePlanTask = (item: PlanTaskItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.planTasks?.[item.projectId] || [];
+      return {
+        ...prev,
+        planTasks: {
+          ...(prev.planTasks || {}),
+          [item.projectId]: currentList.map((t) => (t.id === item.id ? item : t)),
+        },
+      };
+    });
+  };
+
+  const deletePlanTask = (projectId: string, id: string) => {
+    setDatabase((prev) => {
+      const currentList = prev.planTasks?.[projectId] || [];
+      return {
+        ...prev,
+        planTasks: {
+          ...(prev.planTasks || {}),
+          [projectId]: currentList.filter((t) => t.id !== id),
+        },
+      };
+    });
+  };
+
+  // ==================== CÁC HÀM THAO TÁC CÔNG TY ====================
+  const addCompany = (item: CompanyInfo) => {
+    setDatabase((prev) => ({
+      ...prev,
+      companies: [...prev.companies, item],
+    }));
+  };
+
+  const updateCompany = (item: CompanyInfo) => {
+    setDatabase((prev) => ({
+      ...prev,
+      companies: prev.companies.map((c) => (c.id === item.id ? item : c)),
+    }));
+  };
+
+  const deleteCompany = (id: string) => {
+    setDatabase((prev) => ({
+      ...prev,
+      companies: prev.companies.filter((c) => c.id !== id),
+    }));
+  };
+
+  // ==================== SAO LƯU & XUẤT FILE JSON ====================
+  const exportDatabaseToJson = (filename = 'du_lieu_du_an.json') => {
+    try {
+      const exportData: AppDatabase = {
+        ...database,
+        metadata: {
+          ...database.metadata,
+          exportedAt: new Date().toISOString(),
+          lastSavedAt: new Date().toISOString(),
+          totalProjects: database.projects.length,
+        },
+      };
+
+      const jsonStr = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Lỗi xuất file dữ liệu JSON:', e);
+    }
+  };
+
+  // ==================== PHỤC HỒI / NẠP FILE JSON ====================
+  const importDatabaseFromJson = (file: File): Promise<{ success: boolean; message: string }> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const content = e.target?.result as string;
+          const parsed = JSON.parse(content);
+
+          // Kiểm tra cấu trúc cơ bản
+          if (!parsed.projects || !Array.isArray(parsed.projects)) {
+            resolve({
+              success: false,
+              message: 'File không đúng định dạng cơ sở dữ liệu ProjectM (thiếu danh mục projects).',
+            });
+            return;
+          }
+
+          const validDatabase: AppDatabase = {
+            metadata: parsed.metadata || {
+              version: APP_VERSION,
+              appName: 'ProjectM',
+              exportedAt: new Date().toISOString(),
+              lastSavedAt: new Date().toISOString(),
+              totalProjects: parsed.projects.length,
+            },
+            projects: parsed.projects,
+            projectDetails: parsed.projectDetails || {},
+            estimates: parsed.estimates || {},
+            costPackages: parsed.costPackages || {},
+            inspections: parsed.inspections || {},
+            legalDocs: parsed.legalDocs || {},
+            companies: parsed.companies || [],
+            planTasks: parsed.planTasks || {},
+          };
+
+          setDatabase(validDatabase);
+          resolve({
+            success: true,
+            message: `Nạp thành công ${validDatabase.projects.length} dự án từ file ${file.name}.`,
+          });
+        } catch (err) {
+          resolve({
+            success: false,
+            message: `Lỗi đọc file JSON: ${err instanceof Error ? err.message : 'Dữ liệu không hợp lệ'}`,
+          });
+        }
+      };
+      reader.onerror = () => {
+        resolve({
+          success: false,
+          message: 'Không thể đọc file từ thiết bị.',
+        });
+      };
+      reader.readAsText(file);
+    });
+  };
+
+  // ==================== KHÔI PHỤC DỮ LIỆU GỐC ====================
+  const resetDatabaseToDefaults = () => {
+    const defaults = getDefaultDatabase();
+    setDatabase(defaults);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults, null, 2));
+  };
+
+  // ==================== CHỌN THƯ MỤC LƯU FILE TRỰC TIẾP (DIRECTORY PICKER) ====================
+  const selectSaveDirectory = async (): Promise<{ success: boolean; message: string; dirName?: string }> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const windowAny = window as any;
+    if (!windowAny.showDirectoryPicker) {
+      return {
+        success: false,
+        message: 'Trình duyệt chưa hỗ trợ chọn thư mục trực tiếp. Bạn hãy dùng nút "Lưu vị trí mới (Save As)".',
+      };
+    }
+
+    try {
+      const dirHandle = await windowAny.showDirectoryPicker({
+        mode: 'readwrite',
+      });
+
+      // Tạo hoặc ghi đè file du_lieu_du_an.json trong thư mục được chọn
+      const fileHandle = await dirHandle.getFileHandle('du_lieu_du_an.json', { create: true });
+      
+      const now = new Date();
+      const dbWithMeta: AppDatabase = {
+        ...database,
+        metadata: {
+          ...database.metadata,
+          lastSavedAt: now.toISOString(),
+          totalProjects: database.projects.length,
+        },
+      };
+      const jsonStr = JSON.stringify(dbWithMeta, null, 2);
+
+      const writable = await fileHandle.createWritable();
+      await writable.write(jsonStr);
+      await writable.close();
+
+      fileHandleRef.current = fileHandle;
+      setIsDirectFileConnected(true);
+      setConnectedFileName(`Thư mục [${dirHandle.name}]/du_lieu_du_an.json`);
+
+      return {
+        success: true,
+        message: `Đã chọn thư mục "${dirHandle.name}" và lưu thành công file du_lieu_du_an.json! Mọi thay đổi từ nay sẽ tự động đồng bộ vào thư mục này.`,
+        dirName: dirHandle.name,
+      };
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { success: false, message: 'Đã hủy chọn thư mục.' };
+      }
+      return {
+        success: false,
+        message: `Lỗi truy cập thư mục: ${err instanceof Error ? err.message : 'Thao tác không thành công'}`,
+      };
+    }
+  };
+
+  // ==================== LƯU FILE TẠI VỊ TRÍ TÙY CHỌN (SAVE AS) ====================
+  const saveDatabaseAs = async (): Promise<{ success: boolean; message: string; fileName?: string }> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const windowAny = window as any;
+    if (!windowAny.showSaveFilePicker) {
+      exportDatabaseToJson('du_lieu_du_an.json');
+      return {
+        success: true,
+        message: 'Đã tải file du_lieu_du_an.json về máy tính.',
+        fileName: 'du_lieu_du_an.json',
+      };
+    }
+
+    try {
+      const handle = await windowAny.showSaveFilePicker({
+        suggestedName: 'du_lieu_du_an.json',
+        types: [
+          {
+            description: 'File Dữ Liệu ProjectM (JSON)',
+            accept: {
+              'application/json': ['.json'],
+            },
+          },
+        ],
+      });
+
+      const now = new Date();
+      const dbWithMeta: AppDatabase = {
+        ...database,
+        metadata: {
+          ...database.metadata,
+          lastSavedAt: now.toISOString(),
+          totalProjects: database.projects.length,
+        },
+      };
+      const jsonStr = JSON.stringify(dbWithMeta, null, 2);
+
+      const writable = await handle.createWritable();
+      await writable.write(jsonStr);
+      await writable.close();
+
+      fileHandleRef.current = handle;
+      setIsDirectFileConnected(true);
+      setConnectedFileName(handle.name);
+
+      return {
+        success: true,
+        message: `Đã lưu file "${handle.name}" thành công! Mọi thay đổi tiếp theo sẽ tự động ghi nhớ vào file này.`,
+        fileName: handle.name,
+      };
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { success: false, message: 'Đã hủy chọn vị trí lưu file.' };
+      }
+      return {
+        success: false,
+        message: `Lỗi lưu file: ${err instanceof Error ? err.message : 'Thao tác không thành công'}`,
+      };
+    }
+  };
+
+  // ==================== KẾT NỐI FILE TRỰC TIẾP TRÊN ĐĨA (FILE SYSTEM ACCESS API) ====================
+  const connectDirectFile = async (): Promise<{ success: boolean; message: string }> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const windowAny = window as any;
+    if (!windowAny.showOpenFilePicker) {
+      return {
+        success: false,
+        message: 'Trình duyệt hiện tại chưa hỗ trợ File System Access API. Bạn hãy dùng tính năng Xuất/Nạp file JSON thông thường.',
+      };
+    }
+
+    try {
+      const [handle] = await windowAny.showOpenFilePicker({
+        types: [
+          {
+            description: 'File JSON Database',
+            accept: {
+              'application/json': ['.json'],
+            },
+          },
+        ],
+        multiple: false,
+      });
+
+      const file = await handle.getFile();
+      const content = await file.text();
+      const parsed = JSON.parse(content);
+
+      if (parsed.projects && Array.isArray(parsed.projects)) {
+        fileHandleRef.current = handle;
+        setDatabase(parsed);
+        setIsDirectFileConnected(true);
+        setConnectedFileName(file.name);
+
+        return {
+          success: true,
+          message: `Đã kết nối trực tiếp với file "${file.name}". Mọi thay đổi sẽ tự động ghi thẳng vào file này!`,
+        };
+      } else {
+        return {
+          success: false,
+          message: 'File được chọn không đúng định dạng dữ liệu ProjectM.',
+        };
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { success: false, message: 'Đã hủy chọn file.' };
+      }
+      return {
+        success: false,
+        message: `Lỗi kết nối file: ${err instanceof Error ? err.message : 'Thao tác không thành công'}`,
+      };
+    }
+  };
+
+  const disconnectDirectFile = () => {
+    fileHandleRef.current = null;
+    setIsDirectFileConnected(false);
+  };
+
+  return (
+    <DataContext.Provider
+      value={{
+        projects: database.projects,
+        projectDetails: database.projectDetails,
+        estimates: database.estimates,
+        costPackages: database.costPackages,
+        inspections: database.inspections,
+        legalDocs: database.legalDocs,
+        companies: database.companies,
+        planTasks: database.planTasks || {},
+        lastSavedTime,
+        storageSizeKb,
+        isDirectFileConnected,
+        connectedFileName,
+        addProject,
+        updateProject,
+        deleteProject,
+        addEstimate,
+        updateEstimate,
+        deleteEstimate,
+        addCostPackage,
+        updateCostPackage,
+        deleteCostPackage,
+        addInspection,
+        updateInspection,
+        deleteInspection,
+        addLegalDoc,
+        updateLegalDoc,
+        deleteLegalDoc,
+        addPlanTask,
+        updatePlanTask,
+        deletePlanTask,
+        addCompany,
+        updateCompany,
+        deleteCompany,
+        exportDatabaseToJson,
+        importDatabaseFromJson,
+        resetDatabaseToDefaults,
+        selectSaveDirectory,
+        saveDatabaseAs,
+        connectDirectFile,
+        disconnectDirectFile,
+      }}
+    >
+      {children}
+    </DataContext.Provider>
+  );
+};
+
+export const useData = () => {
+  const context = useContext(DataContext);
+  if (!context) {
+    throw new Error('useData must be used within a DataProvider');
+  }
+  return context;
+};
+

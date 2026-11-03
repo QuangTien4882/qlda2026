@@ -1,0 +1,471 @@
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { 
+  Pin, 
+  Search, 
+  X, 
+  Edit3, 
+  Trash2, 
+  Plus, 
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw
+} from 'lucide-react';
+import { AppButton } from './AppButton';
+
+export interface AdvancedColumn<T> {
+  id: string;
+  title: string;           // Tên tiêu đề (ví dụ: "Tổng mức đầu tư")
+  unit?: string;           // Đơn vị (ví dụ: "(đồng)", "(%)") - Bắt buộc nhảy dòng
+  width: number;           // Độ rộng ban đầu (px)
+  minWidth?: number;       // Độ rộng tối thiểu (px, mặc định 25)
+  align?: 'left' | 'center' | 'right';
+  pinned?: boolean;        // Mặc định có ghim hay không
+  canPin?: boolean;        // Cho phép ghim hay không (mặc định true)
+  canResize?: boolean;     // Cho phép kéo dãn hay không (mặc định true)
+  render?: (item: T, index: number) => React.ReactNode;
+  searchValue?: (item: T) => string; // Chuỗi dùng để tìm kiếm
+}
+
+interface AdvancedTableProps<T> {
+  title?: React.ReactNode;
+  subtitle?: React.ReactNode;
+  columns: AdvancedColumn<T>[];
+  data: T[];
+  keyExtractor: (item: T, index: number) => string | number;
+  onAdd?: () => void;
+  addLabel?: string;
+  onEdit?: (item: T) => void;
+  onDelete?: (item: T) => void;
+  onRowClick?: (item: T) => void;
+  emptyMessage?: string;
+  className?: string;
+  showActionsColumn?: boolean;
+}
+
+export function AdvancedTable<T>({
+  title,
+  subtitle,
+  columns: initialColumns,
+  data,
+  keyExtractor,
+  onAdd,
+  addLabel = 'Thêm mới',
+  onEdit,
+  onDelete,
+  onRowClick,
+  emptyMessage = 'Không tìm thấy dữ liệu phù hợp',
+  className = '',
+  showActionsColumn = true,
+}: AdvancedTableProps<T>) {
+  // Ref container cuộn của bảng
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+
+  // 1. Quản lý độ rộng từng cột (Resize độc lập)
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    const map: Record<string, number> = {};
+    initialColumns.forEach((c) => {
+      map[c.id] = c.width;
+    });
+    return map;
+  });
+
+  // 2. Quản lý ghim cột lũy tiến (Freeze Panes chuẩn Excel: Ghim cột k thì ghim toàn bộ 0..k)
+  const initialFreezeIndex = useMemo(() => {
+    let maxIdx = -1;
+    initialColumns.forEach((col, idx) => {
+      if (col.pinned) maxIdx = Math.max(maxIdx, idx);
+    });
+    return maxIdx;
+  }, [initialColumns]);
+
+  const [freezeIndex, setFreezeIndex] = useState<number>(initialFreezeIndex);
+
+  const handleToggleFreeze = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (index <= freezeIndex) {
+      // Đang được ghim: bỏ ghim từ cột này trở về sau
+      setFreezeIndex(index - 1);
+    } else {
+      // Chưa ghim: ghim toàn bộ từ cột 0 đến cột này
+      setFreezeIndex(index);
+    }
+  };
+
+  // 3. Quản lý tìm kiếm không theo thứ tự (Out-of-order Search)
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // 4. Ref và trạng thái kéo giãn cột (Column Resizing)
+  const resizingRef = useRef<{
+    colId: string;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  const startResize = (colId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = {
+      colId,
+      startX: e.clientX,
+      startWidth: colWidths[colId] || 100,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { colId: activeId, startX, startWidth } = resizingRef.current;
+      const delta = moveEvent.clientX - startX;
+      const colDef = initialColumns.find((c) => c.id === activeId);
+      const minW = colDef?.minWidth !== undefined ? colDef.minWidth : 25;
+      const newWidth = Math.max(minW, Math.max(20, startWidth + delta));
+
+      setColWidths((prev) => ({
+        ...prev,
+        [activeId]: newWidth,
+      }));
+    };
+
+    const handleMouseUp = () => {
+      resizingRef.current = null;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  // 5. Tính toán vị trí offset `left` cho các cột ghim (Freeze Panes Offsets)
+  const { pinnedOffsets, totalTableWidth } = useMemo(() => {
+    const offsets: number[] = [];
+    let currentLeft = 0;
+    let totalW = 0;
+
+    initialColumns.forEach((col, idx) => {
+      const w = colWidths[col.id] || col.width;
+      if (idx <= freezeIndex) {
+        offsets[idx] = currentLeft;
+        currentLeft += w;
+      } else {
+        offsets[idx] = 0;
+      }
+      totalW += w;
+    });
+
+    if (showActionsColumn && (onEdit || onDelete)) {
+      totalW += 90; // Cột thao tác
+    }
+
+    return { pinnedOffsets: offsets, totalTableWidth: totalW };
+  }, [initialColumns, freezeIndex, colWidths, showActionsColumn, onEdit, onDelete]);
+
+  // 6. Lọc dữ liệu tìm kiếm không theo thứ tự (Out-of-order Multi-keyword Search)
+  const filteredData = useMemo(() => {
+    if (!searchTerm.trim()) return data;
+
+    const tokens = searchTerm
+      .toLowerCase()
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    return data.filter((item) => {
+      const rowTexts = initialColumns
+        .map((col) => {
+          if (col.searchValue) return col.searchValue(item);
+          const raw = (item as Record<string, unknown>)[col.id];
+          return raw !== undefined && raw !== null ? String(raw) : '';
+        })
+        .join(' ')
+        .toLowerCase();
+
+      return tokens.every((token) => rowTexts.includes(token));
+    });
+  }, [data, searchTerm, initialColumns]);
+
+  // Nút cuộn ngang tiện lợi
+  const scrollHorizontally = (delta: number) => {
+    if (tableScrollRef.current) {
+      tableScrollRef.current.scrollBy({ left: delta, behavior: 'smooth' });
+    }
+  };
+
+  return (
+    <div className={`flex flex-col flex-1 min-h-0 h-full overflow-hidden ${className}`}>
+      {/* Thanh công cụ gọn gàng: Số bản ghi + Nút cuộn ngang + Tìm kiếm Out-of-order + Nút Thêm mới */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-[#0d1424] px-3 py-2 rounded-xl border border-[#232f4e] shrink-0 mb-2 shadow-sm">
+        <div className="min-w-0 flex items-center gap-2">
+          <span className="text-xs bg-blue-900/40 text-blue-300 px-2.5 py-1 rounded-lg border border-blue-700/40 font-mono font-bold shrink-0">
+            {filteredData.length}/{data.length} bản ghi
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Nút điều hướng cuộn ngang nhanh cho chuột thường */}
+          <div className="hidden md:flex items-center gap-1 bg-[#080d1a] border border-[#232f4e] rounded-lg p-0.5">
+            <button
+              type="button"
+              onClick={() => scrollHorizontally(-220)}
+              title="Cuộn bảng sang trái"
+              className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span className="text-[11px] text-slate-400 font-mono px-1">Cuộn ngang</span>
+            <button
+              type="button"
+              onClick={() => scrollHorizontally(220)}
+              title="Cuộn bảng sang phải"
+              className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+
+          {/* Ô tìm kiếm thông minh không cần theo thứ tự */}
+          <div className="relative flex items-center min-w-[180px] sm:min-w-[240px]">
+            <Search size={14} className="absolute left-2.5 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Tìm kiếm mọi từ khóa..."
+              className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg pl-8 pr-7 py-1 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2 p-0.5 text-slate-400 hover:text-slate-100 rounded"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Nút Bỏ ghim nếu đang có cột ghim */}
+          {freezeIndex >= 0 && (
+            <button
+              onClick={() => setFreezeIndex(-1)}
+              title="Bỏ ghim toàn bộ các cột"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs transition-colors"
+            >
+              <RotateCcw size={12} />
+              <span className="hidden xl:inline text-[11px]">Bỏ ghim</span>
+            </button>
+          )}
+
+          {/* Nút thêm mới đồng bộ: "Thêm mới" */}
+          {onAdd && (
+            <AppButton size="sm" variant="primary" icon={<Plus size={14} />} onClick={onAdd}>
+              {addLabel}
+            </AppButton>
+          )}
+        </div>
+      </div>
+
+      {/* Bảng Dữ Liệu Nâng Cao: 
+          - Tự động chiếm trọn chiều cao còn lại (flex-1 min-h-0)
+          - Thanh cuộn ngang luôn ghim cố định ở đáy bảng ngay tầm nhìn
+          - Cột ghim lũy tiến (Freeze Panes) chuẩn Excel
+          - Khi resize cột, chữ tự động xuống dòng (whitespace-normal break-words)
+          - Kẻ khung dòng & cột sắc nét, chống hoàn toàn rò rỉ khi cuộn dọc và cuộn ngang */}
+      <div 
+        ref={tableScrollRef}
+        className="flex-1 min-h-0 w-full overflow-auto rounded-lg border border-slate-600 bg-[#080e1a] shadow-xl relative"
+      >
+        <table
+          className="table-data-grid border-separate border-spacing-0 text-left table-fixed w-full"
+          style={{ width: `${totalTableWidth}px`, minWidth: `${totalTableWidth}px` }}
+        >
+          {/* Header Bảng: Căn giữa, Top, Đơn vị nhảy dòng (Alt+Enter), Ghim lũy tiến, sticky top-0 trực tiếp trên từng th */}
+          <thead className="bg-[#141f36] p-0 m-0">
+            <tr>
+              {initialColumns.map((col, idx) => {
+                const isPinned = idx <= freezeIndex;
+                const isLastPinned = idx === freezeIndex;
+                const leftPos = isPinned ? pinnedOffsets[idx] : undefined;
+                const width = colWidths[col.id] || col.width;
+
+                return (
+                  <th
+                    key={col.id}
+                    style={{
+                      width: `${width}px`,
+                      minWidth: `${width}px`,
+                      maxWidth: `${width}px`,
+                      left: isPinned ? `${leftPos}px` : undefined,
+                      top: 0,
+                    }}
+                    className={`sticky top-0 ${
+                      isPinned
+                        ? 'z-30 bg-[#162544]'
+                        : 'z-20 bg-[#141f36]'
+                    } py-2.5 px-2.5 align-top text-center select-none relative group border-b-2 border-r border-slate-600 text-slate-100 font-semibold ${
+                      isLastPinned ? 'border-r-2 border-r-blue-400 shadow-[4px_0_12px_rgba(0,0,0,0.65)]' : ''
+                    }`}
+                  >
+                    {/* Header Content: Căn giữa & Top */}
+                    <div className="flex flex-col items-center justify-start min-h-[44px]">
+                      <div className="flex items-center justify-center gap-1.5 w-full">
+                        <span className="font-semibold text-slate-100 tracking-wide text-center leading-tight">
+                          {col.title}
+                        </span>
+
+                        {/* Nút Ghim Cột Lũy Tiến (Freeze Panes) */}
+                        {col.canPin !== false && (
+                          <button
+                            onClick={(e) => handleToggleFreeze(idx, e)}
+                            title={
+                              isPinned
+                                ? `Bỏ ghim từ cột này trở đi`
+                                : `Ghim cố định từ cột 1 đến cột "${col.title}"`
+                            }
+                            className={`p-1 rounded transition-colors ${
+                              isPinned
+                                ? 'text-blue-400 bg-blue-900/50 hover:bg-blue-800'
+                                : 'text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100'
+                            }`}
+                          >
+                            <Pin size={12} className={isPinned ? 'rotate-45 text-blue-300' : ''} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Đơn vị nhảy dòng (như Alt+Enter trong Excel) */}
+                      {col.unit && (
+                        <span className="header-unit text-[11px] font-mono font-medium text-slate-300 mt-1 whitespace-nowrap bg-[#0b1222] px-1.5 py-0.5 rounded border border-slate-500/50">
+                          {col.unit}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Thanh kéo dãn mép cột (Col Resizer Handle) */}
+                    {col.canResize !== false && (
+                      <div
+                        onMouseDown={(e) => startResize(col.id, e)}
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400 active:bg-blue-300 select-none touch-none z-40 transition-colors"
+                        title="Kéo sang trái/phải để thay đổi độ rộng cột"
+                      />
+                    )}
+                  </th>
+                );
+              })}
+
+              {/* Cột thao tác (Sửa / Xóa) - GHIM CỐ ĐỊNH BÊN PHẢI (STICKY RIGHT) */}
+              {showActionsColumn && (onEdit || onDelete) && (
+                <th
+                  style={{ width: '90px', minWidth: '90px', maxWidth: '90px', top: 0, right: 0 }}
+                  className="sticky top-0 right-0 z-30 py-2.5 px-2 align-top text-center bg-[#162544] text-slate-100 font-semibold border-b-2 border-l-2 border-l-blue-500/60 border-r border-slate-600 shadow-[-4px_0_12px_rgba(0,0,0,0.65)]"
+                >
+                  <div className="flex flex-col items-center justify-start min-h-[44px]">
+                    <span className="font-semibold text-slate-100 leading-tight">Thao tác</span>
+                    <span className="header-unit text-[11px] text-slate-400 mt-1 font-mono">(Sửa/Xóa)</span>
+                  </div>
+                </th>
+              )}
+            </tr>
+          </thead>
+
+          {/* Body Bảng: Kẻ khung từng ô, Tự động xuống dòng khi resize cột */}
+          <tbody>
+            {filteredData.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={initialColumns.length + (showActionsColumn && (onEdit || onDelete) ? 1 : 0)}
+                  className="py-12 text-center text-slate-400 border-b border-r border-slate-700/80 bg-[#080e1a]"
+                >
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Search size={24} className="text-slate-500" />
+                    <span>{emptyMessage}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              filteredData.map((item, index) => (
+                <tr
+                  key={keyExtractor(item, index)}
+                  onClick={() => onRowClick && onRowClick(item)}
+                  className={`group transition-colors duration-100 ${
+                    onRowClick ? 'cursor-pointer' : ''
+                  }`}
+                >
+                  {initialColumns.map((col, idx) => {
+                    const isPinned = idx <= freezeIndex;
+                    const isLastPinned = idx === freezeIndex;
+                    const leftPos = isPinned ? pinnedOffsets[idx] : undefined;
+                    const width = colWidths[col.id] || col.width;
+
+                    return (
+                      <td
+                        key={col.id}
+                        style={{
+                          width: `${width}px`,
+                          minWidth: `${width}px`,
+                          maxWidth: `${width}px`,
+                          left: isPinned ? `${leftPos}px` : undefined,
+                        }}
+                        className={`py-2 px-2.5 text-slate-200 align-top border-b border-r border-slate-700/80 ${
+                          col.align === 'right'
+                            ? 'text-right'
+                            : col.align === 'center'
+                            ? 'text-center'
+                            : 'text-left'
+                        } ${
+                          isPinned
+                            ? `sticky z-10 ${index % 2 === 0 ? 'bg-[#0f172a]' : 'bg-[#0a101f]'} group-hover:bg-[#162544]`
+                            : `${index % 2 === 0 ? 'bg-[#0d1527]' : 'bg-[#080e1a]'} group-hover:bg-[#162544]`
+                        } ${isLastPinned ? 'border-r-2 border-r-blue-400 shadow-[4px_0_12px_rgba(0,0,0,0.65)]' : ''}`}
+                      >
+                        {/* Tự động xuống dòng khi resize cột hẹp lại */}
+                        <div className="whitespace-normal break-words leading-relaxed">
+                          {col.render
+                            ? col.render(item, index)
+                            : String((item as Record<string, unknown>)[col.id] ?? '')}
+                        </div>
+                      </td>
+                    );
+                  })}
+
+                  {/* Cột thao tác (Sửa / Xóa) - GHIM CỐ ĐỊNH BÊN PHẢI (STICKY RIGHT) */}
+                  {showActionsColumn && (onEdit || onDelete) && (
+                    <td
+                      style={{ width: '90px', minWidth: '90px', maxWidth: '90px', right: 0 }}
+                      className={`sticky right-0 z-20 py-2 px-2 text-center align-top border-b border-l-2 border-l-blue-500/60 border-r border-slate-700/80 shadow-[-4px_0_12px_rgba(0,0,0,0.65)] ${
+                        index % 2 === 0 ? 'bg-[#0f172a]' : 'bg-[#0a101f]'
+                      } group-hover:bg-[#162544]`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-center gap-1.5 pt-1">
+                        {onEdit && (
+                          <button
+                            onClick={() => onEdit(item)}
+                            title="Chỉnh sửa dữ liệu"
+                            className="p-1.5 text-blue-400 hover:text-white hover:bg-blue-600 rounded transition-colors"
+                          >
+                            <Edit3 size={15} />
+                          </button>
+                        )}
+                        {onDelete && (
+                          <button
+                            onClick={() => onDelete(item)}
+                            title="Xóa dữ liệu"
+                            className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-600 rounded transition-colors"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
