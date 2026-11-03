@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
+import { modalStack } from '../../utils/modalStack';
 
 export interface AppModalProps {
   isOpen: boolean;
@@ -22,18 +23,35 @@ export const AppModal: React.FC<AppModalProps> = ({
   level = 1,
   maxWidth,
 }) => {
+  const modalIdRef = useRef<string>(`modal-${Math.random().toString(36).slice(2, 9)}`);
+
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
     if (isOpen) {
+      const id = modalIdRef.current;
+      modalStack.push(id);
       document.body.style.overflow = 'hidden';
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          // Chỉ modal trên cùng trong stack mới được phép xử lý ESC
+          if (modalStack.isTop(id)) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }
+        }
+      };
+
       window.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        modalStack.pop(id);
+        if (modalStack.count() === 0) {
+          document.body.style.overflow = 'unset';
+        }
+        window.removeEventListener('keydown', handleKeyDown);
+      };
     }
-    return () => {
-      document.body.style.overflow = 'unset';
-      window.removeEventListener('keydown', handleKeyDown);
-    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;

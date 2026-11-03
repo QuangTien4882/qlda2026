@@ -48,15 +48,15 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const [showExitConfirm, setShowExitConfirm] = useState<boolean>(false);
 
-  // Tùy chọn làm tròn đến hàng nghìn đồng
-  const [roundToThousand, setRoundToThousand] = useState<boolean>(false);
+  // Tùy chọn làm tròn đến hàng nghìn đồng (Mặc định tích chọn)
+  const [roundToThousand, setRoundToThousand] = useState<boolean>(true);
 
   // Nạp dữ liệu khi mở modal
   useEffect(() => {
     if (isOpen) {
       setIsDirty(false);
       setShowExitConfirm(false);
-      setRoundToThousand(false);
+      setRoundToThousand(true);
 
       const allProjectBreakdowns = costBreakdowns[projectId] || [];
       const filtered = allProjectBreakdowns
@@ -378,20 +378,20 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
         confirmLabel="Hủy thay đổi & Đóng"
         cancelLabel="Ở lại chỉnh sửa"
         variant="warning"
+        extraAction={
+          <AppButton variant="primary" size="sm" onClick={handleSaveAndApply}>
+            <Check size={14} className="mr-1" />
+            Lưu cập nhật và đóng
+          </AppButton>
+        }
         message={
-          <div className="space-y-3 text-xs md:text-sm">
+          <div className="space-y-2 text-xs md:text-sm">
             <p className="text-slate-200">
               Bạn có các khoản mục chi tiết vừa nhập/sửa đổi <strong className="text-amber-300">chưa được lưu cập nhật</strong> vào chi phí.
             </p>
             <p className="text-slate-400">
               Bạn có muốn lưu các khoản chi tiết này trước khi đóng không?
             </p>
-            <div className="pt-2 flex justify-end">
-              <AppButton variant="primary" size="sm" onClick={handleSaveAndApply}>
-                <Check size={14} className="mr-1" />
-                Lưu cập nhật và đóng
-              </AppButton>
-            </div>
           </div>
         }
       />
