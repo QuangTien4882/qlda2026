@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { InspectionItem } from '../../../types/project';
 import { AdvancedTable, AdvancedColumn } from '../../common/AdvancedTable';
 import { AppModal } from '../../common/AppModal';
@@ -9,7 +9,7 @@ import { VnDateInput } from '../../common/VnDateInput';
 import { SearchableSelect, SearchableOption } from '../../common/SearchableSelect';
 import { formatVnNumber } from '../../../utils/numberUtils';
 import { useData } from '../../../context/DataContext';
-import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ShieldAlert, History } from 'lucide-react';
 
 interface TabInspectionsProps {
   inspections: InspectionItem[];
@@ -92,12 +92,16 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
     ? getEffectiveContractValue(projectId, targetPackage.id)
     : (contractValue || 0);
 
-  // Lấy các đợt nghiệm thu khác của cùng gói thầu này (để tính cộng dồn)
-  const otherInspections = inspections.filter((i) => {
-    if (editingItem && i.id === editingItem.id) return false;
-    if (targetPackage && i.costPackageId === targetPackage.id) return true;
-    return i.packageName.trim().toLowerCase() === packageName.trim().toLowerCase();
-  });
+  // Lấy các đợt nghiệm thu khác của cùng gói thầu này (để tính cộng dồn và hiển thị danh sách đợt trước)
+  const otherInspections = useMemo(() => {
+    if (!packageName.trim() && !costPackageId) return [];
+    return inspections.filter((i) => {
+      if (editingItem && i.id === editingItem.id) return false;
+      if (costPackageId && i.costPackageId === costPackageId) return true;
+      if (targetPackage && i.costPackageId === targetPackage.id) return true;
+      return i.packageName.trim().toLowerCase() === packageName.trim().toLowerCase();
+    }).sort((a, b) => (Number(a.stt) || 0) - (Number(b.stt) || 0));
+  }, [inspections, editingItem, costPackageId, targetPackage, packageName]);
 
   const prevInspectionSum = otherInspections.reduce((sum, i) => sum + (Number(i.inspectionValue) || 0), 0);
   const prevPaymentSum = otherInspections.reduce((sum, i) => sum + (Number(i.paymentValue) || 0), 0);
@@ -406,6 +410,93 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
               suffix="đồng"
             />
           </div>
+
+          {/* Bảng Danh sách các đợt đã nghiệm thu của nội dung chi phí này */}
+          {packageName.trim() && (
+            <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-blue-400 uppercase flex items-center gap-1.5">
+                  <History size={14} className="text-blue-400" />
+                  Các đợt đã nghiệm thu của gói thầu này ({otherInspections.length} đợt)
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {otherInspections.length > 0 ? (
+                    <span>Tổng đã NT trước đó: <strong className="font-mono text-emerald-400 font-bold">{formatVnNumber(prevInspectionSum)} đ</strong></span>
+                  ) : (
+                    <span className="italic">Chưa có đợt nghiệm thu nào trước đó</span>
+                  )}
+                </span>
+              </div>
+
+              {otherInspections.length > 0 ? (
+                <div className="overflow-x-auto rounded-lg border border-[#1b2744]">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-[#0e172a] text-slate-400 font-semibold border-b border-[#1b2744]">
+                      <tr>
+                        <th className="py-1.5 px-2.5 text-center w-10">STT</th>
+                        <th className="py-1.5 px-2.5">Đợt NT</th>
+                        <th className="py-1.5 px-2.5 text-center">Ngày NT</th>
+                        <th className="py-1.5 px-2.5 text-right font-mono">Giá trị NT (đồng)</th>
+                        <th className="py-1.5 px-2.5 text-right font-mono">Giá trị TT (đồng)</th>
+                        <th className="py-1.5 px-2.5 text-center">Tỷ lệ TT/NT</th>
+                        <th className="py-1.5 px-2.5">Ghi chú</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#18233c] bg-[#080d1a]">
+                      {otherInspections.map((item, idx) => {
+                        const rowRatio = item.inspectionValue > 0
+                          ? ((item.paymentValue / item.inspectionValue) * 100).toFixed(1)
+                          : '0.0';
+                        return (
+                          <tr key={item.id} className="hover:bg-[#0f1b33] transition-colors">
+                            <td className="py-1.5 px-2.5 text-center font-mono text-slate-400">{idx + 1}</td>
+                            <td className="py-1.5 px-2.5 font-medium text-slate-200">
+                              <span className="px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/50 font-semibold text-[11px]">
+                                {item.inspectionRound}
+                              </span>
+                            </td>
+                            <td className="py-1.5 px-2.5 text-center font-mono text-slate-300">{item.inspectionDate}</td>
+                            <td className="py-1.5 px-2.5 text-right font-mono font-bold text-emerald-400">
+                              {formatVnNumber(item.inspectionValue)} đ
+                            </td>
+                            <td className="py-1.5 px-2.5 text-right font-mono text-blue-300">
+                              {formatVnNumber(item.paymentValue)} đ
+                            </td>
+                            <td className="py-1.5 px-2.5 text-center font-mono text-purple-300">
+                              {rowRatio}%
+                            </td>
+                            <td className="py-1.5 px-2.5 text-slate-400 italic truncate max-w-[140px]">
+                              {item.note || '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-[#0b1426] border-t border-[#1e2e4e] font-semibold text-slate-200">
+                      <tr>
+                        <td colSpan={3} className="py-1.5 px-2.5 text-right text-slate-400">
+                          Tổng cộng đã NT trước đó:
+                        </td>
+                        <td className="py-1.5 px-2.5 text-right font-mono font-bold text-emerald-400">
+                          {formatVnNumber(prevInspectionSum)} đ
+                        </td>
+                        <td className="py-1.5 px-2.5 text-right font-mono font-bold text-blue-300">
+                          {formatVnNumber(prevPaymentSum)} đ
+                        </td>
+                        <td colSpan={2} className="py-1.5 px-2.5 text-center text-slate-400 font-normal italic">
+                          ({otherInspections.length} đợt)
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-2.5 text-center rounded-lg bg-[#080d1a] border border-[#1b2744] text-slate-400 text-xs italic">
+                  Chưa có đợt nghiệm thu nào trước đó cho gói thầu này (Đợt này sẽ là đợt nghiệm thu đầu tiên).
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Hộp kiểm soát hợp đồng và cảnh báo vượt giá trị hợp đồng realtime */}
           {activeContractValue > 0 && (
