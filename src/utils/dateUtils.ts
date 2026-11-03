@@ -99,3 +99,166 @@ export function fromIsoToCustomVnDate(isoStr: string): string {
   return formatCustomVnDate(date);
 }
 
+/**
+ * Trích xuất số ngày thực hiện hợp đồng từ chuỗi nhập liệu (VD: "180 ngày", "6 tháng", "180")
+ */
+export function parseContractExecutionDays(timeStr: string | number | undefined | null): number {
+  if (timeStr === undefined || timeStr === null) return 0;
+  if (typeof timeStr === 'number') return Math.max(0, Math.round(timeStr));
+
+  const clean = timeStr.trim().toLowerCase();
+  if (!clean) return 0;
+
+  // Trường hợp nhập theo tháng: "6 tháng", "12 thang"
+  if (clean.includes('tháng') || clean.includes('thang')) {
+    const match = clean.match(/\d+/);
+    if (match) {
+      return parseInt(match[0], 10) * 30;
+    }
+  }
+
+  // Trường hợp nhập theo năm: "1 năm", "2 nam"
+  if (clean.includes('năm') || clean.includes('nam')) {
+    const match = clean.match(/\d+/);
+    if (match) {
+      return parseInt(match[0], 10) * 365;
+    }
+  }
+
+  // Mặc định bóc tách số ngày (VD: "180 ngày", "90 ngay", "120")
+  const match = clean.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+}
+
+export type DeadlineStatus = 'overdue' | 'urgent' | 'warning' | 'normal' | 'unknown' | 'completed' | 'not_applicable';
+
+export interface ContractDeadlineInfo {
+  contractDateStr: string;
+  contractDate: Date | null;
+  baseDays: number;
+  additionalDays: number;
+  totalDays: number;
+  deadlineDate: Date | null;
+  deadlineStr: string;
+  remainingDays: number; // Âm: đã quá hạn X ngày, Dương: còn X ngày
+  status: DeadlineStatus;
+  statusText: string;
+}
+
+/**
+ * Tính toán ngày hết hạn hợp đồng và trạng thái cảnh báo
+ * Công thức: Hạn chót = Ngày ký + Thời gian thực hiện gốc + Ngày gia hạn từ PLHĐ
+ */
+export function calculateContractDeadline(
+  contractDateStr: string | undefined | null,
+  executionDaysStrOrNum: string | number | undefined | null,
+  additionalDays: number = 0,
+  isCompleted: boolean = false,
+  isFee: boolean = false
+): ContractDeadlineInfo {
+  if (isFee) {
+    return {
+      contractDateStr: contractDateStr || '',
+      contractDate: null,
+      baseDays: 0,
+      additionalDays: 0,
+      totalDays: 0,
+      deadlineDate: null,
+      deadlineStr: '',
+      remainingDays: 0,
+      status: 'not_applicable',
+      statusText: 'Không áp dụng đối với Phí',
+    };
+  }
+
+  if (isCompleted) {
+    return {
+      contractDateStr: contractDateStr || '',
+      contractDate: null,
+      baseDays: 0,
+      additionalDays: 0,
+      totalDays: 0,
+      deadlineDate: null,
+      deadlineStr: '',
+      remainingDays: 0,
+      status: 'completed',
+      statusText: 'Hợp đồng đã hoàn thành',
+    };
+  }
+
+  const baseDays = parseContractExecutionDays(executionDaysStrOrNum);
+  const totalDays = baseDays + (Number(additionalDays) || 0);
+
+  if (!contractDateStr || totalDays <= 0) {
+    return {
+      contractDateStr: contractDateStr || '',
+      contractDate: null,
+      baseDays,
+      additionalDays,
+      totalDays,
+      deadlineDate: null,
+      deadlineStr: '',
+      remainingDays: 0,
+      status: 'unknown',
+      statusText: 'Chưa đủ thông tin tính hạn',
+    };
+  }
+
+  const startDate = parseCustomVnDate(contractDateStr);
+  if (!startDate) {
+    return {
+      contractDateStr: contractDateStr || '',
+      contractDate: null,
+      baseDays,
+      additionalDays,
+      totalDays,
+      deadlineDate: null,
+      deadlineStr: '',
+      remainingDays: 0,
+      status: 'unknown',
+      statusText: 'Ngày ký không đúng định dạng',
+    };
+  }
+
+  // Hạn chót = startDate + totalDays ngày
+  const deadlineDate = new Date(startDate.getTime());
+  deadlineDate.setDate(deadlineDate.getDate() + totalDays);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const target = new Date(deadlineDate.getFullYear(), deadlineDate.getMonth(), deadlineDate.getDate());
+  const diffTime = target.getTime() - today.getTime();
+  const remainingDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+  let status: DeadlineStatus = 'normal';
+  let statusText = `Còn ${remainingDays} ngày`;
+
+  if (remainingDays < 0) {
+    status = 'overdue';
+    statusText = `Quá hạn ${Math.abs(remainingDays)} ngày`;
+  } else if (remainingDays <= 15) {
+    status = 'urgent';
+    statusText = `Khẩn cấp: Còn ${remainingDays} ngày`;
+  } else if (remainingDays <= 30) {
+    status = 'warning';
+    statusText = `Lưu ý: Còn ${remainingDays} ngày`;
+  } else {
+    status = 'normal';
+    statusText = `Còn ${remainingDays} ngày`;
+  }
+
+  return {
+    contractDateStr,
+    contractDate: startDate,
+    baseDays,
+    additionalDays,
+    totalDays,
+    deadlineDate,
+    deadlineStr: formatCustomVnDate(deadlineDate),
+    remainingDays,
+    status,
+    statusText,
+  };
+}
+

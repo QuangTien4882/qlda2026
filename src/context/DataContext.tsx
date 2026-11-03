@@ -13,6 +13,17 @@ import {
   ContractAppendixItem
 } from '../types/project';
 import { AppDatabase } from '../types/database';
+import { 
+  saveDatabaseToIdb, 
+  loadDatabaseFromIdb, 
+  saveBackupSnapshotToIdb, 
+  getBackupSnapshotsFromIdb, 
+  deleteBackupSnapshotFromIdb, 
+  pruneOldBackups, 
+  autoMigrateFromLocalStorageIfEmpty, 
+  BackupSnapshotItem 
+} from '../services/storage/idbService';
+import { formatCustomVnDate } from '../utils/dateUtils';
 
 const STORAGE_KEY = 'projectm_master_database_v3';
 const APP_VERSION = '1.0.0';
@@ -93,6 +104,12 @@ interface DataContextType {
   saveDatabaseAs: () => Promise<{ success: boolean; message: string; fileName?: string }>;
   connectDirectFile: () => Promise<{ success: boolean; message: string }>;
   disconnectDirectFile: () => void;
+
+  // Quản lý sao lưu dự phòng định kỳ & IndexedDB
+  createManualBackup: (note?: string) => Promise<boolean>;
+  restoreFromBackup: (backupItem: BackupSnapshotItem) => Promise<boolean>;
+  getBackupList: () => Promise<BackupSnapshotItem[]>;
+  deleteBackup: (backupId: string) => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -189,7 +206,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Tự động lưu vào localStorage và File Handle (nếu đang kết nối trực tiếp)
+  // Tự động lưu vào IndexedDB, localStorage và File Handle (nếu đang kết nối trực tiếp)
   const persistDatabase = useCallback(async (updated: AppDatabase) => {
     try {
       const now = new Date();
@@ -204,12 +221,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       };
 
+      // 1. Lưu vào IndexedDB (Bộ nhớ Offline vĩnh viễn, không giới hạn dung lượng)
+      await saveDatabaseToIdb(dbWithMeta);
+
       const jsonStr = JSON.stringify(dbWithMeta, null, 2);
+
+      // 2. Lưu dự phòng vào LocalStorage (nếu còn dung lượng)
       try {
         localStorage.setItem(STORAGE_KEY, jsonStr);
       } catch (lsErr: any) {
         if (lsErr?.name === 'QuotaExceededError' || lsErr?.code === 22) {
-          console.warn('LocalStorage quota limit reached. Dữ liệu đang được ưu tiên ghi vào File Handle / IndexedDB.');
+          console.warn('LocalStorage quota limit reached. Dữ liệu đã được lưu an toàn tuyệt đối trong IndexedDB.');
         } else {
           console.error('Lỗi ghi LocalStorage:', lsErr);
         }
@@ -217,7 +239,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLastSavedTime(timeStr);
       calculateStorage(dbWithMeta);
 
-      // Nếu người dùng đã cấp quyền ghi vào file trên máy tính (Google Drive)
+      // 3. Nếu người dùng đã cấp quyền ghi vào file trên máy tính (Google Drive)
       if (fileHandleRef.current) {
         try {
           const writable = await fileHandleRef.current.createWritable();
@@ -236,6 +258,62 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     persistDatabase(database);
   }, [database, persistDatabase]);
+
+  // Khởi động hệ thống: Tự động di chuyển dữ liệu (Migration) từ LocalStorage sang IndexedDB & kích hoạt Auto-backup hàng ngày
+  useEffect(() => {
+    let isMounted = true;
+    const initStorageAndBackup = async () => {
+      try {
+        // 1. Kiểm tra nạp từ IndexedDB hoặc migrate từ LocalStorage
+        const migratedOrExisting = await autoMigrateFromLocalStorageIfEmpty(STORAGE_KEY);
+        if (isMounted && migratedOrExisting && migratedOrExisting.projects && migratedOrExisting.projects.length > 0) {
+          setDatabase(migratedOrExisting);
+        }
+
+        // 2. Kích hoạt Auto-backup hàng ngày (giữ 7 bản xoay vòng gần nhất)
+        const todayStr = formatCustomVnDate(new Date());
+        const lastAutoBackup = localStorage.getItem('projectm_last_autobackup_date');
+        if (lastAutoBackup !== todayStr) {
+          const currentData = migratedOrExisting || database;
+          if (currentData && currentData.projects && currentData.projects.length > 0) {
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            const jsonStr = JSON.stringify(currentData);
+            const sizeKb = Number((new Blob([jsonStr]).size / 1024).toFixed(1));
+
+            let contractCount = 0;
+            Object.values(currentData.costPackages || {}).forEach((pkgs) => {
+              contractCount += pkgs.filter((p) => p.contractNumber).length;
+            });
+
+            const snapshot: BackupSnapshotItem = {
+              id: `backup_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`,
+              timestamp: now.getTime(),
+              dateStr: `${formatCustomVnDate(now)} ${timeStr}`,
+              type: 'auto',
+              note: 'Sao lưu tự động hàng ngày (Auto-backup)',
+              sizeKb,
+              projectCount: currentData.projects.length,
+              contractCount,
+              data: currentData,
+            };
+
+            await saveBackupSnapshotToIdb(snapshot);
+            await pruneOldBackups(7);
+            localStorage.setItem('projectm_last_autobackup_date', todayStr);
+            console.log('[Auto-backup] Đã hoàn thành bản sao lưu tự động ngày:', todayStr);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi khi nạp IndexedDB hoặc Auto-backup:', err);
+      }
+    };
+
+    initStorageAndBackup();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // ==================== CÁC HÀM THAO TÁC DỰ ÁN ====================
   const addProject = (project: ProjectListItem, detail?: ProjectDetailItem) => {
@@ -936,6 +1014,62 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsDirectFileConnected(false);
   };
 
+  // ==================== CÁC HÀM QUẢN LÝ SAO LƯU DỰ PHÒNG (INDEXEDDB BACKUP) ====================
+  const createManualBackup = async (note?: string): Promise<boolean> => {
+    try {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      const jsonStr = JSON.stringify(database);
+      const sizeKb = Number((new Blob([jsonStr]).size / 1024).toFixed(1));
+
+      let contractCount = 0;
+      Object.values(database.costPackages || {}).forEach((pkgs) => {
+        contractCount += pkgs.filter((p) => p.contractNumber).length;
+      });
+
+      const snapshot: BackupSnapshotItem = {
+        id: `manual_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`,
+        timestamp: now.getTime(),
+        dateStr: `${formatCustomVnDate(now)} ${timeStr}`,
+        type: 'manual',
+        note: note || 'Bản sao lưu thủ công của người dùng',
+        sizeKb,
+        projectCount: database.projects.length,
+        contractCount,
+        data: database,
+      };
+
+      const success = await saveBackupSnapshotToIdb(snapshot);
+      await pruneOldBackups(15);
+      return success;
+    } catch (e) {
+      console.error('Lỗi tạo sao lưu thủ công:', e);
+      return false;
+    }
+  };
+
+  const restoreFromBackup = async (backupItem: BackupSnapshotItem): Promise<boolean> => {
+    try {
+      if (!backupItem || !backupItem.data || !backupItem.data.projects) {
+        return false;
+      }
+      setDatabase(backupItem.data);
+      await saveDatabaseToIdb(backupItem.data);
+      return true;
+    } catch (e) {
+      console.error('Lỗi khôi phục từ bản sao lưu:', e);
+      return false;
+    }
+  };
+
+  const getBackupList = async (): Promise<BackupSnapshotItem[]> => {
+    return await getBackupSnapshotsFromIdb();
+  };
+
+  const deleteBackup = async (backupId: string): Promise<boolean> => {
+    return await deleteBackupSnapshotFromIdb(backupId);
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -986,6 +1120,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         saveDatabaseAs,
         connectDirectFile,
         disconnectDirectFile,
+        createManualBackup,
+        restoreFromBackup,
+        getBackupList,
+        deleteBackup,
       }}
     >
       {children}

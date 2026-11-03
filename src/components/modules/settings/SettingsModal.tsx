@@ -23,8 +23,10 @@ import {
   Link2,
   FolderOpen,
   Save,
-  FileCheck
+  FileCheck,
+  Database
 } from 'lucide-react';
+import { BackupManagerModal } from './BackupManagerModal';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -69,6 +71,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [savePathSuccess, setSavePathSuccess] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -346,6 +349,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </p>
 
                 <div className="flex flex-wrap gap-2.5 pt-1">
+                  {/* Mở Trung tâm Quản lý Sao lưu IndexedDB */}
+                  <AppButton
+                    size="sm"
+                    variant="primary"
+                    icon={<Database size={15} />}
+                    onClick={() => setIsBackupModalOpen(true)}
+                  >
+                    Mở Quản Lý Sao Lưu (Auto-backup 7 ngày)
+                  </AppButton>
+
                   {/* Tải file về máy */}
                   <AppButton
                     size="sm"
@@ -555,6 +568,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </p>
           </div>
         }
+      />
+
+      {/* Modal Quản lý Sao lưu IndexedDB */}
+      <BackupManagerModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
       />
     </>
   );

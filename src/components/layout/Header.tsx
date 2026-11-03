@@ -1,24 +1,64 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { useData } from '../../context/DataContext';
-import { Menu, FileSpreadsheet, ArrowLeft, HardDrive } from 'lucide-react';
+import { Menu, FileSpreadsheet, ArrowLeft, HardDrive, Clock, AlertTriangle } from 'lucide-react';
 import { AppBadge } from '../common/AppBadge';
 import { formatVnNumber } from '../../utils/numberUtils';
+import { calculateContractDeadline } from '../../utils/dateUtils';
+import { ContractDeadlineAlertModal } from '../modules/projects/ContractDeadlineAlertModal';
 
 interface HeaderProps {
   onToggleMobileMenu: () => void;
   title?: string;
   onOpenSyncModal?: () => void;
+  onNavigateToCostPackage?: (projectId: string, costPackageId: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onToggleMobileMenu,
   title,
   onOpenSyncModal,
+  onNavigateToCostPackage,
 }) => {
   const { headerTitle, activeProjectInfo } = useSettings();
-  const { lastSavedTime, isDirectFileConnected } = useData();
+  const { lastSavedTime, isDirectFileConnected, projects, costPackages, contractAppendices } = useData();
   const displayTitle = title || headerTitle;
+
+  const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
+
+  // Tính số lượng hợp đồng sắp hết hạn hoặc quá hạn trên toàn hệ thống
+  const { overdueCount, urgentCount, totalWarningCount } = useMemo(() => {
+    let overdue = 0;
+    let urgent = 0;
+    let warning = 0;
+
+    projects.forEach((proj) => {
+      const pkgs = costPackages[proj.id] || [];
+      pkgs.forEach((pkg) => {
+        if (pkg.costType !== 'Phí' && pkg.status !== 'Hoàn thành' && pkg.contractNumber && pkg.contractDate) {
+          const allApps = contractAppendices[proj.id] || [];
+          const pkgApps = allApps.filter((a) => a.costPackageId === pkg.id);
+          const addDays = pkgApps.reduce((sum, a) => {
+            if (a.adjustmentType === 'Tiến độ' || a.adjustmentType === 'Giá trị & Tiến độ') {
+              return sum + (Number(a.adjustmentDays) || 0);
+            }
+            return sum;
+          }, 0);
+
+          const info = calculateContractDeadline(pkg.contractDate, pkg.executionTime, addDays, false, false);
+          if (info.status === 'overdue') overdue++;
+          else if (info.status === 'urgent') urgent++;
+          else if (info.status === 'warning') warning++;
+        }
+      });
+    });
+
+    return {
+      overdueCount: overdue,
+      urgentCount: urgent,
+      totalWarningCount: overdue + urgent + warning,
+    };
+  }, [projects, costPackages, contractAppendices]);
 
   return (
     <header className="h-16 bg-[#0c1322] border-b border-[#232f4e] px-3 md:px-5 flex items-center justify-between shrink-0 select-none z-30 shadow-md">
@@ -105,8 +145,46 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex-1" />
       )}
 
-      {/* 3. KHỐI BÊN PHẢI: CHỈ BÁO LƯU TRỮ, TIÊU ĐỀ BẢNG HIỆN TẠI & TỔNG MỨC ĐẦU TƯ */}
+      {/* 3. KHỐI BÊN PHẢI: CHỈ BÁO CẢNH BÁO HẠN HĐ, CHỈ BÁO LƯU TRỮ, TIÊU ĐỀ BẢNG HIỆN TẠI & TỔNG MỨC ĐẦU TƯ */}
       <div className="flex items-center gap-2 shrink-0 pl-2">
+        {/* Nút cảnh báo hợp đồng sắp hết hạn hoặc quá hạn */}
+        {totalWarningCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => setIsDeadlineModalOpen(true)}
+            title={`Có ${totalWarningCount} hợp đồng cần chú ý tiến độ (${overdueCount} quá hạn, ${urgentCount} khẩn cấp). Bấm để xem chi tiết.`}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer transition-all shadow-sm ${
+              overdueCount > 0
+                ? 'bg-rose-950/80 hover:bg-rose-900 border-rose-600/80 text-rose-300 animate-pulse'
+                : urgentCount > 0
+                ? 'bg-amber-950/80 hover:bg-amber-900 border-amber-600/80 text-amber-200 animate-pulse'
+                : 'bg-yellow-950/70 hover:bg-yellow-900 border-yellow-700/70 text-yellow-300'
+            }`}
+          >
+            {overdueCount > 0 ? (
+              <AlertTriangle size={15} className="text-rose-400 shrink-0" />
+            ) : (
+              <Clock size={15} className="text-amber-400 shrink-0" />
+            )}
+            <span className="hidden sm:inline font-mono">
+              {overdueCount > 0 ? `${overdueCount} HĐ Quá hạn` : `${totalWarningCount} HĐ Cần chú ý`}
+            </span>
+            <span className="sm:hidden font-mono font-bold">
+              {totalWarningCount}
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsDeadlineModalOpen(true)}
+            title="Kiểm tra tiến độ và hạn chót tất cả các hợp đồng"
+            className="hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-lg bg-[#0c1626] hover:bg-[#14233c] border border-slate-700/60 text-slate-400 hover:text-slate-200 text-xs transition-colors"
+          >
+            <Clock size={14} />
+            <span className="text-[11px]">Hạn HĐ</span>
+          </button>
+        )}
+
         {/* Nút chỉ báo lưu trữ Offline & Drive */}
         <button
           type="button"
@@ -136,6 +214,13 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal Cảnh báo Hạn chót Hợp đồng */}
+      <ContractDeadlineAlertModal
+        isOpen={isDeadlineModalOpen}
+        onClose={() => setIsDeadlineModalOpen(false)}
+        onNavigateToCostPackage={onNavigateToCostPackage}
+      />
     </header>
   );
 };

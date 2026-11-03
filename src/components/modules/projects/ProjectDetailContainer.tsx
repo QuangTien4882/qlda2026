@@ -25,6 +25,7 @@ import {
   FileCheck, 
   Clock 
 } from 'lucide-react';
+import { useKeyboardShortcuts } from '../../../hooks/useKeyboardShortcuts';
 
 interface ProjectDetailContainerProps {
   project: ProjectListItem;
@@ -136,6 +137,35 @@ export const ProjectDetailContainer: React.FC<ProjectDetailContainerProps> = ({
     { id: 'tab_legal', label: '5. Hồ sơ pháp lý', icon: <FileCheck size={16} />, badge: legalDocs.length },
     { id: 'tab_plan', label: '6. Kế hoạch', icon: <Clock size={16} />, badge: planTasks.length },
   ];
+
+  // Bắt phím tắt chuyên nghiệp: Ctrl+1..6 để chuyển tab nhanh, Ctrl+F để tìm kiếm
+  useKeyboardShortcuts({
+    onTabChange: (tabIdx) => {
+      const tabMap: Record<number, ProjectDetailTabType> = {
+        1: 'tab_project',
+        2: 'tab_estimates',
+        3: 'tab_costs',
+        4: 'tab_inspections',
+        5: 'tab_legal',
+        6: 'tab_plan',
+      };
+      if (tabMap[tabIdx]) {
+        setActiveTab(tabMap[tabIdx]);
+      }
+    },
+    onSearch: () => {
+      const searchInputs = document.querySelectorAll('input[type="text"], input[type="search"]');
+      for (let i = 0; i < searchInputs.length; i++) {
+        const inp = searchInputs[i] as HTMLInputElement;
+        const ph = inp.placeholder?.toLowerCase() || '';
+        if (ph.includes('tìm') || ph.includes('search')) {
+          inp.focus();
+          inp.select();
+          break;
+        }
+      }
+    },
+  });
 
   return (
     <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden space-y-2">

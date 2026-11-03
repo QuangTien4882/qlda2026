@@ -10,7 +10,7 @@ import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { VnNumberInput } from '../../common/VnNumberInput';
 import { VnDateInput } from '../../common/VnDateInput';
 import { formatVnNumber } from '../../../utils/numberUtils';
-import { formatCustomVnDate } from '../../../utils/dateUtils';
+import { formatCustomVnDate, calculateContractDeadline } from '../../../utils/dateUtils';
 import { useData } from '../../../context/DataContext';
 import { 
   FileText, 
@@ -68,6 +68,18 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
   // Giá trị hợp đồng gốc và giá trị sau phụ lục
   const originalContractValue = Number(costPackage?.contractValue) || 0;
   const effectiveContractValue = originalContractValue + totalAdjustmentAmount;
+
+  // Tính toán hạn chót hợp đồng hiện tại (gồm cả ngày gia hạn từ các PLHĐ)
+  const deadlineInfo = useMemo(() => {
+    if (!costPackage) return null;
+    return calculateContractDeadline(
+      costPackage.contractDate,
+      costPackage.executionTime,
+      totalAdjustmentDays,
+      costPackage.status === 'Hoàn thành',
+      costPackage.costType === 'Phí'
+    );
+  }, [costPackage, totalAdjustmentDays]);
 
   // State cho Form Thêm mới / Chỉnh sửa phụ lục
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -294,6 +306,18 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                     {totalAdjustmentDays > 0 ? '+' : ''}{totalAdjustmentDays} ngày
                   </span>
                 </div>
+                {deadlineInfo && deadlineInfo.status !== 'unknown' && deadlineInfo.status !== 'not_applicable' && (
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-[#1a2846] mt-1">
+                    <span className="text-slate-400">Hạn chót:</span>
+                    <span className={`font-mono text-[11px] font-bold ${
+                      deadlineInfo.status === 'overdue' ? 'text-rose-400' :
+                      deadlineInfo.status === 'urgent' ? 'text-amber-300' :
+                      deadlineInfo.status === 'warning' ? 'text-yellow-300' : 'text-emerald-400'
+                    }`}>
+                      {deadlineInfo.deadlineStr} ({deadlineInfo.statusText})
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Thẻ 3: Giá trị hợp đồng sau phụ lục (Hiệu lực nghiệm thu) */}
@@ -620,6 +644,18 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                   />
                 </div>
               </div>
+              {costPackage && adjustmentDays !== 0 && (
+                <div className="text-[11px] text-blue-300 bg-blue-950/40 border border-blue-800/40 rounded px-2.5 py-1.5 font-mono">
+                  Dự kiến hạn chót mới sau khi điều chỉnh {adjustmentDays > 0 ? `+${adjustmentDays}` : adjustmentDays} ngày:{' '}
+                  <strong className="text-emerald-400">
+                    {calculateContractDeadline(
+                      costPackage.contractDate,
+                      costPackage.executionTime,
+                      (editingItem ? totalAdjustmentDays - (editingItem.adjustmentDays || 0) : totalAdjustmentDays) + adjustmentDays
+                    ).deadlineStr || '—'}
+                  </strong>
+                </div>
+              )}
             </div>
           )}
 

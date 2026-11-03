@@ -11,7 +11,7 @@ import {
 import { AdvancedTable, AdvancedColumn } from '../../common/AdvancedTable';
 import { AppBadge } from '../../common/AppBadge';
 import { ContractAppendixModal } from './ContractAppendixModal';
-import { Plus } from 'lucide-react';
+import { Plus, AlertTriangle, Clock } from 'lucide-react';
 import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
@@ -19,6 +19,7 @@ import { VnNumberInput } from '../../common/VnNumberInput';
 import { VnDateInput } from '../../common/VnDateInput';
 import { SearchableSelect, SearchableOption } from '../../common/SearchableSelect';
 import { formatVnNumber } from '../../../utils/numberUtils';
+import { calculateContractDeadline } from '../../../utils/dateUtils';
 import { useData } from '../../../context/DataContext';
 
 interface TabCostsProps {
@@ -355,6 +356,131 @@ export const TabCosts: React.FC<TabCostsProps> = ({
       minWidth: 25,
       align: 'center',
       render: (item) => <span className="text-slate-200">{item.executionTime}</span>,
+    },
+    {
+      id: 'deadlineStatus',
+      title: 'Thời hạn & Trạng thái HĐ',
+      width: 210,
+      minWidth: 25,
+      align: 'center',
+      render: (item) => {
+        if (item.costType === 'Phí') {
+          return <span className="text-slate-500 font-mono text-xs">—</span>;
+        }
+
+        const itemAppendices = getContractAppendicesByPackage(projectId, item.id);
+        const additionalDays = itemAppendices.reduce((sum, a) => {
+          if (a.adjustmentType === 'Tiến độ' || a.adjustmentType === 'Giá trị & Tiến độ') {
+            return sum + (Number(a.adjustmentDays) || 0);
+          }
+          return sum;
+        }, 0);
+
+        const info = calculateContractDeadline(
+          item.contractDate,
+          item.executionTime,
+          additionalDays,
+          item.status === 'Hoàn thành',
+          false
+        );
+
+        if (info.status === 'completed') {
+          return (
+            <div className="flex flex-col items-center">
+              <AppBadge variant="emerald" dot>Hoàn thành</AppBadge>
+            </div>
+          );
+        }
+
+        if (info.status === 'unknown') {
+          return <span className="text-slate-500 text-xs italic">Chưa đủ dữ liệu</span>;
+        }
+
+        if (info.status === 'overdue') {
+          return (
+            <div className="flex flex-col items-center gap-0.5">
+              <div 
+                className="flex items-center gap-1 text-[11px] font-bold text-rose-300 bg-rose-950/80 border border-rose-700/80 px-2 py-0.5 rounded shadow-sm"
+                title={`Hợp đồng đã quá hạn ${Math.abs(info.remainingDays)} ngày so với hạn chót ${info.deadlineStr}`}
+              >
+                <AlertTriangle size={12} className="text-rose-400 shrink-0 animate-bounce" />
+                <span>Quá hạn {Math.abs(info.remainingDays)} ngày</span>
+              </div>
+              <span className="text-[10px] text-rose-300/80 font-mono">
+                Hạn chót: {info.deadlineStr}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAppendixModalPackage(item);
+                }}
+                className="text-[10px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-0.5 mt-0.5"
+                title="Bấm để lập Phụ lục HĐ gia hạn thời gian thực hiện"
+              >
+                + Lập PLHĐ gia hạn
+              </button>
+            </div>
+          );
+        }
+
+        if (info.status === 'urgent') {
+          return (
+            <div className="flex flex-col items-center gap-0.5">
+              <div 
+                className="flex items-center gap-1 text-[11px] font-bold text-amber-200 bg-amber-950/80 border border-amber-600/80 px-2 py-0.5 rounded shadow-sm"
+                title={`Khẩn cấp: Hợp đồng chỉ còn ${info.remainingDays} ngày là đến hạn chót ${info.deadlineStr}`}
+              >
+                <Clock size={12} className="text-amber-400 shrink-0 animate-pulse" />
+                <span>Còn {info.remainingDays} ngày</span>
+              </div>
+              <span className="text-[10px] text-amber-300/80 font-mono">
+                Hạn chót: {info.deadlineStr}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAppendixModalPackage(item);
+                }}
+                className="text-[10px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-0.5 mt-0.5"
+                title="Bấm để lập Phụ lục HĐ gia hạn thời gian thực hiện"
+              >
+                + Lập PLHĐ gia hạn
+              </button>
+            </div>
+          );
+        }
+
+        if (info.status === 'warning') {
+          return (
+            <div className="flex flex-col items-center gap-0.5">
+              <div 
+                className="flex items-center gap-1 text-[11px] font-semibold text-yellow-300 bg-yellow-950/60 border border-yellow-700/60 px-2 py-0.5 rounded"
+                title={`Lưu ý: Hợp đồng còn ${info.remainingDays} ngày (Hạn chót: ${info.deadlineStr})`}
+              >
+                <Clock size={12} className="text-yellow-400 shrink-0" />
+                <span>Còn {info.remainingDays} ngày</span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Hạn chót: {info.deadlineStr}
+              </span>
+            </div>
+          );
+        }
+
+        // normal
+        return (
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-xs font-mono font-medium text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded">
+              Còn {info.remainingDays} ngày
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              Hạn chót: {info.deadlineStr}
+            </span>
+          </div>
+        );
+      },
     },
     {
       id: 'contractAppendix',

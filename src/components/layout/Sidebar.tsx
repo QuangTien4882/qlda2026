@@ -9,7 +9,9 @@ import {
   HelpCircle,
   ShieldCheck,
   ChevronRight,
-  Settings
+  Settings,
+  Database,
+  Keyboard
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -19,6 +21,8 @@ interface SidebarProps {
   onCloseMobile: () => void;
   onOpenRulesModal?: () => void;
   onOpenSettings: () => void;
+  onOpenBackups?: () => void;
+  onOpenShortcuts?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -28,6 +32,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   onOpenRulesModal,
   onOpenSettings,
+  onOpenBackups,
+  onOpenShortcuts,
 }) => {
   const menuItems: { id: MainMenuType; label: string; icon: React.ReactNode; desc: string }[] = [
     {
@@ -125,8 +131,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Bottom: Settings button */}
-        <div className="p-2.5 border-t border-[#1e2a4a] bg-[#0c1222]">
+        {/* Bottom: Backup, Shortcuts & Settings buttons */}
+        <div className="p-2 border-t border-[#1e2a4a] bg-[#0c1222] space-y-1.5">
+          {/* Nút Sao lưu & Phục hồi CSDL */}
+          {onOpenBackups && (
+            <button
+              onClick={onOpenBackups}
+              className="w-full flex items-center justify-between p-2 rounded-xl bg-[#0f172a] hover:bg-[#16223d] border border-[#1e2c4a] text-slate-200 transition-colors group"
+              title="Mở Trung tâm Sao lưu & Khôi phục (Tự động 7 ngày gần nhất)"
+            >
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                  <Database size={14} />
+                </div>
+                <div className="text-left">
+                  <span className="text-xs font-semibold block text-slate-100">Sao lưu & Khôi phục</span>
+                  <span className="text-[10px] text-emerald-400 font-mono">Auto-backup 7 ngày</span>
+                </div>
+              </div>
+              <ChevronRight size={13} className="text-slate-500 group-hover:text-emerald-400 shrink-0" />
+            </button>
+          )}
+
+          {/* Nút Phím tắt chuyên nghiệp */}
+          {onOpenShortcuts && (
+            <button
+              onClick={onOpenShortcuts}
+              className="w-full flex items-center justify-between p-2 rounded-xl bg-[#0f172a] hover:bg-[#16223d] border border-[#1e2c4a] text-slate-200 transition-colors group"
+              title="Xem danh sách phím tắt chuyên nghiệp (Bấm F1 hoặc ?)"
+            >
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-purple-600/20 text-purple-400 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                  <Keyboard size={14} />
+                </div>
+                <div className="text-left">
+                  <span className="text-xs font-semibold block text-slate-100">Phím tắt thao tác</span>
+                  <span className="text-[10px] text-purple-300 font-mono">Bấm F1 hoặc ?</span>
+                </div>
+              </div>
+              <ChevronRight size={13} className="text-slate-500 group-hover:text-purple-400 shrink-0" />
+            </button>
+          )}
+
           {/* Nút Cài đặt gom Font, Cỡ chữ, File Drive */}
           <button
             onClick={onOpenSettings}
@@ -134,7 +180,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-blue-600/20 text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                <Settings size={15} />
+                <Settings size={14} />
               </div>
               <div className="text-left">
                 <span className="text-xs font-semibold block text-slate-100">Cài đặt hệ thống</span>
