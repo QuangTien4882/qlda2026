@@ -122,8 +122,11 @@ Số: 01/BBNT-${currentProject.code.replace(/[^a-zA-Z0-9]/g, '')}
           <select
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-medium text-xs focus:outline-none focus:border-blue-500"
+            className={`w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 font-medium text-xs focus:outline-none focus:border-blue-500 ${
+              !selectedProjectId ? 'text-slate-500 italic' : 'text-slate-100'
+            }`}
           >
+            <option value="" disabled hidden>Click để chọn dự án</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} - {p.name}
@@ -139,8 +142,11 @@ Số: 01/BBNT-${currentProject.code.replace(/[^a-zA-Z0-9]/g, '')}
           <select
             value={selectedTemplate}
             onChange={(e) => setSelectedTemplate(e.target.value)}
-            className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-medium text-xs focus:outline-none focus:border-blue-500"
+            className={`w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 font-medium text-xs focus:outline-none focus:border-blue-500 ${
+              !selectedTemplate ? 'text-slate-500 italic' : 'text-slate-100'
+            }`}
           >
+            <option value="" disabled hidden>Click để chọn biểu mẫu</option>
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
                 [{t.type}] {t.name}

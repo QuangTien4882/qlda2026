@@ -9,13 +9,20 @@ import { useData } from '../../../context/DataContext';
 
 export const ReportsView: React.FC = () => {
   const { setHeaderTitle } = useSettings();
-  const { projects, costPackages, inspections, exportDatabaseToJson } = useData();
+  const { 
+    projects, 
+    costPackages, 
+    inspections, 
+    exportDatabaseToJson,
+    getEffectiveContractValue,
+    getContractAppendicesByPackage
+  } = useData();
 
   useEffect(() => {
     setHeaderTitle('BÁO CÁO TỔNG HỢP SỐ LIỆU DỰ ÁN');
   }, [setHeaderTitle]);
 
-  // Tính toán số liệu tổng hợp động từ DataContext
+  // Tính toán số liệu tổng hợp động từ DataContext (Đồng bộ đầy đủ Phụ lục hợp đồng PLHĐ)
   const { totalTmdt, totalContractValue, totalPaymentValue, allPackages } = useMemo(() => {
     const tmdt = projects.reduce((sum, p) => sum + (p.totalInvestment || 0), 0);
 
@@ -25,6 +32,8 @@ export const ReportsView: React.FC = () => {
       content: string;
       contractor: string;
       contractValue: number;
+      originalContractValue: number;
+      appendixCount: number;
       inspectionValue: number;
       paymentValue: number;
     }> = [];
@@ -37,12 +46,18 @@ export const ReportsView: React.FC = () => {
       const projInsps = inspections[proj.id] || [];
 
       projCosts.forEach((cost) => {
-        totalContract += cost.contractValue || 0;
+        // Giá trị hợp đồng hiệu lực sau khi tính toàn bộ các Phụ lục Hợp đồng
+        const effectiveContractVal = getEffectiveContractValue(proj.id, cost.id);
+        const appendices = getContractAppendicesByPackage(proj.id, cost.id);
+        totalContract += effectiveContractVal;
 
-        // Tìm nghiệm thu tương ứng (nếu có)
-        const matchInsps = projInsps.filter((i) => i.packageName.includes(cost.content) || cost.content.includes(i.packageName));
-        const inspVal = matchInsps.reduce((s, i) => s + (i.inspectionValue || 0), 0);
-        const payVal = matchInsps.reduce((s, i) => s + (i.paymentValue || 0), 0);
+        // Tìm nghiệm thu tương ứng theo costPackageId hoặc tên gói thầu chính xác
+        const matchInsps = projInsps.filter((i) => {
+          if (i.costPackageId && i.costPackageId === cost.id) return true;
+          return i.packageName.trim().toLowerCase() === cost.content.trim().toLowerCase();
+        });
+        const inspVal = matchInsps.reduce((s, i) => s + (Number(i.inspectionValue) || 0), 0);
+        const payVal = matchInsps.reduce((s, i) => s + (Number(i.paymentValue) || 0), 0);
 
         totalPayment += payVal;
 
@@ -51,7 +66,9 @@ export const ReportsView: React.FC = () => {
           projectName: proj.name,
           content: cost.content,
           contractor: cost.contractor || 'Chưa chỉ định',
-          contractValue: cost.contractValue || 0,
+          contractValue: effectiveContractVal,
+          originalContractValue: cost.contractValue || 0,
+          appendixCount: appendices.length,
           inspectionValue: inspVal,
           paymentValue: payVal,
         });
@@ -64,7 +81,7 @@ export const ReportsView: React.FC = () => {
       totalPaymentValue: totalPayment,
       allPackages: pkgs,
     };
-  }, [projects, costPackages, inspections]);
+  }, [projects, costPackages, inspections, getEffectiveContractValue, getContractAppendicesByPackage]);
 
   const disbursementRate =
     totalContractValue > 0
@@ -171,7 +188,12 @@ export const ReportsView: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 text-slate-300">{pkg.contractor}</td>
                       <td className="py-3 px-4 text-right font-mono text-slate-200">
-                        {formatVnNumber(pkg.contractValue)}
+                        <div>{formatVnNumber(pkg.contractValue)}</div>
+                        {pkg.appendixCount > 0 && (
+                          <div className="text-[10px] text-blue-400 font-sans font-medium">
+                            ({pkg.appendixCount} PLHĐ)
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-emerald-400">
                         {formatVnNumber(pkg.inspectionValue)}

@@ -205,7 +205,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       const jsonStr = JSON.stringify(dbWithMeta, null, 2);
-      localStorage.setItem(STORAGE_KEY, jsonStr);
+      try {
+        localStorage.setItem(STORAGE_KEY, jsonStr);
+      } catch (lsErr: any) {
+        if (lsErr?.name === 'QuotaExceededError' || lsErr?.code === 22) {
+          console.warn('LocalStorage quota limit reached. Dữ liệu đang được ưu tiên ghi vào File Handle / IndexedDB.');
+        } else {
+          console.error('Lỗi ghi LocalStorage:', lsErr);
+        }
+      }
       setLastSavedTime(timeStr);
       calculateStorage(dbWithMeta);
 

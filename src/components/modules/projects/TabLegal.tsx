@@ -100,9 +100,14 @@ export const TabLegal: React.FC<TabLegalProps> = ({
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     setFileType(ext);
 
-    // Tạo Blob URL để xem trước ngay tức thì trong trình duyệt
-    const url = URL.createObjectURL(file);
-    setFileUrl(url);
+    // Đọc file thành Data URL (Base64) để lưu bền vững vào database (không bị mất khi F5)
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setFileUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleRemoveAttachedFile = () => {

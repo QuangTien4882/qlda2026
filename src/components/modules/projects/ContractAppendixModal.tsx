@@ -141,14 +141,19 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
     setIsFormOpen(true);
   };
 
-  // Xử lý chọn tệp đính kèm
+  // Xử lý chọn tệp đính kèm (Lưu dạng Data URL Base64 để bền vững sau khi F5)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setAttachedFileName(file.name);
-    const objectUrl = URL.createObjectURL(file);
-    setAttachedFileUrl(objectUrl);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setAttachedFileUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
