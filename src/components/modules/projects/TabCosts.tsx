@@ -102,20 +102,20 @@ export const TabCosts: React.FC<TabCostsProps> = ({
     setEditingItem(null);
     setStt(nextStt);
     setContent('');
-    setStatus('Chưa thực hiện');
-    setCategory('XD');
+    setStatus('' as any);
+    setCategory('' as any);
     setCostType('Chi phí');
     setContractor('');
     setEstimateValue(0);
     setContractValue(0);
-    setBiddingTime('Quý I/2026');
-    setBiddingForm('Đấu thầu rộng rãi');
-    setBiddingMethod('01 giai đoạn 02 túi hồ sơ');
+    setBiddingTime('');
+    setBiddingForm('' as any);
+    setBiddingMethod('' as any);
     setContractNumber('');
-    setContractDate('18/01/2026');
-    setContractType('Đơn giá cố định');
-    setExecutionTime('180 ngày');
-    setContractAppendix('Không');
+    setContractDate('');
+    setContractType('' as any);
+    setExecutionTime('');
+    setContractAppendix('');
     setNote('');
     setModalOpen(true);
   };
@@ -126,21 +126,23 @@ export const TabCosts: React.FC<TabCostsProps> = ({
     setContent(item.content);
     setStatus(item.status);
     setCategory(item.category);
-    setCostType(item.costType);
+    setCostType(item.costType || 'Chi phí');
     setContractor(item.contractor);
     setEstimateValue(item.estimateValue);
     setContractValue(item.contractValue);
-    setBiddingTime(item.biddingTime);
+    setBiddingTime(item.biddingTime || '');
     setBiddingForm(item.biddingForm);
     setBiddingMethod(item.biddingMethod);
-    setContractNumber(item.contractNumber);
-    setContractDate(item.contractDate);
+    setContractNumber(item.contractNumber || '');
+    setContractDate(item.contractDate || '');
     setContractType(item.contractType);
-    setExecutionTime(item.executionTime);
-    setContractAppendix(item.contractAppendix || 'Không');
+    setExecutionTime(item.executionTime || '');
+    setContractAppendix(item.contractAppendix || '');
     setNote(item.note || '');
     setModalOpen(true);
   };
+
+  const isFee = costType === 'Phí';
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,21 +153,21 @@ export const TabCosts: React.FC<TabCostsProps> = ({
       projectId,
       stt,
       content: content.trim(),
-      status,
-      category,
-      costType,
+      status: status || 'Chưa thực hiện',
+      category: category || 'XD',
+      costType: costType || 'Chi phí',
       contractor: contractor.trim(),
       estimateValue,
       contractValue,
-      discountRate,
-      biddingTime: biddingTime.trim(),
-      biddingForm,
-      biddingMethod,
-      contractNumber: contractNumber.trim(),
-      contractDate: contractDate.trim(),
-      contractType,
-      executionTime: executionTime.trim(),
-      contractAppendix: contractAppendix.trim(),
+      discountRate: isFee ? 0 : discountRate,
+      biddingTime: isFee ? '' : biddingTime.trim(),
+      biddingForm: isFee ? ('Không áp dụng' as any) : (biddingForm || 'Đấu thầu rộng rãi'),
+      biddingMethod: isFee ? 'Không áp dụng' : (biddingMethod || '01 giai đoạn 02 túi hồ sơ'),
+      contractNumber: isFee ? '' : contractNumber.trim(),
+      contractDate: isFee ? '' : contractDate.trim(),
+      contractType: isFee ? 'Trọn gói' : (contractType || 'Đơn giá cố định'),
+      executionTime: isFee ? '' : executionTime.trim(),
+      contractAppendix: isFee ? '' : contractAppendix.trim(),
       note: note.trim(),
     };
 
@@ -280,11 +282,15 @@ export const TabCosts: React.FC<TabCostsProps> = ({
       width: 130,
       minWidth: 25,
       align: 'center',
-      render: (item) => (
-        <span className="font-mono text-xs font-bold text-blue-400 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/40">
-          {item.discountRate > 0 ? `${item.discountRate}%` : '0%'}
-        </span>
-      ),
+      render: (item) => {
+        if (item.costType === 'Phí') return <span className="text-slate-500 font-mono text-xs">—</span>;
+        const valStr = item.discountRate > 0 ? `${String(item.discountRate).replace('.', ',')}%` : '0%';
+        return (
+          <span className="font-mono text-xs font-bold text-blue-400 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/40">
+            {valStr}
+          </span>
+        );
+      },
     },
     {
       id: 'biddingTime',
@@ -475,8 +481,9 @@ export const TabCosts: React.FC<TabCostsProps> = ({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as CostStatus)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Chưa thực hiện">Chưa thực hiện</option>
                 <option value="Đang thực hiện">Đang thực hiện</option>
                 <option value="Hoàn thành">Hoàn thành</option>
@@ -487,8 +494,9 @@ export const TabCosts: React.FC<TabCostsProps> = ({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as CostCategory)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="TVXD">TVXD (Tư vấn XD)</option>
                 <option value="XD">XD (Xây lắp)</option>
                 <option value="K">K (Chi phí khác)</option>
@@ -498,8 +506,21 @@ export const TabCosts: React.FC<TabCostsProps> = ({
               <label className="block text-slate-300 mb-1">Loại chi phí</label>
               <select
                 value={costType}
-                onChange={(e) => setCostType(e.target.value as CostType)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                onChange={(e) => {
+                  const newType = e.target.value as CostType;
+                  setCostType(newType);
+                  if (newType === 'Phí') {
+                    setBiddingTime('');
+                    setBiddingForm('Không áp dụng' as any);
+                    setBiddingMethod('Không áp dụng');
+                    setContractNumber('');
+                    setContractDate('');
+                    setContractType('Trọn gói');
+                    setExecutionTime('');
+                    setContractAppendix('');
+                  }
+                }}
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
                 <option value="Chi phí">Chi phí</option>
                 <option value="Phí">Phí</option>
@@ -514,7 +535,7 @@ export const TabCosts: React.FC<TabCostsProps> = ({
                 options={companyOptions}
                 value={contractor}
                 onChange={(val) => setContractor(val)}
-                placeholder="Chọn hoặc nhập tên nhà thầu..."
+                placeholder="-- Click để chọn hoặc nhập tên nhà thầu --"
                 allowCustomInput={true}
               />
             </div>
@@ -529,55 +550,80 @@ export const TabCosts: React.FC<TabCostsProps> = ({
                 value={estimateValue}
                 onChange={(val) => setEstimateValue(val)}
                 suffix="đồng"
+                placeholder="0"
               />
               <VnNumberInput
                 label="Giá trị hợp đồng (đồng)"
                 value={contractValue}
                 onChange={(val) => setContractValue(val)}
                 suffix="đồng"
+                placeholder="0"
               />
               <div>
                 <label className="block text-slate-300 mb-1.5 font-medium text-xs md:text-sm">
-                  Tỷ lệ giảm thầu (%) (Tự tính)
+                  Tỷ lệ giảm thầu (%)
                 </label>
-                <div className="w-full bg-[#0b1222] border border-[#232f4e] rounded-lg py-2 px-3 font-mono font-bold text-blue-400">
-                  {discountRate}%
+                <div
+                  className={`w-full border rounded-lg py-2 px-3 font-mono font-bold text-xs md:text-sm ${
+                    isFee
+                      ? 'bg-slate-900/60 border-slate-800 text-slate-500 cursor-not-allowed'
+                      : 'bg-[#0b1222] border-[#232f4e] text-blue-400'
+                  }`}
+                >
+                  {isFee ? '— (Không áp dụng)' : (discountRate > 0 ? `${String(discountRate).replace('.', ',')}%` : '0%')}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Đấu thầu & LCNT */}
+          {/* Đấu thầu & LCNT (Disable nếu là Phí) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-slate-300 mb-1">Thời gian LCNT</label>
+              <label className={`block mb-1 ${isFee ? 'text-slate-500' : 'text-slate-300'}`}>
+                Thời gian LCNT {isFee && <span className="text-[11px] text-slate-500 italic">(Không áp dụng)</span>}
+              </label>
               <input
                 type="text"
-                value={biddingTime}
+                disabled={isFee}
+                value={isFee ? '' : biddingTime}
                 onChange={(e) => setBiddingTime(e.target.value)}
-                placeholder="Ví dụ: Quý I/2026"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                placeholder={isFee ? 'Không áp dụng đối với Phí' : 'Ví dụ: Quý I/2026'}
+                className={`w-full border rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm placeholder:italic placeholder:text-slate-500 ${
+                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                }`}
               />
             </div>
             <div>
-              <label className="block text-slate-300 mb-1">Hình thức LCNT</label>
+              <label className={`block mb-1 ${isFee ? 'text-slate-500' : 'text-slate-300'}`}>
+                Hình thức LCNT {isFee && <span className="text-[11px] text-slate-500 italic">(Không áp dụng)</span>}
+              </label>
               <select
-                value={biddingForm}
+                disabled={isFee}
+                value={isFee ? '' : biddingForm}
                 onChange={(e) => setBiddingForm(e.target.value as BiddingForm)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className={`w-full border rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm ${
+                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                }`}
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Chỉ định thầu rút gọn">Chỉ định thầu rút gọn</option>
                 <option value="Chỉ định thầu">Chỉ định thầu</option>
                 <option value="Đấu thầu rộng rãi">Đấu thầu rộng rãi</option>
               </select>
             </div>
             <div>
-              <label className="block text-slate-300 mb-1">Phương thức LCNT</label>
+              <label className={`block mb-1 ${isFee ? 'text-slate-500' : 'text-slate-300'}`}>
+                Phương thức LCNT {isFee && <span className="text-[11px] text-slate-500 italic">(Không áp dụng)</span>}
+              </label>
               <select
-                value={biddingMethod}
+                disabled={isFee}
+                value={isFee ? '' : biddingMethod}
                 onChange={(e) => setBiddingMethod(e.target.value as BiddingMethod)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className={`w-full border rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm ${
+                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                }`}
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Không áp dụng">Không áp dụng</option>
                 <option value="01 giai đoạn 01 túi hồ sơ">01 giai đoạn 01 túi hồ sơ</option>
                 <option value="01 giai đoạn 02 túi hồ sơ">01 giai đoạn 02 túi hồ sơ</option>
@@ -587,32 +633,49 @@ export const TabCosts: React.FC<TabCostsProps> = ({
             </div>
           </div>
 
-          {/* Hợp đồng */}
+          {/* Hợp đồng (Disable nếu là Phí) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-slate-300 mb-1">Số HĐ</label>
+              <label className={`block mb-1 ${isFee ? 'text-slate-500' : 'text-slate-300'}`}>
+                Số HĐ {isFee && <span className="text-[11px] text-slate-500 italic">(Không áp dụng)</span>}
+              </label>
               <input
                 type="text"
-                value={contractNumber}
+                disabled={isFee}
+                value={isFee ? '' : contractNumber}
                 onChange={(e) => setContractNumber(e.target.value)}
-                placeholder="Ví dụ: 18/2026/HĐ-XD"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
+                placeholder={isFee ? 'Không áp dụng đối với Phí' : 'Ví dụ: 18/2026/HĐ-XD'}
+                className={`w-full border rounded-lg px-3 py-2 text-slate-100 font-mono text-xs md:text-sm placeholder:italic placeholder:text-slate-500 ${
+                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                }`}
               />
             </div>
             <div>
               <VnDateInput
-                label="Ngày ký HĐ (Chuẩn VN)"
-                value={contractDate}
+                label={
+                  <span>
+                    Ngày ký HĐ {isFee && <span className="text-[11px] text-slate-500 italic font-normal">(Không áp dụng)</span>}
+                  </span>
+                }
+                disabled={isFee}
+                value={isFee ? '' : contractDate}
                 onChange={(formatted) => setContractDate(formatted)}
+                placeholder={isFee ? 'Không áp dụng đối với Phí' : 'dd/mm/yyyy (Click để chọn ngày)'}
               />
             </div>
             <div>
-              <label className="block text-slate-300 mb-1">Loại HĐ</label>
+              <label className={`block mb-1 ${isFee ? 'text-slate-500' : 'text-slate-300'}`}>
+                Loại HĐ {isFee && <span className="text-[11px] text-slate-500 italic">(Không áp dụng)</span>}
+              </label>
               <select
-                value={contractType}
+                disabled={isFee}
+                value={isFee ? '' : contractType}
                 onChange={(e) => setContractType(e.target.value as ContractType)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className={`w-full border rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm ${
+                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                }`}
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Trọn gói">Trọn gói</option>
                 <option value="Đơn giá cố định">Đơn giá cố định</option>
                 <option value="Đơn giá điều chỉnh">Đơn giá điều chỉnh</option>
@@ -622,23 +685,33 @@ export const TabCosts: React.FC<TabCostsProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-slate-300 mb-1">Thời gian thực hiện HĐ</label>
+              <label className={`block mb-1 ${isFee ? 'text-slate-500' : 'text-slate-300'}`}>
+                Thời gian thực hiện HĐ {isFee && <span className="text-[11px] text-slate-500 italic">(Không áp dụng)</span>}
+              </label>
               <input
                 type="text"
-                value={executionTime}
+                disabled={isFee}
+                value={isFee ? '' : executionTime}
                 onChange={(e) => setExecutionTime(e.target.value)}
-                placeholder="Ví dụ: 180 ngày"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                placeholder={isFee ? 'Không áp dụng đối với Phí' : 'Ví dụ: 180 ngày'}
+                className={`w-full border rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm placeholder:italic placeholder:text-slate-500 ${
+                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                }`}
               />
             </div>
             <div>
-              <label className="block text-slate-300 mb-1">PLHĐ (Phụ lục hợp đồng)</label>
+              <label className={`block mb-1 ${isFee ? 'text-slate-500' : 'text-slate-300'}`}>
+                PLHĐ (Phụ lục hợp đồng) {isFee && <span className="text-[11px] text-slate-500 italic">(Không áp dụng)</span>}
+              </label>
               <input
                 type="text"
-                value={contractAppendix}
+                disabled={isFee}
+                value={isFee ? '' : contractAppendix}
                 onChange={(e) => setContractAppendix(e.target.value)}
-                placeholder="Phụ lục hợp đồng nếu có..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                placeholder={isFee ? 'Không áp dụng đối với Phí' : 'Phụ lục hợp đồng nếu có...'}
+                className={`w-full border rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm placeholder:italic placeholder:text-slate-500 ${
+                  isFee ? 'bg-slate-900/60 border-slate-800 opacity-50 cursor-not-allowed' : 'bg-[#080d1a] border-[#232f4e]'
+                }`}
               />
             </div>
             <div>
@@ -647,8 +720,8 @@ export const TabCosts: React.FC<TabCostsProps> = ({
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Ghi chú thêm..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                placeholder="Ghi chú thêm nếu có..."
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>

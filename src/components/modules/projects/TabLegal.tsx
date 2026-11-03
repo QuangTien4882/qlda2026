@@ -314,7 +314,7 @@ export const TabLegal: React.FC<TabLegalProps> = ({
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Nhập số hiệu văn bản, ngày ban hành, cơ quan ban hành và trích yếu nội dung..."
-              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 resize-none leading-relaxed"
+              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 resize-none leading-relaxed placeholder:italic placeholder:text-slate-500"
             />
           </div>
 
@@ -394,7 +394,7 @@ export const TabLegal: React.FC<TabLegalProps> = ({
                 value={fileName}
                 onChange={(e) => setFileName(e.target.value)}
                 placeholder="Ví dụ: QD-456-QDPD-UBND.pdf"
-                className="flex-1 bg-[#080d1a] border border-[#232f4e] rounded px-2.5 py-1 text-slate-200 font-mono text-xs"
+                className="flex-1 bg-[#080d1a] border border-[#232f4e] rounded px-2.5 py-1 text-slate-200 font-mono text-xs placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>

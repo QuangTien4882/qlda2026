@@ -5,6 +5,7 @@ import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { AppBadge } from '../../common/AppBadge';
+import { VnDateInput } from '../../common/VnDateInput';
 import { 
   Clock, 
   Calendar, 
@@ -158,13 +159,10 @@ export const TabSchedule: React.FC<TabScheduleProps> = ({
     setEditingItem(null);
     setStt(nextStt);
     setTaskName('');
-    setPhase('Chuẩn bị đầu tư');
-    setStartDate(formatVietnameseDate(new Date()));
-    // Mặc định hạn chót là 30 ngày sau
-    const defaultEnd = new Date();
-    defaultEnd.setDate(defaultEnd.getDate() + 30);
-    setEndDate(formatVietnameseDate(defaultEnd));
-    setStatus('Chưa thực hiện');
+    setPhase('' as any);
+    setStartDate('');
+    setEndDate('');
+    setStatus('' as any);
     setNote('');
     setModalOpen(true);
   };
@@ -190,10 +188,10 @@ export const TabSchedule: React.FC<TabScheduleProps> = ({
       projectId,
       stt,
       taskName: taskName.trim(),
-      phase,
+      phase: phase || 'Chuẩn bị đầu tư',
       startDate: startDate.trim(),
       endDate: endDate.trim(),
-      status,
+      status: status || 'Chưa thực hiện',
       note: note.trim(),
     };
 
@@ -548,8 +546,9 @@ export const TabSchedule: React.FC<TabScheduleProps> = ({
               <select
                 value={phase}
                 onChange={(e) => setPhase(e.target.value as PlanPhase)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Chuẩn bị đầu tư">Chuẩn bị đầu tư</option>
                 <option value="Thực hiện đầu tư">Thực hiện đầu tư</option>
                 <option value="Kết thúc xây dựng">Kết thúc xây dựng</option>
@@ -567,96 +566,26 @@ export const TabSchedule: React.FC<TabScheduleProps> = ({
               value={taskName}
               onChange={(e) => setTaskName(e.target.value)}
               placeholder="Ví dụ: Tổ chức lựa chọn nhà thầu gói thầu xây lắp XL-01; Hoàn thiện hồ sơ nghiệm thu..."
-              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 resize-none leading-relaxed"
+              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 resize-none leading-relaxed placeholder:italic placeholder:text-slate-500"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-slate-300 mb-1">
-                Thời gian bắt đầu / thực hiện
-              </label>
-              <input
-                type="text"
+              <VnDateInput
+                label="Thời gian bắt đầu / thực hiện"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                placeholder="Ví dụ: 18/01/2026 hoặc Tháng 10/2026"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
+                onChange={(formatted) => setStartDate(formatted)}
               />
-              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400">
-                <span>Gợi ý:</span>
-                <button
-                  type="button"
-                  onClick={() => setStartDate(formatVietnameseDate(new Date()))}
-                  className="text-blue-400 hover:underline"
-                >
-                  Hôm nay
-                </button>
-                <span>•</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(1);
-                    setStartDate(formatVietnameseDate(d));
-                  }}
-                  className="text-blue-400 hover:underline"
-                >
-                  Đầu tháng
-                </button>
-              </div>
             </div>
 
             <div>
-              <label className="block text-slate-300 mb-1">
-                Thời gian kết thúc / Hạn chót <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
+              <VnDateInput
+                label="Thời gian kết thúc / Hạn chót"
                 required
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                placeholder="Ví dụ: 30/6/2026 hoặc 18/10/2026"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
+                onChange={(formatted) => setEndDate(formatted)}
               />
-              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400">
-                <span>Gợi ý hạn:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 15);
-                    setEndDate(formatVietnameseDate(d));
-                  }}
-                  className="text-blue-400 hover:underline"
-                >
-                  +15 ngày
-                </button>
-                <span>•</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 30);
-                    setEndDate(formatVietnameseDate(d));
-                  }}
-                  className="text-blue-400 hover:underline"
-                >
-                  +30 ngày
-                </button>
-                <span>•</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setMonth(d.getMonth() + 3);
-                    setEndDate(formatVietnameseDate(d));
-                  }}
-                  className="text-blue-400 hover:underline"
-                >
-                  +3 tháng
-                </button>
-              </div>
             </div>
           </div>
 
@@ -665,8 +594,9 @@ export const TabSchedule: React.FC<TabScheduleProps> = ({
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as PlanStatus)}
-              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
             >
+              <option value="">-- Click để chọn --</option>
               <option value="Chưa thực hiện">Chưa thực hiện</option>
               <option value="Đang thực hiện">Đang thực hiện</option>
               <option value="Hoàn thành">Hoàn thành</option>

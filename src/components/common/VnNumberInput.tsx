@@ -138,7 +138,7 @@ export const VnNumberInput: React.FC<VnNumberInputProps> = ({
           value={displayValue}
           onChange={handleChange}
           placeholder={placeholder}
-          className={`w-full bg-[#0b1222] border rounded-lg py-2 text-slate-100 placeholder-slate-500 font-mono text-right transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+          className={`w-full bg-[#0b1222] border rounded-lg py-2 text-slate-100 placeholder:italic placeholder:text-slate-500 font-mono text-right transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
             prefix ? 'pl-8' : 'pl-3'
           } ${suffix ? 'pr-14' : 'pr-3'} ${
             error

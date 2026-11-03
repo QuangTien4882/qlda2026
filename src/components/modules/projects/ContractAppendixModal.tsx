@@ -8,6 +8,7 @@ import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { VnNumberInput } from '../../common/VnNumberInput';
+import { VnDateInput } from '../../common/VnDateInput';
 import { formatVnNumber } from '../../../utils/numberUtils';
 import { formatCustomVnDate } from '../../../utils/dateUtils';
 import { useData } from '../../../context/DataContext';
@@ -101,14 +102,14 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
     
     setEditingItem(null);
     setAppendixNumber(defaultNum);
-    setSignedDate(costPackage.contractDate || '18/01/2026');
-    setAdjustmentType('Giá trị');
+    setSignedDate('');
+    setAdjustmentType('' as any);
     setAdjustmentSign('+');
     setAdjustmentAmountAbs(0);
     setAdjustmentDays(0);
-    setNewExecutionTime(costPackage.executionTime || '');
-    setContent(`Điều chỉnh bổ sung khối lượng cho ${costPackage.content}`);
-    setLegalBasis('Quyết định phê duyệt điều chỉnh / Biên bản thương thảo');
+    setNewExecutionTime('');
+    setContent('');
+    setLegalBasis('');
     setNote('');
     setAttachedFileName('');
     setAttachedFileUrl('');
@@ -175,7 +176,7 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
       stt: editingItem ? editingItem.stt : appendices.length + 1,
       appendixNumber: appendixNumber.trim(),
       signedDate: signedDate.trim(),
-      adjustmentType,
+      adjustmentType: adjustmentType || 'Giá trị',
       adjustmentAmount: finalAmount,
       adjustmentDays: Number(adjustmentDays) || 0,
       newExecutionTime: newExecutionTime.trim() || undefined,
@@ -507,22 +508,17 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                 value={appendixNumber}
                 onChange={(e) => setAppendixNumber(e.target.value)}
                 placeholder="VD: 01/PLHĐ-12/2025"
-                className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs"
+                className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs placeholder:italic placeholder:text-slate-500"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-slate-300 mb-1 font-medium">
-                Ngày ký PLHĐ <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                value={signedDate}
-                onChange={(e) => setSignedDate(e.target.value)}
-                placeholder="VD: 18/01/2026 hoặc 18/3/2026"
-                className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs"
+              <VnDateInput
+                label="Ngày ký PLHĐ"
                 required
+                value={signedDate}
+                onChange={(formatted) => setSignedDate(formatted)}
               />
             </div>
 
@@ -533,6 +529,7 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                 onChange={(e) => setAdjustmentType(e.target.value as AppendixAdjustmentType)}
                 className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg px-3 py-2 text-slate-100 text-xs"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Giá trị">Chỉ điều chỉnh Giá trị</option>
                 <option value="Tiến độ">Chỉ điều chỉnh Tiến độ</option>
                 <option value="Giá trị & Tiến độ">Điều chỉnh cả Giá trị & Tiến độ</option>
@@ -602,7 +599,7 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                     value={adjustmentDays}
                     onChange={(e) => setAdjustmentDays(Number(e.target.value) || 0)}
                     placeholder="VD: 30 hoặc -15"
-                    className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-1.5 text-slate-100 font-mono text-xs"
+                    className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-1.5 text-slate-100 font-mono text-xs placeholder:italic placeholder:text-slate-500"
                   />
                 </div>
                 <div>
@@ -612,7 +609,7 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                     value={newExecutionTime}
                     onChange={(e) => setNewExecutionTime(e.target.value)}
                     placeholder="VD: 210 ngày hoặc đến ngày 18/8/2026"
-                    className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-1.5 text-slate-100 text-xs"
+                    className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-1.5 text-slate-100 text-xs placeholder:italic placeholder:text-slate-500"
                   />
                 </div>
               </div>
@@ -629,7 +626,7 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Ghi rõ nội dung bổ sung khối lượng, phạm vi công việc, lý do gia hạn..."
-              className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg px-3 py-2 text-slate-100 text-xs leading-relaxed"
+              className="w-full bg-[#080d1a] border border-[#232f4e] focus:border-blue-500 rounded-lg px-3 py-2 text-slate-100 text-xs leading-relaxed placeholder:italic placeholder:text-slate-500"
               required
             />
           </div>
@@ -643,7 +640,7 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                 value={legalBasis}
                 onChange={(e) => setLegalBasis(e.target.value)}
                 placeholder="VD: Quyết định 123/QĐ-UBND, Biên bản thương thảo..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs placeholder:italic placeholder:text-slate-500"
               />
             </div>
             <div>
@@ -653,7 +650,7 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Ghi chú thêm nếu có..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>

@@ -139,8 +139,8 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
     setEditingItem(null);
     setStt(nextStt);
     setWorkName('');
-    setWorkType('Dân dụng');
-    setWorkLevel('Cấp II');
+    setWorkType('' as any);
+    setWorkLevel('' as any);
     setCostConstruction(0);
     setCostEquipment(0);
     setCostManagement(0);
@@ -178,8 +178,8 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
       projectId,
       stt,
       workName: workName.trim(),
-      workType,
-      workLevel,
+      workType: workType || 'Dân dụng',
+      workLevel: workLevel || 'Cấp II',
       costConstruction,
       costEquipment,
       costManagement,
@@ -459,7 +459,7 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
                 value={workName}
                 onChange={(e) => setWorkName(e.target.value)}
                 placeholder="Ví dụ: Khối nhà trung tâm đào tạo..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>
@@ -470,8 +470,9 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
               <select
                 value={workType}
                 onChange={(e) => setWorkType(e.target.value as ProjectType)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Giao thông">Giao thông</option>
                 <option value="Hạ tầng kỹ thuật">Hạ tầng kỹ thuật</option>
                 <option value="Phục vụ NN & MT">Phục vụ NN & MT</option>
@@ -484,8 +485,9 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
               <select
                 value={workLevel}
                 onChange={(e) => setWorkLevel(e.target.value as ProjectLevel)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Cấp I">Cấp I</option>
                 <option value="Cấp II">Cấp II</option>
                 <option value="Cấp III">Cấp III</option>
@@ -677,7 +679,7 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
                 value={approvalDecision}
                 onChange={(e) => setApprovalDecision(e.target.value)}
                 placeholder="Số, ngày quyết định..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
             <div>
@@ -687,7 +689,7 @@ export const TabEstimates: React.FC<TabEstimatesProps> = ({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Ghi chú thêm..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>

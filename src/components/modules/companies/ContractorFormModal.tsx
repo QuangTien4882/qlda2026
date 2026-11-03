@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
+import { VnDateInput } from '../../common/VnDateInput';
 import { ContractorItem } from '../../../types/project';
 
 interface ContractorFormModalProps {
@@ -56,11 +57,11 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
       setAddress('');
       setTaxCode('');
       setRepresentative('');
-      setPosition('Giám đốc');
+      setPosition('');
       setBankAccount('');
       setBankName('');
-      setRegistrationPlace('Sở Kế hoạch và Đầu tư');
-      setRegistrationDate('18/01/2026');
+      setRegistrationPlace('');
+      setRegistrationDate('');
       setPhone('');
       setFax('');
       setEmail('');
@@ -156,7 +157,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="VD: Tổng Công ty Xây dựng Số 1 - CTCP"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-semibold"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-semibold placeholder:italic placeholder:text-slate-500"
                 required
               />
             </div>
@@ -170,7 +171,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="VD: Số 111A Pasteur, Phường Bến Nghé, Quận 1, TP.HCM"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
 
@@ -183,7 +184,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={taxCode}
                 onChange={(e) => setTaxCode(e.target.value)}
                 placeholder="VD: 0300378779"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono font-bold"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono font-bold placeholder:italic placeholder:text-slate-500"
                 required
               />
             </div>
@@ -197,18 +198,15 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={registrationPlace}
                 onChange={(e) => setRegistrationPlace(e.target.value)}
                 placeholder="VD: Sở Kế hoạch và Đầu tư TP. Hồ Chí Minh"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
 
             <div>
-              <label className="block text-slate-300 mb-1">Ngày cấp ĐKKD (dd/mm/yyyy)</label>
-              <input
-                type="text"
+              <VnDateInput
+                label="Ngày cấp ĐKKD"
                 value={registrationDate}
-                onChange={(e) => setRegistrationDate(e.target.value)}
-                placeholder="VD: 18/01/2010"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
+                onChange={(formatted) => setRegistrationDate(formatted)}
               />
             </div>
           </div>
@@ -228,7 +226,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={representative}
                 onChange={(e) => setRepresentative(e.target.value)}
                 placeholder="VD: Nguyễn Văn Thành"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-medium"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-medium placeholder:italic placeholder:text-slate-500"
               />
             </div>
 
@@ -239,7 +237,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={position}
                 onChange={(e) => setPosition(e.target.value)}
                 placeholder="VD: Tổng Giám đốc"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>
@@ -252,7 +250,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={bankAccount}
                 onChange={(e) => setBankAccount(e.target.value)}
                 placeholder="VD: 19028889998888"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono text-emerald-400 font-bold"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono text-emerald-400 font-bold placeholder:italic placeholder:text-slate-500"
               />
             </div>
 
@@ -263,7 +261,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
                 placeholder="VD: Vietcombank - CN TP.HCM"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>
@@ -283,7 +281,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="VD: 028 3822 2059"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono placeholder:italic placeholder:text-slate-500"
               />
             </div>
 
@@ -294,7 +292,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={fax}
                 onChange={(e) => setFax(e.target.value)}
                 placeholder="VD: 028 3829 0500"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono placeholder:italic placeholder:text-slate-500"
               />
             </div>
 
@@ -305,7 +303,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="VD: contact@cc1.com.vn"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>
@@ -317,7 +315,7 @@ export const ContractorFormModal: React.FC<ContractorFormModalProps> = ({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="VD: Nhà thầu thi công xây dựng cấp đặc biệt..."
-              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
             />
           </div>
         </div>

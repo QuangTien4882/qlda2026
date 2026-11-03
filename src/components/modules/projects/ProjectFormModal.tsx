@@ -165,10 +165,10 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       setName('');
       setLocation('');
       setScale('');
-      setStatus('Chuẩn bị đầu tư');
-      setGroup('Nhóm B');
-      setType('Dân dụng');
-      setLevel('Cấp II');
+      setStatus('' as any);
+      setGroup('' as any);
+      setType('' as any);
+      setLevel('' as any);
       setApprovalDecision('');
       setNote('');
       setCostCompensation(0);
@@ -196,6 +196,11 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     const projectId = formProjectId;
     const detailId = initialDetail ? initialDetail.id : `dtl-${projectId}`;
 
+    const finalStatus = status || 'Chuẩn bị đầu tư';
+    const finalGroup = group || 'Nhóm B';
+    const finalType = type || 'Dân dụng';
+    const finalLevel = level || 'Cấp II';
+
     // 1. Dữ liệu bảng Cấp 1
     const projectRecord: ProjectListItem = {
       id: projectId,
@@ -203,7 +208,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       code: code.trim(),
       name: name.trim(),
       location: location.trim(),
-      status,
+      status: finalStatus,
       totalInvestment,
       note: note.trim(),
     };
@@ -217,10 +222,10 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       name: name.trim(),
       location: location.trim(),
       scale: scale.trim(),
-      status,
-      group,
-      type,
-      level,
+      status: finalStatus,
+      group: finalGroup,
+      type: finalType,
+      level: finalLevel,
       costCompensation,
       costConstruction,
       costEquipment,
@@ -294,7 +299,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="VD: DA-2026/01"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono font-bold"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono font-bold placeholder:italic placeholder:text-slate-500"
                 required
               />
             </div>
@@ -308,7 +313,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="VD: Xây dựng Trung tâm Đào tạo và Chuyển giao..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-semibold"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-semibold placeholder:italic placeholder:text-slate-500"
                 required
               />
             </div>
@@ -324,7 +329,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="VD: Phường Long Thạnh Mỹ, TP. Thủ Đức, TP.HCM"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
                 required
               />
             </div>
@@ -336,7 +341,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 value={scale}
                 onChange={(e) => setScale(e.target.value)}
                 placeholder="VD: Quy mô 5 tầng nổi, 1 tầng hầm, diện tích sàn 14.500 m2..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>
@@ -347,8 +352,9 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Chuẩn bị đầu tư">Chuẩn bị đầu tư</option>
                 <option value="Đang thực hiện">Đang thực hiện</option>
                 <option value="Hoàn thành chưa quyết toán">Hoàn thành chưa quyết toán</option>
@@ -361,8 +367,9 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
               <select
                 value={group}
                 onChange={(e) => setGroup(e.target.value as ProjectGroup)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Nhóm A">Nhóm A</option>
                 <option value="Nhóm B">Nhóm B</option>
                 <option value="Nhóm C">Nhóm C</option>
@@ -374,8 +381,9 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as ProjectType)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Giao thông">Giao thông</option>
                 <option value="Hạ tầng kỹ thuật">Hạ tầng kỹ thuật</option>
                 <option value="Phục vụ NN & MT">Phục vụ NN & MT</option>
@@ -389,8 +397,9 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
               <select
                 value={level}
                 onChange={(e) => setLevel(e.target.value as ProjectLevel)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 text-xs md:text-sm"
               >
+                <option value="">-- Click để chọn --</option>
                 <option value="Cấp I">Cấp I</option>
                 <option value="Cấp II">Cấp II</option>
                 <option value="Cấp III">Cấp III</option>
@@ -407,7 +416,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 value={approvalDecision}
                 onChange={(e) => setApprovalDecision(e.target.value)}
                 placeholder="VD: Số 182/QĐ-SXD ngày 18/02/2026..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
 
@@ -418,7 +427,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Ghi chú tổng quát của dự án..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
           </div>

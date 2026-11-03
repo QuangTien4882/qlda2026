@@ -119,8 +119,8 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
     setPackageName('');
     setCostPackageId('');
     setContractValue(0);
-    setInspectionRound(`Đợt ${nextStt}`);
-    setInspectionDate('18/01/2026');
+    setInspectionRound('');
+    setInspectionDate('');
     setInspectionValue(0);
     setPaymentValue(0);
     setNote('');
@@ -366,7 +366,7 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
                 options={costPackageOptions}
                 value={packageName}
                 onChange={handleSelectPackage}
-                placeholder="Chọn gói thầu hoặc gõ tìm kiếm..."
+                placeholder="-- Click để chọn hoặc gõ tìm kiếm nội dung chi phí --"
                 allowCustomInput={true}
               />
             </div>
@@ -380,12 +380,12 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
                 value={inspectionRound}
                 onChange={(e) => setInspectionRound(e.target.value)}
                 placeholder="Ví dụ: Đợt 1, Đợt 2..."
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100"
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 placeholder:italic placeholder:text-slate-500"
               />
             </div>
             <div>
               <VnDateInput
-                label="Ngày NT (Chuẩn VN)"
+                label="Ngày NT"
                 value={inspectionDate}
                 onChange={(formatted) => setInspectionDate(formatted)}
               />
@@ -508,7 +508,7 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Chi tiết nội dung khối lượng nghiệm thu..."
-              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 resize-none"
+              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 resize-none placeholder:italic placeholder:text-slate-500"
             />
           </div>
         </form>
