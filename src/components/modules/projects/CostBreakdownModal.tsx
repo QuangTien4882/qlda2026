@@ -127,59 +127,68 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={
-        <div className="flex items-center gap-2 text-sm">
-          <Layers size={18} className="text-blue-400" />
+        <div className="flex items-center gap-2 text-base md:text-lg">
+          <Layers size={20} className="text-blue-400" />
           <span>Chi tiết cấu thành: </span>
-          <span className="text-blue-300 font-semibold uppercase">{costCategoryName}</span>
+          <span className="text-blue-300 font-bold uppercase">{costCategoryName}</span>
         </div>
       }
       level={2}
       footer={
         <div className="flex items-center justify-between w-full">
-          <div className="text-xs text-slate-400">
-            Tổng cộng chi tiết: <strong className="text-emerald-400 font-mono text-sm">{formatVnNumber(totalBreakdownAmount)} đ</strong>
+          <div className="text-sm text-slate-300">
+            Tổng cộng chi tiết:{' '}
+            <strong className="text-emerald-400 font-mono text-base ml-1">
+              {formatVnNumber(totalBreakdownAmount)} đ
+            </strong>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <AppButton variant="secondary" size="sm" onClick={onClose}>
               Đóng
             </AppButton>
             <AppButton variant="primary" size="sm" onClick={handleSaveAndApply}>
-              <Check size={14} className="mr-1" />
+              <Check size={15} className="mr-1" />
               Cập nhật tổng vào chi phí
             </AppButton>
           </div>
         </div>
       }
     >
-      <div className="space-y-4">
+      <div className="flex flex-col h-full space-y-3.5">
         {/* Banner thông tin ngữ cảnh */}
-        <div className="p-3.5 rounded-xl bg-[#091224] border border-[#1e2f52] flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="p-3.5 rounded-xl bg-[#091224] border border-[#1e2f52] flex flex-wrap items-center justify-between gap-3 text-sm shrink-0">
           <div className="space-y-1">
             <div className="text-slate-300">
-              <span className="text-slate-400">Đối tượng:</span> <strong className="text-slate-100">{parentTitle}</strong>
+              <span className="text-slate-400">Đối tượng:</span>{' '}
+              <strong className="text-slate-100">{parentTitle}</strong>
             </div>
             <div className="text-slate-300">
-              <span className="text-slate-400">Loại chi phí:</span> <strong className="text-blue-300">{costCategoryName}</strong>
+              <span className="text-slate-400">Loại chi phí:</span>{' '}
+              <strong className="text-blue-300 font-semibold">{costCategoryName}</strong>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-xs font-mono">
+          <div className="flex items-center gap-4 font-mono">
             <div className="text-right">
-              <div className="text-slate-400 text-[11px] font-sans">Giá trị hiện tại ở bảng</div>
-              <div className="text-slate-200 font-semibold">{formatVnNumber(currentCostAmount)} đ</div>
+              <div className="text-slate-400 text-xs font-sans">Giá trị hiện tại ở bảng</div>
+              <div className="text-slate-200 font-semibold text-sm">
+                {formatVnNumber(currentCostAmount)} đ
+              </div>
             </div>
-            <ArrowRight size={16} className="text-slate-500" />
+            <ArrowRight size={18} className="text-slate-500" />
             <div className="text-right">
-              <div className="text-slate-400 text-[11px] font-sans">Tổng các khoản chi tiết</div>
-              <div className="text-emerald-400 font-bold text-sm">{formatVnNumber(totalBreakdownAmount)} đ</div>
+              <div className="text-slate-400 text-xs font-sans">Tổng các khoản chi tiết</div>
+              <div className="text-emerald-400 font-bold text-base">
+                {formatVnNumber(totalBreakdownAmount)} đ
+              </div>
             </div>
           </div>
         </div>
 
         {/* Chênh lệch nếu có */}
         {diffAmount !== 0 && currentCostAmount > 0 && (
-          <div className="px-3 py-1.5 rounded-lg bg-blue-950/40 border border-blue-500/30 text-blue-300 text-xs flex items-center gap-2">
-            <Info size={14} className="shrink-0 text-blue-400" />
+          <div className="px-3.5 py-2 rounded-lg bg-blue-950/40 border border-blue-500/30 text-blue-300 text-sm flex items-center gap-2 shrink-0">
+            <Info size={16} className="shrink-0 text-blue-400" />
             <span>
               Tổng chi tiết cấu thành {diffAmount > 0 ? 'lớn hơn' : 'nhỏ hơn'} giá trị hiện tại là{' '}
               <strong className="font-mono text-white">{formatVnNumber(Math.abs(diffAmount))} đ</strong>. Bấm nút "Cập nhật tổng vào chi phí" để đồng bộ.
@@ -187,23 +196,23 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
           </div>
         )}
 
-        {/* Bảng danh sách các khoản mục con chi tiết */}
-        <div className="border border-slate-700/80 rounded-lg overflow-hidden bg-[#070d1a]">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-[#111c33] text-slate-200 uppercase font-semibold border-b border-slate-700">
+        {/* Bảng danh sách các khoản mục con chi tiết - Chiếm trọn không gian chiều cao */}
+        <div className="flex-1 min-h-[300px] border border-slate-700/80 rounded-xl overflow-auto bg-[#070d1a] relative">
+          <table className="w-full text-left border-collapse table-data-grid">
+            <thead className="bg-[#111c33] text-slate-200 uppercase font-semibold border-b border-slate-700 sticky top-0 z-10">
               <tr>
                 <th className="py-2.5 px-3 text-center w-14">STT</th>
-                <th className="py-2.5 px-3 min-w-[280px]">Nội dung khoản mục chi tiết cấu thành</th>
-                <th className="py-2.5 px-3 text-right w-48">Giá trị (đồng)</th>
-                <th className="py-2.5 px-3 w-48">Căn cứ / Ghi chú</th>
+                <th className="py-2.5 px-3 min-w-[300px]">Nội dung khoản mục chi tiết cấu thành</th>
+                <th className="py-2.5 px-3 text-right w-52">Giá trị (đồng)</th>
+                <th className="py-2.5 px-3 w-52">Căn cứ / Ghi chú</th>
                 <th className="py-2.5 px-3 text-center w-14">Xóa</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 italic">
-                    Chưa có khoản mục chi tiết nào. Bấm nút "Thêm khoản mục" bên dưới để nhập.
+                  <td colSpan={5} className="py-12 text-center text-slate-400 italic">
+                    Chưa có khoản mục chi tiết nào. Bấm nút "Thêm khoản mục chi tiết" bên dưới để nhập.
                   </td>
                 </tr>
               ) : (
@@ -221,7 +230,7 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
                         value={item.name}
                         onChange={(e) => handleUpdateItem(index, 'name', e.target.value)}
                         placeholder="Ví dụ: Chi phí thẩm tra thiết kế, Chi phí khảo sát địa chất..."
-                        className="w-full bg-[#050914] border border-[#233152] focus:border-blue-500 rounded px-2.5 py-1.5 text-slate-100 text-xs"
+                        className="w-full bg-[#050914] border border-[#233152] focus:border-blue-500 rounded-lg px-3 py-1.5 text-slate-100"
                       />
                     </td>
 
@@ -230,7 +239,7 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
                       <VnNumberInput
                         value={item.amount}
                         onChange={(val) => handleUpdateItem(index, 'amount', val)}
-                        className="w-full text-right font-mono font-semibold !py-1 text-emerald-400 bg-[#050914] border border-[#233152] rounded"
+                        className="w-full text-right font-mono font-semibold text-emerald-400 bg-[#050914] border border-[#233152] rounded-lg"
                       />
                     </td>
 
@@ -241,7 +250,7 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
                         value={item.note || ''}
                         onChange={(e) => handleUpdateItem(index, 'note', e.target.value)}
                         placeholder="Căn cứ định mức..."
-                        className="w-full bg-[#050914] border border-[#233152] focus:border-blue-500 rounded px-2.5 py-1.5 text-slate-300 text-xs"
+                        className="w-full bg-[#050914] border border-[#233152] focus:border-blue-500 rounded-lg px-3 py-1.5 text-slate-300"
                       />
                     </td>
 
@@ -250,10 +259,10 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(index)}
-                        className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-colors"
                         title="Xóa khoản mục này"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={16} />
                       </button>
                     </td>
                   </tr>
@@ -261,15 +270,15 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
               )}
             </tbody>
             {items.length > 0 && (
-              <tfoot className="bg-[#0b1426] border-t-2 border-slate-700 font-semibold">
+              <tfoot className="bg-[#0b1426] border-t-2 border-slate-700 font-semibold sticky bottom-0 z-10">
                 <tr>
-                  <td colSpan={2} className="py-2.5 px-3 text-right uppercase text-slate-300 tracking-wide text-xs">
-                    Tổng cộng {costCategoryName}:
+                  <td colSpan={2} className="py-2.5 px-3 text-right uppercase text-slate-300 tracking-wide font-bold">
+                    Tổng cộng chi tiết {costCategoryName}:
                   </td>
-                  <td className="py-2.5 px-3 text-right font-mono text-emerald-400 font-bold text-sm">
+                  <td className="py-2.5 px-3 text-right font-mono text-emerald-400 font-bold text-base">
                     {formatVnNumber(totalBreakdownAmount)}
                   </td>
-                  <td colSpan={2} className="py-2.5 px-3 text-slate-400 text-[11px] font-normal">
+                  <td colSpan={2} className="py-2.5 px-3 text-slate-400 font-medium">
                     (đồng)
                   </td>
                 </tr>
@@ -279,18 +288,18 @@ export const CostBreakdownModal: React.FC<CostBreakdownModalProps> = ({
         </div>
 
         {/* Nút thêm dòng */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between shrink-0 pt-1">
           <button
             type="button"
             onClick={handleAddItem}
-            className="px-3 py-1.5 rounded-lg bg-[#142340] hover:bg-[#1b2f56] text-blue-300 border border-blue-500/40 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors shadow-sm"
+            className="px-3.5 py-2 rounded-lg bg-[#142340] hover:bg-[#1b2f56] text-blue-300 border border-blue-500/40 font-semibold inline-flex items-center gap-1.5 transition-colors shadow-sm text-sm"
           >
-            <Plus size={14} />
+            <Plus size={16} />
             <span>Thêm khoản mục chi tiết</span>
           </button>
 
-          <div className="text-[11px] text-slate-400">
-            Số khoản mục: <strong className="text-slate-200">{items.length}</strong>
+          <div className="text-xs text-slate-400">
+            Số khoản mục: <strong className="text-slate-200 font-mono text-sm">{items.length}</strong>
           </div>
         </div>
       </div>

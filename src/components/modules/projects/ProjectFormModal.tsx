@@ -2,14 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
 import { VnNumberInput } from '../../common/VnNumberInput';
+import { CostBreakdownModal } from './CostBreakdownModal';
 import { formatVnNumber } from '../../../utils/numberUtils';
+import { Layers } from 'lucide-react';
 import { 
   ProjectListItem, 
   ProjectDetailItem, 
   ProjectStatus, 
   ProjectGroup, 
   ProjectType, 
-  ProjectLevel 
+  ProjectLevel,
+  SevenCostCategory
 } from '../../../types/project';
 
 interface ProjectFormModalProps {
@@ -29,6 +32,9 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   initialDetail,
   nextStt,
 }) => {
+  // ID dự án dùng cố định xuyên suốt phiên tạo / sửa form để liên kết chi tiết cấu thành
+  const [formProjectId, setFormProjectId] = useState<string>(() => initialData?.id || `prj-${Date.now()}`);
+
   // 1. Nhóm thông tin chung
   const [stt, setStt] = useState<number>(nextStt);
   const [code, setCode] = useState('');
@@ -51,6 +57,58 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   const [costOthers, setCostOthers] = useState<number>(0);
   const [costContingency, setCostContingency] = useState<number>(0);
 
+  // Modal mở chi tiết cấu thành cho từng loại trong 7 chi phí
+  const [breakdownModal, setBreakdownModal] = useState<{
+    isOpen: boolean;
+    costCategory: SevenCostCategory;
+    costCategoryName: string;
+    currentCostAmount: number;
+  }>({
+    isOpen: false,
+    costCategory: 'costConstruction',
+    costCategoryName: '',
+    currentCostAmount: 0,
+  });
+
+  const handleOpenBreakdown = (
+    costCategory: SevenCostCategory,
+    costCategoryName: string,
+    currentCostAmount: number
+  ) => {
+    setBreakdownModal({
+      isOpen: true,
+      costCategory,
+      costCategoryName,
+      currentCostAmount,
+    });
+  };
+
+  const handleApplyBreakdownTotal = (newTotal: number) => {
+    switch (breakdownModal.costCategory) {
+      case 'costCompensation':
+        setCostCompensation(newTotal);
+        break;
+      case 'costConstruction':
+        setCostConstruction(newTotal);
+        break;
+      case 'costEquipment':
+        setCostEquipment(newTotal);
+        break;
+      case 'costManagement':
+        setCostManagement(newTotal);
+        break;
+      case 'costConsulting':
+        setCostConsulting(newTotal);
+        break;
+      case 'costOthers':
+        setCostOthers(newTotal);
+        break;
+      case 'costContingency':
+        setCostContingency(newTotal);
+        break;
+    }
+  };
+
   // Tổng mức đầu tư tự động cộng realtime
   const totalInvestment =
     costCompensation +
@@ -65,6 +123,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
 
   useEffect(() => {
     if (initialData) {
+      setFormProjectId(initialData.id);
       setStt(initialData.stt);
       setCode(initialData.code);
       setName(initialData.name);
@@ -100,6 +159,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
         setCostContingency(0);
       }
     } else {
+      setFormProjectId(`prj-${Date.now()}`);
       setStt(nextStt);
       setCode(`DA-2026/0${nextStt}`);
       setName('');
@@ -133,7 +193,8 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       return;
     }
 
-    const projectId = initialData ? initialData.id : `prj-${Date.now()}`;
+    const projectId = formProjectId;
+    const detailId = initialDetail ? initialDetail.id : `dtl-${projectId}`;
 
     // 1. Dữ liệu bảng Cấp 1
     const projectRecord: ProjectListItem = {
@@ -149,7 +210,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
 
     // 2. Đầy đủ dữ liệu chi tiết Tab 1 (Dự án & 7 chi phí)
     const detailRecord: ProjectDetailItem = {
-      id: initialDetail ? initialDetail.id : `dtl-${projectId}`,
+      id: detailId,
       projectId,
       stt,
       code: code.trim(),
@@ -376,49 +437,168 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <VnNumberInput
-              label="1. CP BT, HT & TĐC"
+              label={
+                <div className="flex items-center justify-between">
+                  <span>1. CP BT, HT & TĐC</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenBreakdown(
+                        'costCompensation',
+                        'CP Bồi thường, HT & TĐC',
+                        costCompensation
+                      )
+                    }
+                    className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                  >
+                    <Layers size={11} /> Chi tiết
+                  </button>
+                </div>
+              }
               value={costCompensation}
               onChange={(val) => setCostCompensation(val)}
               suffix="đồng"
             />
 
             <VnNumberInput
-              label="2. CP Xây dựng"
+              label={
+                <div className="flex items-center justify-between">
+                  <span>2. CP Xây dựng</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenBreakdown(
+                        'costConstruction',
+                        'CP Xây dựng',
+                        costConstruction
+                      )
+                    }
+                    className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                  >
+                    <Layers size={11} /> Chi tiết
+                  </button>
+                </div>
+              }
               value={costConstruction}
               onChange={(val) => setCostConstruction(val)}
               suffix="đồng"
             />
 
             <VnNumberInput
-              label="3. CP Thiết bị"
+              label={
+                <div className="flex items-center justify-between">
+                  <span>3. CP Thiết bị</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenBreakdown(
+                        'costEquipment',
+                        'CP Thiết bị',
+                        costEquipment
+                      )
+                    }
+                    className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                  >
+                    <Layers size={11} /> Chi tiết
+                  </button>
+                </div>
+              }
               value={costEquipment}
               onChange={(val) => setCostEquipment(val)}
               suffix="đồng"
             />
 
             <VnNumberInput
-              label="4. CP QLDA"
+              label={
+                <div className="flex items-center justify-between">
+                  <span>4. CP QLDA</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenBreakdown(
+                        'costManagement',
+                        'CP Quản lý dự án',
+                        costManagement
+                      )
+                    }
+                    className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                  >
+                    <Layers size={11} /> Chi tiết
+                  </button>
+                </div>
+              }
               value={costManagement}
               onChange={(val) => setCostManagement(val)}
               suffix="đồng"
             />
 
             <VnNumberInput
-              label="5. CP TVĐTXD"
+              label={
+                <div className="flex items-center justify-between">
+                  <span>5. CP TVĐTXD</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenBreakdown(
+                        'costConsulting',
+                        'CP Tư vấn ĐTXD',
+                        costConsulting
+                      )
+                    }
+                    className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                  >
+                    <Layers size={11} /> Chi tiết
+                  </button>
+                </div>
+              }
               value={costConsulting}
               onChange={(val) => setCostConsulting(val)}
               suffix="đồng"
             />
 
             <VnNumberInput
-              label="6. CP Khác"
+              label={
+                <div className="flex items-center justify-between">
+                  <span>6. CP Khác</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenBreakdown(
+                        'costOthers',
+                        'CP Khác',
+                        costOthers
+                      )
+                    }
+                    className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                  >
+                    <Layers size={11} /> Chi tiết
+                  </button>
+                </div>
+              }
               value={costOthers}
               onChange={(val) => setCostOthers(val)}
               suffix="đồng"
             />
 
             <VnNumberInput
-              label="7. CP Dự phòng"
+              label={
+                <div className="flex items-center justify-between">
+                  <span>7. CP Dự phòng</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenBreakdown(
+                        'costContingency',
+                        'CP Dự phòng',
+                        costContingency
+                      )
+                    }
+                    className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1 font-normal"
+                  >
+                    <Layers size={11} /> Chi tiết
+                  </button>
+                </div>
+              }
               value={costContingency}
               onChange={(val) => setCostContingency(val)}
               suffix="đồng"
@@ -441,6 +621,19 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
           </div>
         </div>
       </form>
+
+      {/* Modal Cấp 2: Chi tiết cấu thành chi phí khi tạo / sửa dự án */}
+      <CostBreakdownModal
+        isOpen={breakdownModal.isOpen}
+        onClose={() => setBreakdownModal((prev) => ({ ...prev, isOpen: false }))}
+        projectId={formProjectId}
+        parentId={initialDetail?.id || `dtl-${formProjectId}`}
+        parentTitle={code ? `${code} - ${name || 'Dự án mới'}` : (name || 'Dự án mới')}
+        costCategory={breakdownModal.costCategory}
+        costCategoryName={breakdownModal.costCategoryName}
+        currentCostAmount={breakdownModal.currentCostAmount}
+        onApplyTotal={handleApplyBreakdownTotal}
+      />
     </AppModal>
   );
 };

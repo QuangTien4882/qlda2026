@@ -39,28 +39,28 @@ export const AppModal: React.FC<AppModalProps> = ({
   if (!isOpen) return null;
 
   // Cấu hình quy chuẩn kích thước theo tỷ lệ 90% cho từng cấp:
-  // - Cấp 1 (Dự án/Hệ thống): 94vw, cao tối đa 92vh
-  // - Cấp 2 (Dự toán, Chi phí, Nghiệm thu, Pháp lý): 90% Cấp 1 = ~85vw, cao 83vh
-  // - Cấp 3 (Chọn danh mục con, Xác nhận): 90% Cấp 2 = ~76vw, cao 75vh
-  // - Cấp 4 (Xác nhận nhỏ): 90% Cấp 3 = ~68vw, cao 67vh
+  // - Cấp 1: 94vw, cao 88vh
+  // - Cấp 2: 90% Cấp 1 = 85vw, cao 80vh
+  // - Cấp 3: 90% Cấp 2 = 76vw, cao tối đa 72vh
+  // - Cấp 4: 90% Cấp 3 = 68vw, cao tối đa 64vh
   const levelConfig: Record<number, { wrapperClass: string; zContainer: string; badgeLabel: string }> = {
     1: {
-      wrapperClass: 'w-[94vw] max-w-6xl max-h-[92vh]',
+      wrapperClass: 'w-[94vw] max-w-7xl h-[88vh]',
       zContainer: 'z-50',
       badgeLabel: 'Cấp 1',
     },
     2: {
-      wrapperClass: 'w-[85vw] max-w-5xl max-h-[83vh]',
+      wrapperClass: 'w-[85vw] max-w-6xl h-[80vh]',
       zContainer: 'z-[60]',
       badgeLabel: 'Cấp 2',
     },
     3: {
-      wrapperClass: 'w-[76vw] max-w-3xl max-h-[75vh]',
+      wrapperClass: 'w-[76vw] max-w-4xl max-h-[72vh]',
       zContainer: 'z-[70]',
       badgeLabel: 'Cấp 3',
     },
     4: {
-      wrapperClass: 'w-[68vw] max-w-xl max-h-[67vh]',
+      wrapperClass: 'w-[68vw] max-w-2xl max-h-[64vh]',
       zContainer: 'z-[80]',
       badgeLabel: 'Cấp 4',
     },
@@ -90,8 +90,8 @@ export const AppModal: React.FC<AppModalProps> = ({
           <div className="min-w-0 flex items-center gap-2.5">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-slate-100 text-sm md:text-base truncate">{title}</h3>
-                <span className="text-[10px] bg-blue-950/80 text-blue-300 border border-blue-700/50 px-1.5 py-0.5 rounded font-mono font-medium shrink-0">
+                <h3 className="font-semibold text-slate-100 text-base md:text-lg truncate">{title}</h3>
+                <span className="text-xs bg-blue-950/80 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded font-mono font-medium shrink-0">
                   {currentLevelConfig.badgeLabel}
                 </span>
               </div>
@@ -107,8 +107,8 @@ export const AppModal: React.FC<AppModalProps> = ({
           </button>
         </div>
 
-        {/* Body Modal */}
-        <div className="p-5 overflow-y-auto flex-1 text-slate-200 text-sm">{children}</div>
+        {/* Body Modal - Không ép cứng text-sm để cỡ chữ toàn hệ thống co giãn chuẩn theo cài đặt */}
+        <div className="p-5 overflow-y-auto flex-1 text-slate-200">{children}</div>
 
         {/* Footer Modal */}
         {footer && (
