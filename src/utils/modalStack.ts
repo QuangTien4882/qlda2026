@@ -15,3 +15,4 @@ export const modalStack = {
   },
   count: () => stack.length,
 };
+

@@ -9,7 +9,8 @@ import {
   CompanyInfo,
   PlanTaskItem,
   CostBreakdownItem,
-  SevenCostCategory
+  SevenCostCategory,
+  ContractAppendixItem
 } from '../types/project';
 import { AppDatabase } from '../types/database';
 
@@ -27,6 +28,7 @@ interface DataContextType {
   companies: CompanyInfo[];
   planTasks: Record<string, PlanTaskItem[]>;
   costBreakdowns: Record<string, CostBreakdownItem[]>;
+  contractAppendices: Record<string, ContractAppendixItem[]>;
 
   // Trạng thái lưu trữ
   lastSavedTime: string;
@@ -56,6 +58,12 @@ interface DataContextType {
   addCostPackage: (item: CostPackageItem) => void;
   updateCostPackage: (item: CostPackageItem) => void;
   deleteCostPackage: (projectId: string, id: string) => void;
+
+  // Thao tác Phụ lục Hợp đồng (PLHĐ)
+  saveContractAppendix: (appendix: ContractAppendixItem) => void;
+  deleteContractAppendix: (projectId: string, appendixId: string) => void;
+  getContractAppendicesByPackage: (projectId: string, costPackageId: string) => ContractAppendixItem[];
+  getEffectiveContractValue: (projectId: string, costPackageId: string) => number;
 
   // Thao tác Nghiệm thu
   addInspection: (item: InspectionItem) => void;
@@ -106,6 +114,7 @@ const getDefaultDatabase = (): AppDatabase => ({
   legalDocs: {},
   planTasks: {},
   costBreakdowns: {},
+  contractAppendices: {},
   companies: [],
 });
 
@@ -141,6 +150,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             legalDocs: parsed.legalDocs || {},
             planTasks: parsed.planTasks || {},
             costBreakdowns: parsed.costBreakdowns || {},
+            contractAppendices: parsed.contractAppendices || {},
             companies: parsed.companies || [],
           };
         }
@@ -294,8 +304,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newPlanTasks = { ...(prev.planTasks || {}) };
       delete newPlanTasks[projectId];
 
-      const newCostBreakdowns = { ...(prev.costBreakdowns || {}) };
+       const newCostBreakdowns = { ...(prev.costBreakdowns || {}) };
       delete newCostBreakdowns[projectId];
+
+      const newContractAppendices = { ...(prev.contractAppendices || {}) };
+      delete newContractAppendices[projectId];
 
       return {
         ...prev,
@@ -307,6 +320,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         legalDocs: newLegal,
         planTasks: newPlanTasks,
         costBreakdowns: newCostBreakdowns,
+        contractAppendices: newContractAppendices,
       };
     });
   };
@@ -392,6 +406,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return true;
       });
 
+      // Ràng buộc toàn vẹn: Tự động xóa luôn các phụ lục hợp đồng liên quan đến gói thầu này
+      const currentAppendices = prev.contractAppendices?.[projectId] || [];
+      const updatedAppendices = currentAppendices.filter((app) => app.costPackageId !== id);
+
       return {
         ...prev,
         costPackages: {
@@ -401,6 +419,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         inspections: {
           ...prev.inspections,
           [projectId]: updatedInspections,
+        },
+        contractAppendices: {
+          ...(prev.contractAppendices || {}),
+          [projectId]: updatedAppendices,
         },
       };
     });
@@ -434,6 +456,65 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return totalSum;
+  };
+
+  // ==================== CÁC HÀM THAO TÁC PHỤ LỤC HỢP ĐỒNG (PLHĐ) ====================
+  const getContractAppendicesByPackage = useCallback(
+    (projectId: string, costPackageId: string): ContractAppendixItem[] => {
+      const list = database.contractAppendices?.[projectId] || [];
+      return list
+        .filter((item) => item.costPackageId === costPackageId)
+        .sort((a, b) => a.stt - b.stt);
+    },
+    [database.contractAppendices]
+  );
+
+  const getEffectiveContractValue = useCallback(
+    (projectId: string, costPackageId: string): number => {
+      const packageList = database.costPackages[projectId] || [];
+      const targetPackage = packageList.find((p) => p.id === costPackageId);
+      const originalValue = Number(targetPackage?.contractValue) || 0;
+      const appendices = getContractAppendicesByPackage(projectId, costPackageId);
+      const totalAdjustment = appendices.reduce(
+        (sum, item) => sum + (Number(item.adjustmentAmount) || 0),
+        0
+      );
+      return originalValue + totalAdjustment;
+    },
+    [database.costPackages, getContractAppendicesByPackage]
+  );
+
+  const saveContractAppendix = (appendix: ContractAppendixItem) => {
+    setDatabase((prev) => {
+      const currentList = prev.contractAppendices?.[appendix.projectId] || [];
+      const exists = currentList.some((item) => item.id === appendix.id);
+      let updated: ContractAppendixItem[];
+      if (exists) {
+        updated = currentList.map((item) => (item.id === appendix.id ? appendix : item));
+      } else {
+        updated = [...currentList, appendix];
+      }
+      return {
+        ...prev,
+        contractAppendices: {
+          ...(prev.contractAppendices || {}),
+          [appendix.projectId]: updated,
+        },
+      };
+    });
+  };
+
+  const deleteContractAppendix = (projectId: string, appendixId: string) => {
+    setDatabase((prev) => {
+      const currentList = prev.contractAppendices?.[projectId] || [];
+      return {
+        ...prev,
+        contractAppendices: {
+          ...(prev.contractAppendices || {}),
+          [projectId]: currentList.filter((item) => item.id !== appendixId),
+        },
+      };
+    });
   };
 
   // ==================== CÁC HÀM THAO TÁC NGHIỆM THU ====================
@@ -859,6 +940,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         companies: database.companies,
         planTasks: database.planTasks || {},
         costBreakdowns: database.costBreakdowns || {},
+        contractAppendices: database.contractAppendices || {},
         lastSavedTime,
         storageSizeKb,
         isDirectFileConnected,
@@ -873,6 +955,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addCostPackage,
         updateCostPackage,
         deleteCostPackage,
+        saveContractAppendix,
+        deleteContractAppendix,
+        getContractAppendicesByPackage,
+        getEffectiveContractValue,
         addInspection,
         updateInspection,
         deleteInspection,

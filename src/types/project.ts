@@ -85,6 +85,32 @@ export type BiddingMethod =
   | '02 giai đoạn 02 túi hồ sơ';
 export type ContractType = 'Trọn gói' | 'Đơn giá cố định' | 'Đơn giá điều chỉnh';
 
+export type AppendixAdjustmentType = 
+  | 'Giá trị'
+  | 'Tiến độ'
+  | 'Giá trị & Tiến độ'
+  | 'Điều khoản khác';
+
+export interface ContractAppendixItem {
+  id: string;                     // Mã định danh phụ lục: plhd-<timestamp>-<stt>
+  projectId: string;              // Mã dự án
+  costPackageId: string;          // Mã gói thầu / nội dung chi phí liên kết
+  stt: number;                    // STT (1, 2, 3...)
+  appendixNumber: string;         // Số PLHĐ (VD: "01/PLHĐ-12/2025")
+  signedDate: string;             // Ngày ký (chuẩn ngày VN: 18/01/2026, 18/3/2026)
+  adjustmentType: AppendixAdjustmentType; // Loại điều chỉnh
+  adjustmentAmount: number;       // Giá trị điều chỉnh (+/- đồng, số âm nếu giảm trừ)
+  adjustmentDays: number;         // Số ngày điều chỉnh tiến độ (+/- ngày)
+  newExecutionTime?: string;      // Thời gian thực hiện sau điều chỉnh (VD: "210 ngày")
+  content: string;                // Nội dung tóm tắt phụ lục
+  legalBasis?: string;            // Căn cứ pháp lý
+  attachedFileUrl?: string;       // File đính kèm URL / Base64
+  attachedFileName?: string;      // Tên file đính kèm
+  note?: string;                  // Ghi chú
+  createdAt?: string;             // Thời gian tạo
+  updatedAt?: string;             // Thời gian cập nhật
+}
+
 export interface CostPackageItem {
   id: string;
   projectId: string;

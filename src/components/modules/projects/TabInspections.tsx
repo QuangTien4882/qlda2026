@@ -26,7 +26,11 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
   onUpdate,
   onDelete,
 }) => {
-  const { costPackages } = useData();
+  const { 
+    costPackages, 
+    getEffectiveContractValue, 
+    getContractAppendicesByPackage 
+  } = useData();
   const projectPackages = costPackages[projectId] || [];
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -50,21 +54,43 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
       ? Number(((paymentValue / inspectionValue) * 100).toFixed(2))
       : 0;
 
-  // Danh mục gói thầu từ Tab 3: Chi phí để chọn nhanh
-  const costPackageOptions: SearchableOption[] = projectPackages.map((pkg) => ({
-    value: pkg.content,
-    label: pkg.content,
-    subLabel: `Giá trị HĐ: ${formatVnNumber(pkg.contractValue)} đ • Nhà thầu: ${pkg.contractor || 'Chưa chọn'}`,
-    badge: pkg.contractNumber ? `Số HĐ: ${pkg.contractNumber}` : pkg.category,
-    badgeColor: 'blue',
-    extraData: pkg,
-  }));
+  // Danh mục gói thầu từ Tab 3: Chi phí để chọn nhanh (Hiển thị giá trị HĐ sau phụ lục nếu có)
+  const costPackageOptions: SearchableOption[] = projectPackages.map((pkg) => {
+    const effectiveVal = getEffectiveContractValue(projectId, pkg.id);
+    const appendices = getContractAppendicesByPackage(projectId, pkg.id);
+    const hasAppendices = appendices.length > 0;
+
+    return {
+      value: pkg.content,
+      label: pkg.content,
+      subLabel: `HĐ gốc: ${formatVnNumber(pkg.contractValue)} đ${
+        hasAppendices ? ` • Sau ${appendices.length} PLHĐ: ${formatVnNumber(effectiveVal)} đ` : ''
+      } • Nhà thầu: ${pkg.contractor || 'Chưa chọn'}`,
+      badge: pkg.contractNumber ? `Số HĐ: ${pkg.contractNumber}` : pkg.category,
+      badgeColor: 'blue',
+      extraData: pkg,
+    };
+  });
 
   // Gói thầu đang được gắn với đợt nghiệm thu này
   const targetPackage = projectPackages.find(
     (p) => (costPackageId && p.id === costPackageId) || p.content.trim().toLowerCase() === packageName.trim().toLowerCase()
   );
-  const activeContractValue = targetPackage?.contractValue || contractValue || 0;
+
+  // Danh sách phụ lục hợp đồng của gói thầu này (nếu có)
+  const targetAppendices = targetPackage
+    ? getContractAppendicesByPackage(projectId, targetPackage.id)
+    : [];
+  const appendixAdjustmentTotal = targetAppendices.reduce(
+    (sum, a) => sum + (Number(a.adjustmentAmount) || 0),
+    0
+  );
+
+  // Giá trị hợp đồng hiệu lực sau phụ lục (hoặc giá trị hợp đồng gốc nếu chưa có PL)
+  const originalContractVal = targetPackage?.contractValue || contractValue || 0;
+  const activeContractValue = targetPackage
+    ? getEffectiveContractValue(projectId, targetPackage.id)
+    : (contractValue || 0);
 
   // Lấy các đợt nghiệm thu khác của cùng gói thầu này (để tính cộng dồn)
   const otherInspections = inspections.filter((i) => {
@@ -397,11 +423,18 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
                   ) : (
                     <CheckCircle2 size={15} className="text-emerald-400" />
                   )}
-                  Kiểm soát Giá trị Hợp đồng:
+                  {targetAppendices.length > 0 ? 'Giá trị HĐ hiệu lực (sau PL):' : 'Kiểm soát Giá trị Hợp đồng:'}
                 </span>
-                <span className="font-mono font-bold text-blue-300">
-                  {formatVnNumber(activeContractValue)} đ
-                </span>
+                <div className="text-right">
+                  <span className="font-mono font-bold text-emerald-400">
+                    {formatVnNumber(activeContractValue)} đ
+                  </span>
+                  {targetAppendices.length > 0 && (
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      (Gốc: {formatVnNumber(originalContractVal)} đ {appendixAdjustmentTotal >= 0 ? '+' : ''}{formatVnNumber(appendixAdjustmentTotal)} đ qua {targetAppendices.length} PLHĐ)
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
@@ -435,7 +468,7 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
                   <div>
                     <strong className="text-rose-200">CẢNH BÁO VƯỢT GIÁ TRỊ HỢP ĐỒNG:</strong> Tổng giá
                     trị nghiệm thu ({formatVnNumber(totalProjectedInspection)} đ) đã VƯỢT giá trị hợp
-                    đồng ({formatVnNumber(activeContractValue)} đ) là{' '}
+                    đồng {targetAppendices.length > 0 ? 'sau phụ lục' : ''} ({formatVnNumber(activeContractValue)} đ) là{' '}
                     <strong className="underline text-rose-100 font-mono">
                       {formatVnNumber(excessInspectionAmount)} đ
                     </strong>{' '}

@@ -10,6 +10,8 @@ import {
 } from '../../../types/project';
 import { AdvancedTable, AdvancedColumn } from '../../common/AdvancedTable';
 import { AppBadge } from '../../common/AppBadge';
+import { ContractAppendixModal } from './ContractAppendixModal';
+import { Plus } from 'lucide-react';
 import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
@@ -34,11 +36,17 @@ export const TabCosts: React.FC<TabCostsProps> = ({
   onUpdate,
   onDelete,
 }) => {
-  const { companies, inspections } = useData();
+  const { 
+    companies, 
+    inspections, 
+    getContractAppendicesByPackage, 
+    getEffectiveContractValue 
+  } = useData();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CostPackageItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<CostPackageItem | null>(null);
+  const [appendixModalPackage, setAppendixModalPackage] = useState<CostPackageItem | null>(null);
 
   // Form states
   const [stt, setStt] = useState(costPackages.length + 1);
@@ -76,6 +84,11 @@ export const TabCosts: React.FC<TabCostsProps> = ({
       (deletingItem?.content &&
         insp.packageName?.trim().toLowerCase() === deletingItem?.content.trim().toLowerCase())
   );
+
+  // Tìm các phụ lục hợp đồng liên quan đến gói thầu đang muốn xóa
+  const relatedAppendices = deletingItem
+    ? getContractAppendicesByPackage(projectId, deletingItem.id)
+    : [];
 
   // Tự động tính Tỷ lệ giảm thầu (%) = (Dự toán - Hợp đồng) / Dự toán * 100%
   const discountRate =
@@ -235,14 +248,30 @@ export const TabCosts: React.FC<TabCostsProps> = ({
       id: 'contractValue',
       title: 'Giá trị hợp đồng',
       unit: '(đồng)',
-      width: 180,
+      width: 190,
       minWidth: 25,
       align: 'right',
-      render: (item) => (
-        <span className="font-mono font-bold text-emerald-400">
-          {formatVnNumber(item.contractValue)}
-        </span>
-      ),
+      render: (item) => {
+        const itemAppendices = getContractAppendicesByPackage(projectId, item.id);
+        const totalAdj = itemAppendices.reduce((s, a) => s + (Number(a.adjustmentAmount) || 0), 0);
+        const effectiveVal = Number(item.contractValue) + totalAdj;
+
+        return (
+          <div className="flex flex-col items-end">
+            <span className="font-mono font-bold text-emerald-400">
+              {formatVnNumber(item.contractValue)}
+            </span>
+            {totalAdj !== 0 && (
+              <span 
+                className="text-[10px] text-blue-300 font-mono" 
+                title={`Giá trị hiệu lực sau phụ lục: ${formatVnNumber(effectiveVal)} đ`}
+              >
+                Sau PL: <strong className={totalAdj > 0 ? 'text-emerald-300' : 'text-amber-300'}>{formatVnNumber(effectiveVal)}</strong>
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: 'discountRate',
@@ -324,9 +353,55 @@ export const TabCosts: React.FC<TabCostsProps> = ({
     {
       id: 'contractAppendix',
       title: 'PLHĐ',
-      width: 180,
+      width: 190,
       minWidth: 25,
-      render: (item) => <span className="text-slate-400">{item.contractAppendix}</span>,
+      align: 'center',
+      render: (item) => {
+        const itemAppendices = getContractAppendicesByPackage(projectId, item.id);
+        const count = itemAppendices.length;
+        const totalAdj = itemAppendices.reduce((s, a) => s + (Number(a.adjustmentAmount) || 0), 0);
+
+        if (count === 0) {
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAppendixModalPackage(item);
+              }}
+              title="Bấm để mở Quản lý Phụ lục Hợp đồng"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#0b1424] hover:bg-blue-900/40 border border-[#232f4e] hover:border-blue-500/60 text-slate-400 hover:text-blue-300 text-xs transition-colors group"
+            >
+              <Plus size={12} className="text-slate-500 group-hover:text-blue-400" />
+              <span>+ Thêm PLHĐ</span>
+            </button>
+          );
+        }
+
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setAppendixModalPackage(item);
+            }}
+            title={`Có ${count} Phụ lục hợp đồng. Bấm để quản lý chi tiết.`}
+            className="flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-lg bg-[#0b172e] hover:bg-[#122345] border border-blue-500/40 hover:border-blue-400 text-xs transition-all w-full max-w-[170px] mx-auto text-center"
+          >
+            <div className="flex items-center gap-1 font-bold text-blue-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+              <span>{count} PLHĐ</span>
+            </div>
+            {totalAdj !== 0 ? (
+              <span className={`font-mono text-[11px] font-semibold ${totalAdj > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {totalAdj > 0 ? '+' : ''}{formatVnNumber(totalAdj)} đ
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-400">Điều chỉnh tiến độ/nội dung</span>
+            )}
+          </button>
+        );
+      },
     },
     {
       id: 'note',
@@ -589,12 +664,12 @@ export const TabCosts: React.FC<TabCostsProps> = ({
         }}
         title="Xóa nội dung chi phí & gói thầu"
         confirmLabel={
-          relatedInspections.length > 0
-            ? `Xóa gói thầu & ${relatedInspections.length} đợt NT liên quan`
+          relatedInspections.length > 0 || relatedAppendices.length > 0
+            ? 'Xác nhận xóa toàn bộ'
             : 'Xác nhận xóa'
         }
         message={
-          relatedInspections.length > 0 ? (
+          relatedInspections.length > 0 || relatedAppendices.length > 0 ? (
             <div className="space-y-3 text-xs md:text-sm">
               <p className="text-slate-200">
                 Bạn có chắc chắn muốn xóa gói thầu/nội dung: <strong className="text-white">"{deletingItem?.content}"</strong>?
@@ -603,20 +678,20 @@ export const TabCosts: React.FC<TabCostsProps> = ({
                 <div className="font-bold flex items-center gap-1.5 text-rose-200">
                   ⚠️ CẢNH BÁO RÀNG BUỘC TOÀN VẸN:
                 </div>
-                <div>
-                  Gói thầu này hiện đang liên kết với{' '}
-                  <strong className="text-white underline font-semibold">
-                    {relatedInspections.length} đợt nghiệm thu/thanh toán
-                  </strong>{' '}
-                  bên tab <span className="font-bold text-rose-200">4. Nghiệm thu</span>.
-                </div>
-                <div>
-                  Khi xóa gói thầu này, hệ thống sẽ{' '}
-                  <strong className="text-rose-100 uppercase">
-                    tự động xóa toàn bộ các đợt nghiệm thu liên quan
-                  </strong>{' '}
-                  để đảm bảo không bị sai lệch số liệu!
-                </div>
+                {relatedAppendices.length > 0 && (
+                  <div>
+                    • Gói thầu này có <strong className="text-blue-300 font-semibold">{relatedAppendices.length} phụ lục hợp đồng (PLHĐ)</strong> liên kết. Khi xóa, toàn bộ các phụ lục này sẽ được tự động xóa theo.
+                  </div>
+                )}
+                {relatedInspections.length > 0 && (
+                  <div>
+                    • Gói thầu này hiện đang liên kết với{' '}
+                    <strong className="text-white underline font-semibold">
+                      {relatedInspections.length} đợt nghiệm thu/thanh toán
+                    </strong>{' '}
+                    bên tab <span className="font-bold text-rose-200">4. Nghiệm thu</span>. Toàn bộ các đợt nghiệm thu này sẽ được xóa để đảm bảo không bị sai lệch số liệu!
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -624,6 +699,16 @@ export const TabCosts: React.FC<TabCostsProps> = ({
           )
         }
       />
+
+      {/* Modal Quản Lý Phụ Lục Hợp Đồng (Cấp 2) */}
+      {appendixModalPackage && (
+        <ContractAppendixModal
+          isOpen={!!appendixModalPackage}
+          onClose={() => setAppendixModalPackage(null)}
+          projectId={projectId}
+          costPackage={appendixModalPackage}
+        />
+      )}
     </div>
   );
 };
