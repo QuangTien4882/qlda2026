@@ -356,11 +356,11 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                   !status ? 'text-slate-500 italic' : 'text-slate-100'
                 }`}
               >
-                <option value="" disabled hidden>Click để chọn</option>
-                <option value="Chuẩn bị đầu tư">Chuẩn bị đầu tư</option>
-                <option value="Đang thực hiện">Đang thực hiện</option>
-                <option value="Hoàn thành chưa quyết toán">Hoàn thành chưa quyết toán</option>
-                <option value="Quyết toán">Quyết toán</option>
+                <option value="" disabled hidden className="italic text-slate-500 bg-[#0c1424]">Click để chọn</option>
+                <option value="Chuẩn bị đầu tư" className="not-italic text-slate-100 bg-[#0c1424]">Chuẩn bị đầu tư</option>
+                <option value="Đang thực hiện" className="not-italic text-slate-100 bg-[#0c1424]">Đang thực hiện</option>
+                <option value="Hoàn thành chưa quyết toán" className="not-italic text-slate-100 bg-[#0c1424]">Hoàn thành chưa quyết toán</option>
+                <option value="Quyết toán" className="not-italic text-slate-100 bg-[#0c1424]">Quyết toán</option>
               </select>
             </div>
 
@@ -373,10 +373,10 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                   !group ? 'text-slate-500 italic' : 'text-slate-100'
                 }`}
               >
-                <option value="" disabled hidden>Click để chọn</option>
-                <option value="Nhóm A">Nhóm A</option>
-                <option value="Nhóm B">Nhóm B</option>
-                <option value="Nhóm C">Nhóm C</option>
+                <option value="" disabled hidden className="italic text-slate-500 bg-[#0c1424]">Click để chọn</option>
+                <option value="Nhóm A" className="not-italic text-slate-100 bg-[#0c1424]">Nhóm A</option>
+                <option value="Nhóm B" className="not-italic text-slate-100 bg-[#0c1424]">Nhóm B</option>
+                <option value="Nhóm C" className="not-italic text-slate-100 bg-[#0c1424]">Nhóm C</option>
               </select>
             </div>
 
@@ -389,12 +389,12 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                   !type ? 'text-slate-500 italic' : 'text-slate-100'
                 }`}
               >
-                <option value="" disabled hidden>Click để chọn</option>
-                <option value="Giao thông">Giao thông</option>
-                <option value="Hạ tầng kỹ thuật">Hạ tầng kỹ thuật</option>
-                <option value="Phục vụ NN & MT">Phục vụ NN & MT</option>
-                <option value="Công nghiệp">Công nghiệp</option>
-                <option value="Dân dụng">Dân dụng</option>
+                <option value="" disabled hidden className="italic text-slate-500 bg-[#0c1424]">Click để chọn</option>
+                <option value="Giao thông" className="not-italic text-slate-100 bg-[#0c1424]">Giao thông</option>
+                <option value="Hạ tầng kỹ thuật" className="not-italic text-slate-100 bg-[#0c1424]">Hạ tầng kỹ thuật</option>
+                <option value="Phục vụ NN & MT" className="not-italic text-slate-100 bg-[#0c1424]">Phục vụ NN & MT</option>
+                <option value="Công nghiệp" className="not-italic text-slate-100 bg-[#0c1424]">Công nghiệp</option>
+                <option value="Dân dụng" className="not-italic text-slate-100 bg-[#0c1424]">Dân dụng</option>
               </select>
             </div>
 
@@ -407,11 +407,11 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                   !level ? 'text-slate-500 italic' : 'text-slate-100'
                 }`}
               >
-                <option value="" disabled hidden>Click để chọn</option>
-                <option value="Cấp I">Cấp I</option>
-                <option value="Cấp II">Cấp II</option>
-                <option value="Cấp III">Cấp III</option>
-                <option value="Cấp IV">Cấp IV</option>
+                <option value="" disabled hidden className="italic text-slate-500 bg-[#0c1424]">Click để chọn</option>
+                <option value="Cấp I" className="not-italic text-slate-100 bg-[#0c1424]">Cấp I</option>
+                <option value="Cấp II" className="not-italic text-slate-100 bg-[#0c1424]">Cấp II</option>
+                <option value="Cấp III" className="not-italic text-slate-100 bg-[#0c1424]">Cấp III</option>
+                <option value="Cấp IV" className="not-italic text-slate-100 bg-[#0c1424]">Cấp IV</option>
               </select>
             </div>
           </div>

@@ -98,6 +98,29 @@ table.table-data-grid {
   line-height: 1.2 !important;
 }
 
+/* ========================================================================
+   CHUẨN HÓA DROPDOWN SELECT & OPTION:
+   - Khi ô select chưa chọn: placeholder hiển thị in nghiêng và màu xám (nhờ class italic text-slate-500 trên select).
+   - Khi click mở danh sách options: toàn bộ các option lựa chọn PHẢI hiển thị
+     font chữ đứng bình thường (not-italic), màu chữ trắng sáng rõ ràng (#f1f5f9)
+     và nền tối chuẩn (#0c1424), không bị in nghiêng và không bị mờ xám.
+   - Riêng option placeholder rỗng (value="" disabled) giữ nguyên in nghiêng.
+   ======================================================================== */
+select option {
+  font-style: normal !important;
+  font-weight: 400 !important;
+  color: #f1f5f9 !important;
+  background-color: #0c1424 !important;
+}
+
+select option:disabled,
+select option[value=""] {
+  font-style: italic !important;
+  color: #64748b !important;
+  background-color: #0c1424 !important;
+}
+
+
 * {
   box-sizing: border-box;
 }

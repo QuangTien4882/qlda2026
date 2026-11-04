@@ -104,6 +104,8 @@ interface DataContextType {
   saveDatabaseAs: () => Promise<{ success: boolean; message: string; fileName?: string }>;
   connectDirectFile: () => Promise<{ success: boolean; message: string }>;
   disconnectDirectFile: () => void;
+  writeCurrentDataToSelectedFile: () => Promise<{ success: boolean; message: string; fileName?: string }>;
+  forceWriteToCurrentFile: () => Promise<{ success: boolean; message: string }>;
 
   // Quản lý sao lưu dự phòng định kỳ & IndexedDB
   createManualBackup: (note?: string) => Promise<boolean>;
@@ -1014,6 +1016,101 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsDirectFileConnected(false);
   };
 
+  // ==================== GHI ĐÈ DỮ LIỆU HIỆN TẠI VÀO FILE TRÊN MÁY & BẬT ĐỒNG BỘ ====================
+  const writeCurrentDataToSelectedFile = async (): Promise<{ success: boolean; message: string; fileName?: string }> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const windowAny = window as any;
+    if (!windowAny.showOpenFilePicker) {
+      return {
+        success: false,
+        message: 'Trình duyệt hiện tại chưa hỗ trợ File System Access API. Bạn hãy dùng tính năng "Tải file JSON về máy".',
+      };
+    }
+
+    try {
+      const [handle] = await windowAny.showOpenFilePicker({
+        types: [
+          {
+            description: 'File JSON Database',
+            accept: {
+              'application/json': ['.json'],
+            },
+          },
+        ],
+        multiple: false,
+      });
+
+      const now = new Date();
+      const dbWithMeta: AppDatabase = {
+        ...database,
+        metadata: {
+          ...database.metadata,
+          lastSavedAt: now.toISOString(),
+          totalProjects: database.projects.length,
+        },
+      };
+      const jsonStr = JSON.stringify(dbWithMeta, null, 2);
+
+      const writable = await handle.createWritable();
+      await writable.write(jsonStr);
+      await writable.close();
+
+      fileHandleRef.current = handle;
+      setIsDirectFileConnected(true);
+      setConnectedFileName(handle.name);
+
+      return {
+        success: true,
+        message: `Đã ghi thành công ${database.projects.length} dự án vào file "${handle.name}". Từ nay, mọi thay đổi trên phần mềm sẽ tự động cập nhật vào file này!`,
+        fileName: handle.name,
+      };
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { success: false, message: 'Đã hủy chọn file.' };
+      }
+      return {
+        success: false,
+        message: `Lỗi ghi file: ${err instanceof Error ? err.message : 'Thao tác không thành công'}`,
+      };
+    }
+  };
+
+  const forceWriteToCurrentFile = async (): Promise<{ success: boolean; message: string }> => {
+    if (!fileHandleRef.current) {
+      return {
+        success: false,
+        message: 'Chưa kết nối với file nào trên máy tính.',
+      };
+    }
+
+    try {
+      const now = new Date();
+      const dbWithMeta: AppDatabase = {
+        ...database,
+        metadata: {
+          ...database.metadata,
+          lastSavedAt: now.toISOString(),
+          totalProjects: database.projects.length,
+        },
+      };
+      const jsonStr = JSON.stringify(dbWithMeta, null, 2);
+
+      const writable = await fileHandleRef.current.createWritable();
+      await writable.write(jsonStr);
+      await writable.close();
+
+      return {
+        success: true,
+        message: `Đã đồng bộ lại toàn bộ dữ liệu vào file "${connectedFileName}" thành công!`,
+      };
+    } catch (err: unknown) {
+      return {
+        success: false,
+        message: `Lỗi khi ghi file: ${err instanceof Error ? err.message : 'Không thể ghi file'}`,
+      };
+    }
+  };
+
   // ==================== CÁC HÀM QUẢN LÝ SAO LƯU DỰ PHÒNG (INDEXEDDB BACKUP) ====================
   const createManualBackup = async (note?: string): Promise<boolean> => {
     try {
@@ -1120,6 +1217,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         saveDatabaseAs,
         connectDirectFile,
         disconnectDirectFile,
+        writeCurrentDataToSelectedFile,
+        forceWriteToCurrentFile,
         createManualBackup,
         restoreFromBackup,
         getBackupList,

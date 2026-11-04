@@ -560,11 +560,11 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                   !adjustmentType ? 'text-slate-500 italic' : 'text-slate-100'
                 }`}
               >
-                <option value="" disabled hidden>Click để chọn</option>
-                <option value="Giá trị">Chỉ điều chỉnh Giá trị</option>
-                <option value="Tiến độ">Chỉ điều chỉnh Tiến độ</option>
-                <option value="Giá trị & Tiến độ">Điều chỉnh cả Giá trị & Tiến độ</option>
-                <option value="Điều khoản khác">Điều khoản khác (Nhân sự, thanh toán...)</option>
+                <option value="" disabled hidden className="italic text-slate-500 bg-[#0c1424]">Click để chọn</option>
+                <option value="Giá trị" className="not-italic text-slate-100 bg-[#0c1424]">Chỉ điều chỉnh Giá trị</option>
+                <option value="Tiến độ" className="not-italic text-slate-100 bg-[#0c1424]">Chỉ điều chỉnh Tiến độ</option>
+                <option value="Giá trị & Tiến độ" className="not-italic text-slate-100 bg-[#0c1424]">Điều chỉnh cả Giá trị & Tiến độ</option>
+                <option value="Điều khoản khác" className="not-italic text-slate-100 bg-[#0c1424]">Điều khoản khác (Nhân sự, thanh toán...)</option>
               </select>
             </div>
           </div>

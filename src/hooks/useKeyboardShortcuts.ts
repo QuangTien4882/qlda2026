@@ -124,3 +124,4 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers, isEnabled: bool
     };
   }, [handleKeyDown]);
 }
+
