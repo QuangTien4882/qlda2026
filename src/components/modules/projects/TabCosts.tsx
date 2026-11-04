@@ -19,7 +19,7 @@ import { VnNumberInput } from '../../common/VnNumberInput';
 import { VnDateInput } from '../../common/VnDateInput';
 import { SearchableSelect, SearchableOption } from '../../common/SearchableSelect';
 import { formatVnNumber } from '../../../utils/numberUtils';
-import { calculateContractDeadline } from '../../../utils/dateUtils';
+import { calculateContractDeadline, getPackageEffectiveDeadline } from '../../../utils/dateUtils';
 import { useData } from '../../../context/DataContext';
 
 interface TabCostsProps {
@@ -369,20 +369,7 @@ export const TabCosts: React.FC<TabCostsProps> = ({
         }
 
         const itemAppendices = getContractAppendicesByPackage(projectId, item.id);
-        const additionalDays = itemAppendices.reduce((sum, a) => {
-          if (a.adjustmentType === 'Tiến độ' || a.adjustmentType === 'Giá trị & Tiến độ') {
-            return sum + (Number(a.adjustmentDays) || 0);
-          }
-          return sum;
-        }, 0);
-
-        const info = calculateContractDeadline(
-          item.contractDate,
-          item.executionTime,
-          additionalDays,
-          item.status === 'Hoàn thành',
-          false
-        );
+        const info = getPackageEffectiveDeadline(item, itemAppendices);
 
         if (info.status === 'completed') {
           return (

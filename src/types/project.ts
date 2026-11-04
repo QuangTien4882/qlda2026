@@ -99,9 +99,11 @@ export interface ContractAppendixItem {
   appendixNumber: string;         // Số PLHĐ (VD: "01/PLHĐ-12/2025")
   signedDate: string;             // Ngày ký (chuẩn ngày VN: 18/01/2026, 18/3/2026)
   adjustmentType: AppendixAdjustmentType; // Loại điều chỉnh
-  adjustmentAmount: number;       // Giá trị điều chỉnh (+/- đồng, số âm nếu giảm trừ)
-  adjustmentDays: number;         // Số ngày điều chỉnh tiến độ (+/- ngày)
-  newExecutionTime?: string;      // Thời gian thực hiện sau điều chỉnh (VD: "210 ngày")
+  adjustmentAmount: number;       // Giá trị chênh lệch điều chỉnh (+/- đồng, số âm nếu giảm trừ)
+  newContractValue?: number;      // Giá trị hợp đồng sau điều chỉnh (đồng)
+  extendedDate?: string;          // Thời điểm được gia hạn đến ngày (dd/mm/yyyy, VD: "31/12/2026")
+  adjustmentDays?: number;        // Số ngày điều chỉnh tiến độ (+/- ngày)
+  newExecutionTime?: string;      // Thời gian thực hiện sau điều chỉnh (VD: "Đến ngày 31/12/2026")
   content: string;                // Nội dung tóm tắt phụ lục
   legalBasis?: string;            // Căn cứ pháp lý
   attachedFileUrl?: string;       // File đính kèm URL / Base64

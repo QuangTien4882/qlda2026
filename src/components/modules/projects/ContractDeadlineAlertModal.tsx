@@ -3,7 +3,7 @@ import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
 import { AppBadge } from '../../common/AppBadge';
 import { useData } from '../../../context/DataContext';
-import { calculateContractDeadline, ContractDeadlineInfo } from '../../../utils/dateUtils';
+import { calculateContractDeadline, getPackageEffectiveDeadline, ContractDeadlineInfo } from '../../../utils/dateUtils';
 import { AlertTriangle, Clock, Calendar, CheckCircle2, ArrowRight } from 'lucide-react';
 import { CostPackageItem, ProjectListItem } from '../../../types/project';
 
@@ -39,20 +39,7 @@ export const ContractDeadlineAlertModal: React.FC<ContractDeadlineAlertModalProp
         // Lấy các phụ lục của gói thầu này
         const allProjApps = contractAppendices[proj.id] || [];
         const pkgApps = allProjApps.filter((a) => a.costPackageId === pkg.id);
-        const additionalDays = pkgApps.reduce((sum, a) => {
-          if (a.adjustmentType === 'Tiến độ' || a.adjustmentType === 'Giá trị & Tiến độ') {
-            return sum + (Number(a.adjustmentDays) || 0);
-          }
-          return sum;
-        }, 0);
-
-        const info = calculateContractDeadline(
-          pkg.contractDate,
-          pkg.executionTime,
-          additionalDays,
-          false,
-          false
-        );
+        const info = getPackageEffectiveDeadline(pkg, pkgApps);
 
         // Chỉ đưa vào danh sách nếu đã quá hạn hoặc còn <= 30 ngày
         if (info.status === 'overdue' || info.status === 'urgent' || info.status === 'warning') {

@@ -4,7 +4,7 @@ import { useData } from '../../context/DataContext';
 import { Menu, FileSpreadsheet, ArrowLeft, HardDrive, Clock, AlertTriangle } from 'lucide-react';
 import { AppBadge } from '../common/AppBadge';
 import { formatVnNumber } from '../../utils/numberUtils';
-import { calculateContractDeadline } from '../../utils/dateUtils';
+import { calculateContractDeadline, getPackageEffectiveDeadline } from '../../utils/dateUtils';
 import { ContractDeadlineAlertModal } from '../modules/projects/ContractDeadlineAlertModal';
 
 interface HeaderProps {
@@ -38,14 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
         if (pkg.costType !== 'Phí' && pkg.status !== 'Hoàn thành' && pkg.contractNumber && pkg.contractDate) {
           const allApps = contractAppendices[proj.id] || [];
           const pkgApps = allApps.filter((a) => a.costPackageId === pkg.id);
-          const addDays = pkgApps.reduce((sum, a) => {
-            if (a.adjustmentType === 'Tiến độ' || a.adjustmentType === 'Giá trị & Tiến độ') {
-              return sum + (Number(a.adjustmentDays) || 0);
-            }
-            return sum;
-          }, 0);
-
-          const info = calculateContractDeadline(pkg.contractDate, pkg.executionTime, addDays, false, false);
+          const info = getPackageEffectiveDeadline(pkg, pkgApps);
           if (info.status === 'overdue') overdue++;
           else if (info.status === 'urgent') urgent++;
           else if (info.status === 'warning') warning++;

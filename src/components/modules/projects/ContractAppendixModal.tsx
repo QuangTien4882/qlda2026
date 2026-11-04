@@ -10,7 +10,7 @@ import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { VnNumberInput } from '../../common/VnNumberInput';
 import { VnDateInput } from '../../common/VnDateInput';
 import { formatVnNumber } from '../../../utils/numberUtils';
-import { formatCustomVnDate, calculateContractDeadline } from '../../../utils/dateUtils';
+import { formatCustomVnDate, calculateContractDeadline, getPackageEffectiveDeadline, parseCustomVnDate } from '../../../utils/dateUtils';
 import { useData } from '../../../context/DataContext';
 import { 
   FileText, 
@@ -69,17 +69,11 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
   const originalContractValue = Number(costPackage?.contractValue) || 0;
   const effectiveContractValue = originalContractValue + totalAdjustmentAmount;
 
-  // Tính toán hạn chót hợp đồng hiện tại (gồm cả ngày gia hạn từ các PLHĐ)
+  // Tính toán hạn chót hợp đồng hiện tại (gồm cả thời điểm gia hạn từ các PLHĐ)
   const deadlineInfo = useMemo(() => {
     if (!costPackage) return null;
-    return calculateContractDeadline(
-      costPackage.contractDate,
-      costPackage.executionTime,
-      totalAdjustmentDays,
-      costPackage.status === 'Hoàn thành',
-      costPackage.costType === 'Phí'
-    );
-  }, [costPackage, totalAdjustmentDays]);
+    return getPackageEffectiveDeadline(costPackage, appendices);
+  }, [costPackage, appendices]);
 
   // State cho Form Thêm mới / Chỉnh sửa phụ lục
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -89,16 +83,25 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
   const [appendixNumber, setAppendixNumber] = useState('');
   const [signedDate, setSignedDate] = useState('');
   const [adjustmentType, setAdjustmentType] = useState<AppendixAdjustmentType>('Giá trị');
-  const [adjustmentSign, setAdjustmentSign] = useState<'+' | '-'>('+');
-  const [adjustmentAmountAbs, setAdjustmentAmountAbs] = useState<number>(0);
-  const [adjustmentDays, setAdjustmentDays] = useState<number>(0);
-  const [newExecutionTime, setNewExecutionTime] = useState('');
+  const [newContractValue, setNewContractValue] = useState<number>(0);
+  const [extendedDate, setExtendedDate] = useState('');
   const [content, setContent] = useState('');
   const [legalBasis, setLegalBasis] = useState('');
   const [note, setNote] = useState('');
   const [attachedFileName, setAttachedFileName] = useState('');
   const [attachedFileUrl, setAttachedFileUrl] = useState('');
   const [formError, setFormError] = useState('');
+
+  // Giá trị hợp đồng trước khi tính phụ lục đang mở (để tính chênh lệch tự động)
+  const baseContractValue = useMemo(() => {
+    if (!costPackage) return 0;
+    const original = Number(costPackage.contractValue) || 0;
+    if (!editingItem) {
+      return original + totalAdjustmentAmount;
+    } else {
+      return original + totalAdjustmentAmount - (Number(editingItem.adjustmentAmount) || 0);
+    }
+  }, [costPackage, editingItem, totalAdjustmentAmount]);
 
   // State xác nhận xóa
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -115,11 +118,9 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
     setEditingItem(null);
     setAppendixNumber(defaultNum);
     setSignedDate('');
-    setAdjustmentType('' as any);
-    setAdjustmentSign('+');
-    setAdjustmentAmountAbs(0);
-    setAdjustmentDays(0);
-    setNewExecutionTime('');
+    setAdjustmentType('Giá trị');
+    setNewContractValue(effectiveContractValue);
+    setExtendedDate('');
     setContent('');
     setLegalBasis('');
     setNote('');
@@ -135,15 +136,9 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
     setAppendixNumber(item.appendixNumber);
     setSignedDate(item.signedDate);
     setAdjustmentType(item.adjustmentType);
-    if (item.adjustmentAmount < 0) {
-      setAdjustmentSign('-');
-      setAdjustmentAmountAbs(Math.abs(item.adjustmentAmount));
-    } else {
-      setAdjustmentSign('+');
-      setAdjustmentAmountAbs(item.adjustmentAmount);
-    }
-    setAdjustmentDays(item.adjustmentDays || 0);
-    setNewExecutionTime(item.newExecutionTime || '');
+    const existingBase = originalContractValue + totalAdjustmentAmount - (Number(item.adjustmentAmount) || 0);
+    setNewContractValue(item.newContractValue !== undefined ? item.newContractValue : existingBase + (Number(item.adjustmentAmount) || 0));
+    setExtendedDate(item.extendedDate || (item.newExecutionTime?.match(/\d{1,2}\/\d{1,2}\/\d{4}/)?.[0] || ''));
     setContent(item.content);
     setLegalBasis(item.legalBasis || '');
     setNote(item.note || '');
@@ -184,7 +179,17 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
       return;
     }
 
-    const finalAmount = adjustmentSign === '-' ? -Math.abs(adjustmentAmountAbs) : Math.abs(adjustmentAmountAbs);
+    const finalAmount = (adjustmentType === 'Giá trị' || adjustmentType === 'Giá trị & Tiến độ')
+      ? (newContractValue - baseContractValue)
+      : 0;
+
+    let daysDiff = 0;
+    if (extendedDate && deadlineInfo?.deadlineDate) {
+      const parsedExt = parseCustomVnDate(extendedDate);
+      if (parsedExt) {
+        daysDiff = Math.round((parsedExt.getTime() - deadlineInfo.deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+      }
+    }
 
     const appendixItem: ContractAppendixItem = {
       id: editingItem ? editingItem.id : `plhd-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -195,8 +200,10 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
       signedDate: signedDate.trim(),
       adjustmentType: adjustmentType || 'Giá trị',
       adjustmentAmount: finalAmount,
-      adjustmentDays: Number(adjustmentDays) || 0,
-      newExecutionTime: newExecutionTime.trim() || undefined,
+      newContractValue: (adjustmentType === 'Giá trị' || adjustmentType === 'Giá trị & Tiến độ') ? newContractValue : undefined,
+      extendedDate: (adjustmentType === 'Tiến độ' || adjustmentType === 'Giá trị & Tiến độ') ? extendedDate.trim() : undefined,
+      adjustmentDays: daysDiff > 0 ? daysDiff : 0,
+      newExecutionTime: extendedDate.trim() ? `Đến ngày ${extendedDate.trim()}` : undefined,
       content: content.trim(),
       legalBasis: legalBasis.trim() || undefined,
       attachedFileName: attachedFileName.trim() || undefined,
@@ -366,8 +373,8 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                   <th className="py-2.5 px-3 w-36">Số PLHĐ</th>
                   <th className="py-2.5 px-3 text-center w-28">Ngày ký</th>
                   <th className="py-2.5 px-3 text-center w-36">Loại điều chỉnh</th>
-                  <th className="py-2.5 px-3 text-right w-44">Giá trị điều chỉnh (đồng)</th>
-                  <th className="py-2.5 px-3 text-center w-28">Tiến độ (+/- ngày)</th>
+                  <th className="py-2.5 px-3 text-right w-48">Giá trị HĐ sau PLHĐ (đồng)</th>
+                  <th className="py-2.5 px-3 text-center w-36">Thời điểm gia hạn</th>
                   <th className="py-2.5 px-3 min-w-[220px]">Nội dung điều chỉnh</th>
                   <th className="py-2.5 px-3 w-40">Căn cứ pháp lý</th>
                   <th className="py-2.5 px-3 text-center w-28">File đính kèm</th>
@@ -412,25 +419,36 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
                         </span>
                       </td>
 
-                      {/* Giá trị điều chỉnh */}
-                      <td className="py-2 px-3 text-right font-mono font-bold">
-                        {item.adjustmentAmount !== 0 ? (
-                          <span className={item.adjustmentAmount > 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                            {item.adjustmentAmount > 0 ? '+' : ''}{formatVnNumber(item.adjustmentAmount)} đ
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-normal">0 đ</span>
+                      {/* Giá trị HĐ sau PLHĐ */}
+                      <td className="py-2 px-3 text-right font-mono">
+                        <div className="font-bold text-emerald-400">
+                          {item.newContractValue !== undefined
+                            ? `${formatVnNumber(item.newContractValue)} đ`
+                            : `${formatVnNumber(originalContractValue + item.adjustmentAmount)} đ`}
+                        </div>
+                        {item.adjustmentAmount !== 0 && (
+                          <div className={`text-[10px] ${item.adjustmentAmount > 0 ? 'text-emerald-300' : 'text-rose-400'}`}>
+                            ({item.adjustmentAmount > 0 ? '+' : ''}{formatVnNumber(item.adjustmentAmount)} đ)
+                          </div>
                         )}
                       </td>
 
-                      {/* Tiến độ điều chỉnh */}
-                      <td className="py-2 px-3 text-center font-mono font-semibold">
-                        {item.adjustmentDays !== 0 ? (
-                          <span className={item.adjustmentDays > 0 ? 'text-blue-300' : 'text-amber-400'}>
-                            {item.adjustmentDays > 0 ? '+' : ''}{item.adjustmentDays} ngày
+                      {/* Thời điểm gia hạn */}
+                      <td className="py-2 px-3 text-center font-mono">
+                        {item.extendedDate ? (
+                          <span className="font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-800/50 px-2 py-0.5 rounded">
+                            {item.extendedDate}
+                          </span>
+                        ) : item.newExecutionTime ? (
+                          <span className="font-semibold text-blue-300">
+                            {item.newExecutionTime}
+                          </span>
+                        ) : item.adjustmentDays ? (
+                          <span className="text-amber-300">
+                            +{item.adjustmentDays} ngày
                           </span>
                         ) : (
-                          <span className="text-slate-500 font-normal">—</span>
+                          <span className="text-slate-500">—</span>
                         )}
                       </td>
 
@@ -569,91 +587,84 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
             </div>
           </div>
 
-          {/* Dòng 2: Giá trị điều chỉnh (Tăng / Giảm) */}
+          {/* Dòng 2: Nhập Giá trị hợp đồng sau điều chỉnh -> Tự động tính chênh lệch */}
           {(adjustmentType === 'Giá trị' || adjustmentType === 'Giá trị & Tiến độ') && (
-            <div className="p-3.5 rounded-xl bg-[#091428] border border-blue-500/40 space-y-2">
-              <span className="text-xs font-semibold text-blue-300 block">
-                Điều chỉnh Giá trị hợp đồng (đồng):
-              </span>
-              <div className="flex items-center gap-2">
-                {/* Chọn Tăng (+) hoặc Giảm (-) */}
-                <div className="flex rounded-lg border border-[#232f4e] overflow-hidden shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setAdjustmentSign('+')}
-                    className={`px-3 py-1.5 font-mono font-bold text-xs transition-colors ${
-                      adjustmentSign === '+' ? 'bg-emerald-600 text-white' : 'bg-[#080d1a] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Tăng (+)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdjustmentSign('-')}
-                    className={`px-3 py-1.5 font-mono font-bold text-xs transition-colors ${
-                      adjustmentSign === '-' ? 'bg-rose-600 text-white' : 'bg-[#080d1a] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Giảm trừ (-)
-                  </button>
-                </div>
+            <div className="p-3.5 rounded-xl bg-[#091428] border border-blue-500/40 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#1b2b4c] pb-2">
+                <span className="text-xs font-semibold text-blue-300">
+                  Điều chỉnh Giá trị hợp đồng (nhập giá trị HĐ mới):
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Giá trị HĐ trước điều chỉnh: <strong className="font-mono text-slate-100">{formatVnNumber(baseContractValue)} đ</strong>
+                </span>
+              </div>
 
-                {/* Ô nhập số tiền */}
-                <div className="flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end pt-1">
+                <div>
+                  <label className="block text-slate-300 text-xs mb-1 font-medium">
+                    Giá trị hợp đồng sau điều chỉnh (đồng) <span className="text-rose-400">*</span>:
+                  </label>
                   <VnNumberInput
-                    value={adjustmentAmountAbs}
-                    onChange={(val) => setAdjustmentAmountAbs(Math.abs(val))}
+                    value={newContractValue}
+                    onChange={(val) => setNewContractValue(val)}
                     placeholder="0"
                     suffix="đồng"
                     className="w-full"
-                    inputClassName={`text-right font-mono font-bold text-sm ${adjustmentSign === '+' ? 'text-emerald-400' : 'text-rose-400'}`}
+                    inputClassName="text-right font-mono font-bold text-sm text-emerald-300 bg-[#060c18]"
                   />
+                </div>
+
+                {/* Thẻ tự động tính chênh lệch */}
+                <div className="p-2.5 rounded-lg bg-[#060c18] border border-[#1a2846] flex flex-col justify-center">
+                  <span className="text-[11px] text-slate-400 block">Chênh lệch tự động tính toán:</span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {(() => {
+                      const diff = newContractValue - baseContractValue;
+                      return (
+                        <span className={`font-mono font-bold text-xs sm:text-sm ${
+                          diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-rose-400' : 'text-slate-400'
+                        }`}>
+                          {diff > 0 ? `+${formatVnNumber(diff)} đ (Tăng)` : diff < 0 ? `-${formatVnNumber(Math.abs(diff))} đ (Giảm trừ)` : '0 đ (Không đổi)'}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
               <p className="text-[11px] text-slate-400 italic">
-                * Nếu phát sinh bổ sung khối lượng: chọn <strong>Tăng (+)</strong>. Nếu cắt giảm khối lượng: chọn <strong>Giảm trừ (-)</strong>.
+                * Bạn chỉ cần nhập giá trị hợp đồng cuối cùng sau khi điều chỉnh, phần mềm sẽ tự động tính khoảng chênh lệch tăng/giảm.
               </p>
             </div>
           )}
 
-          {/* Dòng 3: Tiến độ điều chỉnh (Gia hạn ngày) */}
+          {/* Dòng 3: Nhập thời điểm được gia hạn (ví dụ: 31/12/2026) */}
           {(adjustmentType === 'Tiến độ' || adjustmentType === 'Giá trị & Tiến độ') && (
-            <div className="p-3.5 rounded-xl bg-[#091428] border border-blue-500/40 space-y-2">
-              <span className="text-xs font-semibold text-blue-300 block">
-                Điều chỉnh Tiến độ / Thời gian thực hiện:
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 text-xs mb-1">Số ngày gia hạn (+/- ngày):</label>
-                  <input
-                    type="number"
-                    value={adjustmentDays}
-                    onChange={(e) => setAdjustmentDays(Number(e.target.value) || 0)}
-                    placeholder="VD: 30 hoặc -15"
-                    className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-1.5 text-slate-100 font-mono text-xs placeholder:italic placeholder:text-slate-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 text-xs mb-1">Thời gian thực hiện sau điều chỉnh:</label>
-                  <input
-                    type="text"
-                    value={newExecutionTime}
-                    onChange={(e) => setNewExecutionTime(e.target.value)}
-                    placeholder="VD: 210 ngày hoặc đến ngày 18/8/2026"
-                    className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-1.5 text-slate-100 text-xs placeholder:italic placeholder:text-slate-500"
-                  />
-                </div>
+            <div className="p-3.5 rounded-xl bg-[#091428] border border-blue-500/40 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#1b2b4c] pb-2">
+                <span className="text-xs font-semibold text-blue-300">
+                  Điều chỉnh Thời gian thực hiện / Gia hạn hợp đồng:
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Hạn chót hiện tại: <strong className="font-mono text-slate-100">{deadlineInfo?.deadlineStr || 'Chưa xác định'}</strong>
+                </span>
               </div>
-              {costPackage && adjustmentDays !== 0 && (
-                <div className="text-[11px] text-blue-300 bg-blue-950/40 border border-blue-800/40 rounded px-2.5 py-1.5 font-mono">
-                  Dự kiến hạn chót mới sau khi điều chỉnh {adjustmentDays > 0 ? `+${adjustmentDays}` : adjustmentDays} ngày:{' '}
-                  <strong className="text-emerald-400">
-                    {calculateContractDeadline(
-                      costPackage.contractDate,
-                      costPackage.executionTime,
-                      (editingItem ? totalAdjustmentDays - (editingItem.adjustmentDays || 0) : totalAdjustmentDays) + adjustmentDays
-                    ).deadlineStr || '—'}
-                  </strong>
+
+              <div className="pt-1">
+                <VnDateInput
+                  label="Thời điểm được gia hạn đến ngày (dd/mm/yyyy)"
+                  required
+                  value={extendedDate}
+                  onChange={(val) => setExtendedDate(val)}
+                  placeholder="VD: 31/12/2026"
+                />
+              </div>
+
+              {extendedDate && (
+                <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-600/40 text-xs text-emerald-300 flex items-center gap-2">
+                  <Check size={14} className="text-emerald-400 shrink-0" />
+                  <span>
+                    Hạn chót mới của hợp đồng: <strong className="font-mono text-white underline">{extendedDate}</strong> (Hệ thống sẽ cập nhật cảnh báo theo hạn này)
+                  </span>
                 </div>
               )}
             </div>

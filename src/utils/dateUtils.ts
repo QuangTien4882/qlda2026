@@ -262,3 +262,133 @@ export function calculateContractDeadline(
   };
 }
 
+/**
+ * Tính toán ngày hết hạn hợp đồng có tính đến tất cả các Phụ lục Hợp đồng (PLHĐ).
+ * Ưu tiên tuyệt đối: Thời điểm gia hạn (extendedDate hoặc ngày dạng dd/mm/yyyy trong newExecutionTime) của PLHĐ.
+ * Nếu không có thời điểm gia hạn cụ thể, mới dùng tổng số ngày gia hạn cộng dồn.
+ */
+export function getPackageEffectiveDeadline(
+  pkg: {
+    contractDate?: string | null;
+    executionTime?: string | number | null;
+    status?: string | null;
+    costType?: string | null;
+  },
+  appendices: Array<{
+    adjustmentType?: string;
+    extendedDate?: string;
+    adjustmentDays?: number;
+    newExecutionTime?: string;
+  }> = []
+): ContractDeadlineInfo {
+  if (pkg.costType === 'Phí') {
+    return {
+      contractDateStr: pkg.contractDate || '',
+      contractDate: null,
+      baseDays: 0,
+      additionalDays: 0,
+      totalDays: 0,
+      deadlineDate: null,
+      deadlineStr: '',
+      remainingDays: 0,
+      status: 'not_applicable',
+      statusText: 'Không áp dụng đối với Phí',
+    };
+  }
+
+  if (pkg.status === 'Hoàn thành') {
+    return {
+      contractDateStr: pkg.contractDate || '',
+      contractDate: null,
+      baseDays: 0,
+      additionalDays: 0,
+      totalDays: 0,
+      deadlineDate: null,
+      deadlineStr: '',
+      remainingDays: 0,
+      status: 'completed',
+      statusText: 'Hợp đồng đã hoàn thành',
+    };
+  }
+
+  // 1. Tìm các phụ lục có điều chỉnh tiến độ
+  const timeAppendices = appendices.filter(
+    (a) => a.adjustmentType === 'Tiến độ' || a.adjustmentType === 'Giá trị & Tiến độ'
+  );
+
+  // 2. Tìm thời điểm gia hạn cụ thể (extendedDate hoặc chuỗi ngày trong newExecutionTime)
+  let latestExtendedDate: Date | null = null;
+  let latestExtendedDateStr = '';
+
+  for (const app of timeAppendices) {
+    let candidateStr = app.extendedDate?.trim() || '';
+    if (!candidateStr && app.newExecutionTime) {
+      // Tìm mẫu ngày dd/mm/yyyy trong newExecutionTime (ví dụ: "31/12/2026" hoặc "Đến ngày 31/12/2026")
+      const match = app.newExecutionTime.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
+      if (match) {
+        candidateStr = match[0];
+      }
+    }
+
+    if (candidateStr) {
+      const parsed = parseCustomVnDate(candidateStr);
+      if (parsed) {
+        if (!latestExtendedDate || parsed.getTime() > latestExtendedDate.getTime()) {
+          latestExtendedDate = parsed;
+          latestExtendedDateStr = formatCustomVnDate(parsed);
+        }
+      }
+    }
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // 3. NẾU CÓ THỜI ĐIỂM GIA HẠN CỤ THỂ TỪ PLHĐ: DÙNG TRỰC TIẾP LÀM HẠN CHÓT
+  if (latestExtendedDate) {
+    const target = new Date(latestExtendedDate.getFullYear(), latestExtendedDate.getMonth(), latestExtendedDate.getDate());
+    const diffTime = target.getTime() - today.getTime();
+    const remainingDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    let status: DeadlineStatus = 'normal';
+    let statusText = `Còn ${remainingDays} ngày`;
+
+    if (remainingDays < 0) {
+      status = 'overdue';
+      statusText = `Quá hạn ${Math.abs(remainingDays)} ngày`;
+    } else if (remainingDays <= 15) {
+      status = 'urgent';
+      statusText = `Khẩn cấp: Còn ${remainingDays} ngày`;
+    } else if (remainingDays <= 30) {
+      status = 'warning';
+      statusText = `Lưu ý: Còn ${remainingDays} ngày`;
+    } else {
+      status = 'normal';
+      statusText = `Còn ${remainingDays} ngày`;
+    }
+
+    return {
+      contractDateStr: pkg.contractDate || '',
+      contractDate: parseCustomVnDate(pkg.contractDate || '') || null,
+      baseDays: parseContractExecutionDays(pkg.executionTime),
+      additionalDays: 0,
+      totalDays: 0,
+      deadlineDate: latestExtendedDate,
+      deadlineStr: latestExtendedDateStr,
+      remainingDays,
+      status,
+      statusText,
+    };
+  }
+
+  // 4. NẾU KHÔNG CÓ THỜI ĐIỂM CỤ THỂ: Tính theo số ngày gia hạn cộng dồn
+  const additionalDays = timeAppendices.reduce((sum, a) => sum + (Number(a.adjustmentDays) || 0), 0);
+  return calculateContractDeadline(
+    pkg.contractDate,
+    pkg.executionTime,
+    additionalDays,
+    pkg.status === 'Hoàn thành',
+    pkg.costType === 'Phí'
+  );
+}
+
