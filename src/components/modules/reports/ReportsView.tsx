@@ -31,6 +31,8 @@ interface FilterDropdownProps {
   onSearchChange: (val: string) => void;
   onSelectAll: () => void;
   isAllSelected: boolean;
+  align?: 'left' | 'right';
+  popupWidth?: string;
   children: React.ReactNode;
 }
 
@@ -46,9 +48,21 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({
   onSearchChange,
   onSelectAll,
   isAllSelected,
+  align = 'left',
+  popupWidth = 'w-72',
   children,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus ô tìm kiếm mà không làm cuộn khung nhìn ngang/dọc
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => {
+        inputRef.current?.focus({ preventScroll: true });
+      }, 50);
+    }
+  }, [isOpen]);
 
   const titleText = displayText 
     ? displayText 
@@ -87,18 +101,22 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({
         </div>
       </div>
 
-      {/* POPUP MENU */}
+      {/* POPUP MENU - Mở hướng vào trong (right-0 cho các cột bên phải), không làm tràn màn hình */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1.5 w-72 max-w-[90vw] bg-[#0c1424] border border-[#232f4e] rounded-xl shadow-2xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+        <div 
+          className={`absolute top-full mt-1.5 ${popupWidth} max-w-[90vw] bg-[#0c1424] border border-[#232f4e] rounded-xl shadow-2xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 ${
+            align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'
+          }`}
+        >
           {/* Search box in popup */}
           <div className="relative">
             <input
+              ref={inputRef}
               type="text"
               value={searchTerm}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Tìm kiếm..."
               className="w-full bg-[#060c18] border border-[#1e2c4c] focus:border-blue-500 rounded-lg pl-7 pr-2.5 py-1 text-xs text-slate-100 placeholder:italic placeholder:text-slate-500 focus:outline-none"
-              autoFocus
             />
             <Search size={13} className="absolute left-2 top-2 text-slate-500" />
             {searchTerm && (
@@ -517,7 +535,7 @@ export const ReportsView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-3.5 overflow-y-auto h-full pr-1 pb-10 print:p-0 print:overflow-visible">
+    <div className="space-y-3.5 overflow-y-auto overflow-x-hidden h-full pr-1 pb-10 print:p-0 print:overflow-visible">
       {/* 1. HEADER TITLE & SEARCH (Y HỆT HÌNH ẢNH SỐ 1) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
         <div>
@@ -698,6 +716,8 @@ export const ReportsView: React.FC = () => {
               }
             }}
             isAllSelected={selectedKmcps.length === kmcpOptions.length}
+            align="right"
+            popupWidth="w-60"
           >
             {kmcpOptions
               .filter((k) => k.label.toLowerCase().includes(kmcpSearch.toLowerCase()))
@@ -746,6 +766,8 @@ export const ReportsView: React.FC = () => {
               }
             }}
             isAllSelected={selectedCostTypes.length === costTypeOptions.length}
+            align="right"
+            popupWidth="w-56"
           >
             {costTypeOptions
               .filter((c) => c.label.toLowerCase().includes(costTypeSearch.toLowerCase()))
