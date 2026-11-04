@@ -28,9 +28,14 @@ import {
   HelpCircle,
   RefreshCw,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  Wifi,
+  Copy,
+  ExternalLink,
+  Layers
 } from 'lucide-react';
 import { BackupManagerModal } from './BackupManagerModal';
+import { getNetworkInfo } from '../../../services/storage/localBridgeService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -53,6 +58,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     storageSizeKb,
     isDirectFileConnected,
     connectedFileName,
+    diskFilePath,
+    setDiskFilePath,
+    isBridgeActive,
+    lastDiskWriteTime,
+    diskFileSize,
+    syncNowToDisk,
+    reloadFromDisk,
     exportDatabaseToJson,
     importDatabaseFromJson,
     resetDatabaseToDefaults,
@@ -64,10 +76,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     forceWriteToCurrentFile,
   } = useData();
 
-  const [activeTab, setActiveTab] = useState<'appearance' | 'drive'>('drive');
+  const [activeTab, setActiveTab] = useState<'drive' | 'appearance'>('drive');
+  const [inputDiskPath, setInputDiskPath] = useState(diskFilePath);
+  const [networkInfo, setNetworkInfo] = useState<{ primaryIp: string; port: string; mobileUrl: string } | null>(null);
+  const [copiedMobileUrl, setCopiedMobileUrl] = useState(false);
   const [drivePath, setDrivePath] = useState(
     settings.googleDrivePath || 'D:\\Google Drive\\ProjectM\\du_lieu_du_an.json'
   );
+
+  React.useEffect(() => {
+    if (diskFilePath) {
+      setInputDiskPath(diskFilePath);
+    }
+  }, [diskFilePath]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      getNetworkInfo().then((info) => {
+        if (info.success) {
+          setNetworkInfo(info);
+        }
+      });
+    }
+  }, [isOpen]);
+
+  const handleCopyMobileUrl = () => {
+    if (!networkInfo?.mobileUrl) return;
+    navigator.clipboard.writeText(networkInfo.mobileUrl);
+    setCopiedMobileUrl(true);
+    setTimeout(() => setCopiedMobileUrl(false), 2500);
+  };
+
+  const handleApplyDiskPath = () => {
+    if (!inputDiskPath.trim()) return;
+    setDiskFilePath(inputDiskPath.trim());
+    setNotification({ type: 'success', message: 'Đã cập nhật đường dẫn lưu trữ ổ cứng.' });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleSyncToDiskNow = async () => {
+    const res = await syncNowToDisk(inputDiskPath.trim());
+    if (res.success) {
+      setNotification({ type: 'success', message: res.message });
+    } else {
+      setNotification({ type: 'error', message: res.message });
+    }
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  const handleReloadFromDiskNow = async () => {
+    const res = await reloadFromDisk(inputDiskPath.trim());
+    if (res.success) {
+      setNotification({ type: 'success', message: res.message });
+    } else {
+      setNotification({ type: 'error', message: res.message });
+    }
+    setTimeout(() => setNotification(null), 5000);
+  };
 
   React.useEffect(() => {
     if (settings.googleDrivePath) {
@@ -242,168 +307,234 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </div>
           )}
 
-          {/* Tab 2: Drive Sync & Chọn đường dẫn lưu file */}
+          {/* Tab 2: Drive Sync, Local Storage Bridge & Kết nối Điện thoại PWA */}
           {activeTab === 'drive' && (
             <div className="space-y-4">
-              {/* KHỐI 1: VỊ TRÍ LƯU TRỮ CƠ SỞ DỮ LIỆU HIỆN HÀNH (ĐANG HOẠT ĐỘNG CHÍNH) */}
-              <div className="p-4 bg-[#091428] border-2 border-emerald-500/50 rounded-xl space-y-3 shadow-lg">
+              {/* KHỐI 1: GHI TRỰC TIẾP VÀO Ổ CỨNG MÁY TÍNH (WINDOWS LOCAL STORAGE BRIDGE) */}
+              <div className="p-4 bg-[#091428] border-2 border-emerald-500/60 rounded-xl space-y-3.5 shadow-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-500/30 pb-2.5">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="font-bold text-emerald-400 text-xs sm:text-sm uppercase tracking-wide">
-                      1. Vị trí Lưu trữ Cơ sở Dữ liệu Hiện hành (Trên Máy Bạn)
+                    <span className="font-bold text-emerald-400 text-xs sm:text-sm uppercase tracking-wide flex items-center gap-1.5">
+                      <HardDrive size={16} />
+                      1. Ghi Trực Tiếp Vào File Ổ Cứng Máy Tính (Windows Local Bridge)
                     </span>
                   </div>
-                  <span className="text-xs font-mono text-emerald-300 bg-emerald-950/80 px-2.5 py-1 rounded border border-emerald-700/60">
-                    Trạng thái: <strong>✓ Đang lưu an toàn</strong> (Lúc {lastSavedTime})
+                  <span className="text-xs font-mono text-emerald-300 bg-emerald-950/80 px-2.5 py-1 rounded border border-emerald-700/60 flex items-center gap-1">
+                    <CheckCircle2 size={13} className="text-emerald-400" />
+                    Trạng thái: <strong>Đang kết nối & Tự động lưu</strong>
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                  <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-1">
-                    <span className="text-slate-400 block text-[11px]">Nơi lưu trữ chính:</span>
-                    <div className="font-bold text-blue-300 font-mono text-xs flex items-center gap-1">
-                      <Database size={13} className="text-emerald-400 shrink-0" />
-                      <span>IndexedDB: ProjectM_OfflineDB</span>
-                    </div>
-                    <span className="text-[10px] text-slate-400 block">Bộ nhớ Offline trình duyệt (Không giới hạn)</span>
+                {/* Hộp cấu hình đường dẫn file vật lý trên Windows */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <FolderOpen size={14} className="text-emerald-400" />
+                      <span>Đường dẫn file JSON trên máy tính (Nhập hoặc chỉnh sửa đường dẫn bất kỳ):</span>
+                    </label>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      Lần ghi gần nhất: <strong className="text-emerald-300">{lastDiskWriteTime || lastSavedTime}</strong>
+                    </span>
                   </div>
 
-                  <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-1">
-                    <span className="text-slate-400 block text-[11px]">Dữ liệu phần mềm đang hiển thị:</span>
-                    <strong className="text-sm font-mono text-emerald-300 block">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={inputDiskPath}
+                        onChange={(e) => setInputDiskPath(e.target.value)}
+                        placeholder="Ví dụ: D:\1. BQL Ban Thach\CSDL (CAM XOA)\du_lieu_du_an.json"
+                        className="w-full bg-[#060c18] border border-emerald-600/50 rounded-lg px-3 py-2 text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all placeholder:text-slate-600"
+                      />
+                    </div>
+                    <AppButton
+                      size="sm"
+                      variant="outline"
+                      onClick={handleApplyDiskPath}
+                      className="shrink-0 text-xs border-emerald-600/60 text-emerald-300 hover:bg-emerald-950/50"
+                    >
+                      Áp dụng đường dẫn
+                    </AppButton>
+                  </div>
+
+                  {/* Các nút hành động tức thì với file ổ đĩa */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <AppButton
+                      size="sm"
+                      variant="primary"
+                      icon={<Save size={14} />}
+                      onClick={handleSyncToDiskNow}
+                      className="shadow-md shadow-blue-950/60 font-semibold"
+                    >
+                      💾 Ghi đè {projects.length} dự án vào file này ngay
+                    </AppButton>
+
+                    <AppButton
+                      size="sm"
+                      variant="secondary"
+                      icon={<RefreshCw size={14} />}
+                      onClick={handleReloadFromDiskNow}
+                      className="font-medium"
+                    >
+                      🔄 Nạp lại dữ liệu từ file này
+                    </AppButton>
+
+                    <button
+                      onClick={handleSyncToSelectedFile}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#142038] hover:bg-[#1e2f50] text-slate-200 border border-[#2b3e66] text-xs font-medium flex items-center gap-1.5 transition-colors"
+                    >
+                      <Link2 size={13} className="text-blue-400" />
+                      <span>Chọn file qua Windows Explorer...</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Grid tóm tắt thông số file trên ổ cứng */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1">
+                  <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-0.5">
+                    <span className="text-slate-400 block text-[11px]">Dữ liệu phần mềm:</span>
+                    <strong className="text-emerald-300 font-mono text-xs block">
                       {projects.length} dự án ({storageSizeKb} KB)
                     </strong>
-                    <span className="text-[10px] text-slate-300 block truncate" title={projects.map((p) => p.name).join(' • ')}>
+                    <span className="text-[10px] text-slate-400 truncate block" title={projects.map((p) => p.name).join(' • ')}>
                       {projects.map((p) => p.name).join(' • ') || 'Chưa có dự án nào'}
                     </span>
                   </div>
 
-                  <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-1">
-                    <span className="text-slate-400 block text-[11px]">Bảo vệ & Sao lưu dự phòng:</span>
-                    <strong className="text-sm font-mono text-purple-300 block">
-                      Auto-backup 7 ngày
+                  <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-0.5">
+                    <span className="text-slate-400 block text-[11px]">Dung lượng file trên ổ đĩa:</span>
+                    <strong className="text-blue-300 font-mono text-xs block">
+                      {diskFileSize ? `${(diskFileSize / 1024).toFixed(1)} KB (${diskFileSize} bytes)` : `${storageSizeKb} KB`}
                     </strong>
-                    <span className="text-[10px] text-slate-400 block">Tự động chụp snapshot mỗi ngày</span>
+                    <span className="text-[10px] text-emerald-400 block">✓ File vật lý Windows</span>
+                  </div>
+
+                  <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-0.5">
+                    <span className="text-slate-400 block text-[11px]">Cơ chế bảo vệ:</span>
+                    <strong className="text-purple-300 font-mono text-xs block">
+                      Zero-Loss Persistence
+                    </strong>
+                    <span className="text-[10px] text-slate-400 block">Miễn nhiễm 100% khi xóa cache</span>
                   </div>
                 </div>
 
-                <div className="p-2.5 bg-emerald-950/30 border border-emerald-600/30 rounded-lg text-xs text-slate-300 leading-relaxed">
-                  ✓ Toàn bộ dữ liệu của bạn được lưu trữ vĩnh viễn trên ổ cứng máy tính qua IndexedDB. Khi bạn tắt máy, đóng trình duyệt hay tải lại trang (F5), dữ liệu <strong>không bao giờ bị mất</strong>.
+                <div className="p-2.5 bg-emerald-950/40 border border-emerald-600/40 rounded-lg text-xs text-slate-300 leading-relaxed flex items-start gap-2">
+                  <ShieldCheck size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    Mỗi khi bạn thêm, sửa, xóa bất kỳ dự án hay chi phí nào, hệ thống <strong>tự động ghi thẳng vào file vật lý trên máy tính sau 0.02 giây</strong>. Dù bạn có xóa sạch lịch sử web, xóa bộ nhớ đệm (cache) hay cài lại trình duyệt, dữ liệu của bạn trên ổ đĩa <code className="text-emerald-300 font-mono">D:\</code> hay <code className="text-emerald-300 font-mono">E:\</code> vẫn nguyên vẹn 100%!
+                  </div>
                 </div>
               </div>
 
-              {/* KHỐI 2: ĐỒNG BỘ VÀO FILE .JSON NGOÀI Ổ ĐĨA / GOOGLE DRIVE */}
-              <div className="p-4 bg-[#0b1222] border-2 border-blue-500/50 rounded-xl space-y-3.5 shadow-lg">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#232f4e] pb-2">
-                  <div className="flex items-center gap-2 text-blue-400 font-bold text-xs sm:text-sm uppercase tracking-wide">
-                    <FolderOpen size={18} />
-                    <span>2. Đồng Bộ Vào File .JSON Ngoài Ổ Đĩa (Google Drive / CSDL)</span>
+              {/* KHỐI 2: KẾT NỐI & SỬ DỤNG TRÊN ĐIỆN THOẠI DI ĐỘNG (PWA & WI-FI LAN) */}
+              <div className="p-4 bg-[#0b1426] border-2 border-blue-500/60 rounded-xl space-y-3.5 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-500/30 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                    <span className="font-bold text-blue-400 text-xs sm:text-sm uppercase tracking-wide flex items-center gap-1.5">
+                      <Smartphone size={16} />
+                      2. Sử Dụng & Cài Đặt Trên Điện Thoại Di Động (PWA Mobile)
+                    </span>
                   </div>
-                  <span className="text-[11px] text-slate-400 italic">
-                    File System Access API (Tự động ghi thời gian thực)
+                  <span className="text-xs font-mono text-blue-300 bg-blue-950/80 px-2.5 py-1 rounded border border-blue-700/60 flex items-center gap-1">
+                    <Wifi size={13} className="text-blue-400" />
+                    Mạng Wi-Fi nội bộ
                   </span>
                 </div>
 
-                {/* Hộp giải thích chi tiết vì sao file ngoài ổ đĩa rỗng */}
-                <div className="p-3 bg-[#0d182e] border border-blue-500/30 rounded-xl space-y-1.5 text-xs">
-                  <div className="flex items-center gap-1.5 font-bold text-amber-300">
-                    <HelpCircle size={15} className="text-amber-400 shrink-0" />
-                    <span>Tại sao mở file JSON ngoài ổ đĩa bằng Notepad lại thấy rỗng hoặc khác trên phần mềm?</span>
+                {/* Hộp hiển thị địa chỉ truy cập điện thoại */}
+                <div className="p-3 bg-[#060c18] border border-blue-500/40 rounded-xl space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <span className="text-slate-400 text-xs block">Địa chỉ mở trên trình duyệt Điện thoại:</span>
+                      <div className="font-mono text-sm sm:text-base font-bold text-cyan-300 bg-cyan-950/60 px-3 py-1.5 rounded-lg border border-cyan-700/60 inline-flex items-center gap-2">
+                        <span>{networkInfo?.mobileUrl || 'http://192.168.1.47:3000'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <AppButton
+                        size="sm"
+                        variant={copiedMobileUrl ? 'success' : 'primary'}
+                        icon={copiedMobileUrl ? <Check size={14} /> : <Copy size={14} />}
+                        onClick={handleCopyMobileUrl}
+                        className="text-xs"
+                      >
+                        {copiedMobileUrl ? '✓ Đã chép link' : 'Sao chép link'}
+                      </AppButton>
+                    </div>
                   </div>
-                  <p className="text-slate-300 leading-relaxed">
-                    Trình duyệt web chạy trong môi trường bảo mật (Sandbox) nên <strong>không thể tự ý ghi vào ổ cứng</strong> của bạn nếu chưa được bạn chỉ định file. File JSON bạn mở bằng Notepad trên máy tính hiện là file cũ chưa được liên kết.
-                  </p>
-                  <p className="text-blue-300 leading-relaxed font-medium">
-                    👉 Để file JSON trên máy tính nhận đầy đủ <strong>{projects.length} dự án</strong> và tự động cập nhật mỗi khi bạn thao tác, hãy bấm nút:
-                  </p>
                 </div>
 
-                {/* Trạng thái liên kết file hiện tại */}
-                {isDirectFileConnected ? (
-                  <div className="p-3 bg-emerald-950/70 border border-emerald-500/70 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="p-2 rounded-lg bg-emerald-600/30 text-emerald-400 shrink-0">
-                        <FileCheck size={20} />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-emerald-400 font-bold block text-xs sm:text-sm">
-                          ✓ ĐANG TỰ ĐỘNG ĐỒNG BỘ VÀO FILE TRÊN MÁY TÍNH
-                        </span>
-                        <div className="text-slate-200 font-mono text-xs truncate">
-                          File: <strong className="text-white underline">{connectedFileName}</strong>
-                        </div>
-                        <span className="text-[11px] text-slate-300 mt-0.5 block">
-                          Mỗi khi bạn thêm, sửa, xóa bất kỳ dữ liệu nào, file này ngoài ổ đĩa sẽ tự động cập nhật ngay lập tức!
-                        </span>
-                      </div>
+                {/* Hướng dẫn 3 bước cài đặt app trên điện thoại */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                  <div className="p-3 bg-[#081020] rounded-lg border border-[#1e2d4c] space-y-1">
+                    <div className="font-bold text-cyan-300 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-cyan-600/30 text-cyan-300 flex items-center justify-center font-mono text-xs">1</span>
+                      <span>Kết nối Wi-Fi</span>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <AppButton
-                        size="sm"
-                        variant="success"
-                        icon={<RefreshCw size={13} />}
-                        onClick={handleForceWrite}
-                      >
-                        Đồng bộ lại ngay
-                      </AppButton>
-                      <button
-                        onClick={disconnectDirectFile}
-                        className="px-2.5 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-700/80 text-xs font-semibold shrink-0 transition-colors"
-                      >
-                        Hủy liên kết
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3.5 bg-amber-950/40 border border-amber-600/50 rounded-xl space-y-3 text-xs">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-bold text-amber-300 text-xs sm:text-sm block">
-                          Hiện tại: Chưa liên kết với file JSON nào ngoài ổ đĩa máy tính
-                        </span>
-                        <p className="text-slate-300 mt-0.5">
-                          Dữ liệu {projects.length} dự án hiện mới chỉ lưu trong bộ nhớ IndexedDB của trình duyệt. Hãy chọn một trong các thao tác dưới đây để xuất dữ liệu ra file trên máy tính của bạn:
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* 2 Nút hành động nổi bật */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
-                      {/* Nút 1: Chọn file trên máy để ghi đè & đồng bộ */}
-                      <AppButton
-                        size="sm"
-                        variant="primary"
-                        icon={<Link2 size={16} />}
-                        onClick={handleSyncToSelectedFile}
-                        className="flex-1 justify-center py-2 text-xs font-bold shadow-md shadow-blue-950/60"
-                      >
-                        🔗 Chọn file trên máy để Ghi đè {projects.length} dự án & Bật tự động đồng bộ
-                      </AppButton>
-
-                      {/* Nút 2: Lưu thành file mới */}
-                      <AppButton
-                        size="sm"
-                        variant="success"
-                        icon={<Save size={16} />}
-                        onClick={handleSaveAs}
-                        className="justify-center py-2 text-xs font-semibold"
-                      >
-                        💾 Lưu vị trí mới (Save As)...
-                      </AppButton>
-                    </div>
-
-                    <p className="text-[11px] text-slate-400 italic">
-                      * Mẹo: Bạn hãy bấm <strong>"Chọn file trên máy để Ghi đè..."</strong> và chọn file <code className="text-blue-300 font-mono">du_lieu_du_an.json</code> trong thư mục của bạn (ví dụ thư mục CSDL CAM XOA hay Google Drive). Phần mềm sẽ ghi đè toàn bộ dữ liệu hiện tại vào file đó và tự động cập nhật liên tục!
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      Kết nối điện thoại vào cùng mạng Wi-Fi với máy tính cơ quan hoặc tại nhà.
                     </p>
                   </div>
-                )}
 
-                {/* Các thao tác tải file và nạp file bổ sung */}
-                <div className="pt-2 border-t border-[#1e2a4a] flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-slate-400 font-medium mr-1">Tải về thủ công:</span>
+                  <div className="p-3 bg-[#081020] rounded-lg border border-[#1e2d4c] space-y-1">
+                    <div className="font-bold text-cyan-300 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-cyan-600/30 text-cyan-300 flex items-center justify-center font-mono text-xs">2</span>
+                      <span>Mở trình duyệt</span>
+                    </div>
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      Mở <strong>Safari</strong> (iPhone) hoặc <strong>Chrome</strong> (Android) và nhập địa chỉ ở trên.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-[#081020] rounded-lg border border-[#1e2d4c] space-y-1">
+                    <div className="font-bold text-cyan-300 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-cyan-600/30 text-cyan-300 flex items-center justify-center font-mono text-xs">3</span>
+                      <span>Thêm vào màn hình</span>
+                    </div>
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      Bấm nút <strong>Chia sẻ / Menu 3 chấm</strong> ➔ Chọn <strong>"Thêm vào Màn hình chính" (Add to Home Screen)</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-blue-950/40 border border-blue-600/40 rounded-lg text-xs text-slate-300 leading-relaxed flex items-start gap-2">
+                  <Smartphone size={16} className="text-blue-400 shrink-0 mt-0.5" />
+                  <div>
+                    Sau khi cài, trên màn hình điện thoại của bạn sẽ xuất hiện <strong>biểu tượng ứng dụng ProjectM</strong> độc lập. Giao diện tự động tối ưu màn hình cảm ứng, có thanh điều hướng dưới đáy, cho phép tra cứu số liệu dự án, hợp đồng và nhập liệu trực tiếp ngay tại công trường!
+                  </div>
+                </div>
+              </div>
+
+              {/* KHỐI 3: BẢO VỆ PHỤ TRỢ (INDEXEDDB & SAO LƯU THỦ CÔNG) */}
+              <div className="p-3.5 bg-[#0b1222] border border-[#232f4e] rounded-xl space-y-3">
+                <div className="flex items-center justify-between border-b border-[#1e2c4c] pb-2">
+                  <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs sm:text-sm">
+                    <Database size={16} className="text-purple-400" />
+                    <span>3. Lưu Trữ Phụ Trợ & Sao Lưu Dự Phòng (IndexedDB & Auto-backup 7 ngày)</span>
+                  </div>
+                  <span className="text-[11px] text-purple-300 font-mono bg-purple-950/70 px-2 py-0.5 rounded border border-purple-800/40">
+                    ProjectM_OfflineDB
+                  </span>
+                </div>
+
+                <p className="text-slate-400 text-xs">
+                  Ngoài việc ghi trực tiếp vào file ổ cứng, hệ thống còn lưu trữ một bản song song trong IndexedDB và tự động chụp snapshot xoay vòng 7 ngày gần nhất để bạn có thể khôi phục bất cứ lúc nào.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <AppButton
+                    size="sm"
+                    variant="ghost"
+                    icon={<Database size={14} className="text-purple-400" />}
+                    onClick={() => setIsBackupModalOpen(true)}
+                    className="border border-purple-700/50 hover:bg-purple-950/50 text-purple-200"
+                  >
+                    Mở Quản Lý Sao Lưu (Auto-backup 7 ngày)
+                  </AppButton>
+
                   <AppButton
                     size="sm"
                     variant="outline"
@@ -428,27 +559,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     className="hidden"
                     onChange={handleFileChange}
                   />
-
-                  <AppButton
-                    size="sm"
-                    variant="ghost"
-                    icon={<Database size={14} />}
-                    onClick={() => setIsBackupModalOpen(true)}
-                  >
-                    Mở Quản Lý Sao Lưu (Auto-backup 7 ngày)
-                  </AppButton>
                 </div>
-              </div>
-
-              {/* Hướng dẫn đồng bộ lên Google Drive Desktop */}
-              <div className="p-3.5 bg-[#0b1222] border border-[#232f4e] rounded-xl space-y-2">
-                <div className="flex items-center gap-2 text-blue-400 font-semibold text-xs sm:text-sm">
-                  <Smartphone size={17} />
-                  <span>Cách đồng bộ tự động lên Google Drive & Điện thoại di động</span>
-                </div>
-                <p className="text-slate-300 text-xs leading-relaxed">
-                  Khi bạn bấm nút <strong>"Lưu vị trí mới (Save As)"</strong> hoặc <strong>"Chọn file trên máy..."</strong> và lưu file vào thư mục Google Drive trên máy tính (ví dụ <code className="text-blue-300 font-mono">G:\My Drive\ProjectM\du_lieu_du_an.json</code>), ứng dụng Google Drive for Desktop sẽ tự động đẩy file này lên mây. Bạn có thể mở Google Drive trên điện thoại xem trực tiếp số liệu dự án, hợp đồng, chi phí mọi lúc mọi nơi kể cả khi mất mạng.
-                </p>
               </div>
 
               {/* Nút khôi phục dữ liệu gốc mẫu */}

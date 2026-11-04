@@ -23,10 +23,18 @@ import {
   autoMigrateFromLocalStorageIfEmpty, 
   BackupSnapshotItem 
 } from '../services/storage/idbService';
+import { 
+  writeDatabaseToFileViaBridge, 
+  readDatabaseFromFileViaBridge, 
+  checkFileOnDiskViaBridge, 
+  requestPersistentStorage 
+} from '../services/storage/localBridgeService';
 import { formatCustomVnDate } from '../utils/dateUtils';
 
 const STORAGE_KEY = 'projectm_master_database_v3';
 const APP_VERSION = '1.0.0';
+const DEFAULT_DISK_PATH = 'D:\\1. BQL Ban Thach\\CSDL (CAM XOA)\\du_lieu_du_an.json';
+const DISK_PATH_STORAGE_KEY = 'projectm_disk_file_path';
 
 interface DataContextType {
   // Dữ liệu
@@ -46,6 +54,15 @@ interface DataContextType {
   storageSizeKb: number;
   isDirectFileConnected: boolean;
   connectedFileName: string;
+
+  // Lưu trữ ổ cứng máy tính vật lý (Windows Local Storage Bridge)
+  diskFilePath: string;
+  setDiskFilePath: (path: string) => void;
+  isBridgeActive: boolean;
+  lastDiskWriteTime: string;
+  diskFileSize: number;
+  syncNowToDisk: (customPath?: string) => Promise<{ success: boolean; message: string; filePath?: string }>;
+  reloadFromDisk: (customPath?: string) => Promise<{ success: boolean; message: string }>;
 
   // Thao tác Dự án
   addProject: (project: ProjectListItem, detail?: ProjectDetailItem) => void;
@@ -193,6 +210,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isDirectFileConnected, setIsDirectFileConnected] = useState(false);
   const [connectedFileName, setConnectedFileName] = useState('du_lieu_du_an.json');
 
+  // Lưu trữ ổ cứng máy tính vật lý (Windows Local Storage Bridge)
+  const [diskFilePath, setDiskFilePathState] = useState<string>(() => {
+    try {
+      return localStorage.getItem(DISK_PATH_STORAGE_KEY) || DEFAULT_DISK_PATH;
+    } catch {
+      return DEFAULT_DISK_PATH;
+    }
+  });
+  const [isBridgeActive, setIsBridgeActive] = useState(false);
+  const [lastDiskWriteTime, setLastDiskWriteTime] = useState('');
+  const [diskFileSize, setDiskFileSize] = useState(0);
+
+  const setDiskFilePath = (path: string) => {
+    setDiskFilePathState(path);
+    try {
+      localStorage.setItem(DISK_PATH_STORAGE_KEY, path);
+    } catch {
+      // ignore
+    }
+  };
+
   // File Handle cho Web File System Access API
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fileHandleRef = useRef<any>(null);
@@ -208,7 +246,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Tự động lưu vào IndexedDB, localStorage và File Handle (nếu đang kết nối trực tiếp)
+  // Tự động lưu vào IndexedDB, localStorage, Local Storage Bridge và File Handle
   const persistDatabase = useCallback(async (updated: AppDatabase) => {
     try {
       const now = new Date();
@@ -241,7 +279,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLastSavedTime(timeStr);
       calculateStorage(dbWithMeta);
 
-      // 3. Nếu người dùng đã cấp quyền ghi vào file trên máy tính (Google Drive)
+      // 3. Ghi trực tiếp vào file JSON trên ổ cứng máy tính vật lý qua Local Storage Bridge API
+      if (diskFilePath) {
+        try {
+          const bridgeResult = await writeDatabaseToFileViaBridge(diskFilePath, dbWithMeta);
+          if (bridgeResult.success) {
+            setIsBridgeActive(true);
+            setDiskFileSize(bridgeResult.sizeBytes || 0);
+            setLastDiskWriteTime(timeStr);
+          }
+        } catch (bridgeErr) {
+          console.warn('[Storage Bridge] Tự động ghi ổ đĩa thất bại:', bridgeErr);
+        }
+      }
+
+      // 4. Nếu người dùng đã cấp quyền ghi vào file trên máy tính (Google Drive) qua File System Access API
       if (fileHandleRef.current) {
         try {
           const writable = await fileHandleRef.current.createWritable();
@@ -254,37 +306,88 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.error('Lỗi lưu trữ dữ liệu:', e);
     }
-  }, [calculateStorage]);
+  }, [calculateStorage, diskFilePath]);
 
   // Lưu tự động mỗi khi database thay đổi
   useEffect(() => {
     persistDatabase(database);
   }, [database, persistDatabase]);
 
-  // Khởi động hệ thống: Tự động di chuyển dữ liệu (Migration) từ LocalStorage sang IndexedDB & kích hoạt Auto-backup hàng ngày
+  // Khởi động hệ thống: Bảo vệ lưu trữ bền vững, nạp từ ổ cứng / IndexedDB & kích hoạt Auto-backup hàng ngày
   useEffect(() => {
     let isMounted = true;
     const initStorageAndBackup = async () => {
       try {
-        // 1. Kiểm tra nạp từ IndexedDB hoặc migrate từ LocalStorage
-        const migratedOrExisting = await autoMigrateFromLocalStorageIfEmpty(STORAGE_KEY);
-        if (isMounted && migratedOrExisting && migratedOrExisting.projects && migratedOrExisting.projects.length > 0) {
-          setDatabase(migratedOrExisting);
+        // 0. Yêu cầu quyền lưu trữ bền vững (Persistent Storage)
+        requestPersistentStorage();
+
+        // 1. Kiểm tra nạp từ file ổ đĩa máy tính trước (nếu có Bridge và file chứa dữ liệu hợp lệ)
+        let loadedDb: AppDatabase | null = null;
+        try {
+          const checkRes = await checkFileOnDiskViaBridge(diskFilePath);
+          if (checkRes.exists) {
+            const readRes = await readDatabaseFromFileViaBridge(diskFilePath);
+            if (readRes.success && readRes.data?.projects && readRes.data.projects.length > 0) {
+              loadedDb = readRes.data;
+              if (isMounted) {
+                setDatabase(readRes.data);
+                setIsBridgeActive(true);
+                setDiskFileSize(readRes.sizeBytes || 0);
+                const now = new Date();
+                setLastDiskWriteTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`);
+              }
+            }
+          }
+        } catch (bridgeErr) {
+          console.warn('[Bridge Startup] Không thể nạp từ ổ đĩa:', bridgeErr);
         }
 
-        // 2. Kích hoạt Auto-backup hàng ngày (giữ 7 bản xoay vòng gần nhất)
+        // 2. Nếu file ổ đĩa chưa có dữ liệu, nạp từ IndexedDB hoặc migrate từ LocalStorage
+        let currentData = loadedDb;
+        if (!currentData) {
+          const migratedOrExisting = await autoMigrateFromLocalStorageIfEmpty(STORAGE_KEY);
+          if (isMounted && migratedOrExisting && migratedOrExisting.projects && migratedOrExisting.projects.length > 0) {
+            currentData = migratedOrExisting;
+            setDatabase(migratedOrExisting);
+          }
+        }
+
+        // 3. Nếu bộ nhớ có dự án mà file đĩa chưa có hoặc rỗng, lập tức ghi thẳng vào file đĩa!
+        if (currentData && currentData.projects && currentData.projects.length > 0) {
+          try {
+            const diskCheck = await checkFileOnDiskViaBridge(diskFilePath);
+            if (!diskCheck.exists || (diskCheck.sizeBytes && diskCheck.sizeBytes < 500)) {
+              const writeRes = await writeDatabaseToFileViaBridge(diskFilePath, currentData);
+              if (isMounted && writeRes.success) {
+                setIsBridgeActive(true);
+                setDiskFileSize(writeRes.sizeBytes || 0);
+                const now = new Date();
+                setLastDiskWriteTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`);
+              }
+            } else if (diskCheck.exists) {
+              if (isMounted) {
+                setIsBridgeActive(true);
+                setDiskFileSize(diskCheck.sizeBytes || 0);
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        // 4. Kích hoạt Auto-backup hàng ngày (giữ 7 bản xoay vòng gần nhất)
         const todayStr = formatCustomVnDate(new Date());
         const lastAutoBackup = localStorage.getItem('projectm_last_autobackup_date');
         if (lastAutoBackup !== todayStr) {
-          const currentData = migratedOrExisting || database;
-          if (currentData && currentData.projects && currentData.projects.length > 0) {
+          const backupTarget = currentData || database;
+          if (backupTarget && backupTarget.projects && backupTarget.projects.length > 0) {
             const now = new Date();
             const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-            const jsonStr = JSON.stringify(currentData);
+            const jsonStr = JSON.stringify(backupTarget);
             const sizeKb = Number((new Blob([jsonStr]).size / 1024).toFixed(1));
 
             let contractCount = 0;
-            Object.values(currentData.costPackages || {}).forEach((pkgs) => {
+            Object.values(backupTarget.costPackages || {}).forEach((pkgs) => {
               contractCount += pkgs.filter((p) => p.contractNumber).length;
             });
 
@@ -295,9 +398,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               type: 'auto',
               note: 'Sao lưu tự động hàng ngày (Auto-backup)',
               sizeKb,
-              projectCount: currentData.projects.length,
+              projectCount: backupTarget.projects.length,
               contractCount,
-              data: currentData,
+              data: backupTarget,
             };
 
             await saveBackupSnapshotToIdb(snapshot);
@@ -1167,6 +1270,58 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return await deleteBackupSnapshotFromIdb(backupId);
   };
 
+  // ==================== CÁC HÀM ĐỒNG BỘ Ổ CỨNG VẬT LÝ (LOCAL STORAGE BRIDGE) ====================
+  const syncNowToDisk = async (customPath?: string): Promise<{ success: boolean; message: string; filePath?: string }> => {
+    const targetPath = customPath || diskFilePath;
+    const now = new Date();
+    const dbWithMeta: AppDatabase = {
+      ...database,
+      metadata: {
+        ...database.metadata,
+        lastSavedAt: now.toISOString(),
+        totalProjects: database.projects.length,
+      },
+    };
+
+    const res = await writeDatabaseToFileViaBridge(targetPath, dbWithMeta);
+    if (res.success) {
+      setIsBridgeActive(true);
+      setDiskFileSize(res.sizeBytes || 0);
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      setLastDiskWriteTime(timeStr);
+      return {
+        success: true,
+        message: `Đã ghi thành công ${database.projects.length} dự án vào file "${res.filePath || targetPath}".`,
+        filePath: res.filePath || targetPath,
+      };
+    }
+    return {
+      success: false,
+      message: res.message || 'Lỗi ghi file vào ổ đĩa.',
+    };
+  };
+
+  const reloadFromDisk = async (customPath?: string): Promise<{ success: boolean; message: string }> => {
+    const targetPath = customPath || diskFilePath;
+    const res = await readDatabaseFromFileViaBridge(targetPath);
+    if (res.success && res.data && Array.isArray(res.data.projects)) {
+      setDatabase(res.data);
+      setIsBridgeActive(true);
+      setDiskFileSize(res.sizeBytes || 0);
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      setLastDiskWriteTime(timeStr);
+      return {
+        success: true,
+        message: `Đã nạp thành công ${res.data.projects.length} dự án từ file "${res.filePath || targetPath}".`,
+      };
+    }
+    return {
+      success: false,
+      message: res.message || 'Không thể nạp dữ liệu từ file ổ đĩa.',
+    };
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -1184,6 +1339,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         storageSizeKb,
         isDirectFileConnected,
         connectedFileName,
+        diskFilePath,
+        setDiskFilePath,
+        isBridgeActive,
+        lastDiskWriteTime,
+        diskFileSize,
+        syncNowToDisk,
+        reloadFromDisk,
         addProject,
         updateProject,
         deleteProject,

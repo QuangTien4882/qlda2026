@@ -5,6 +5,15 @@ import { SettingsProvider } from './context/SettingsContext';
 import { DataProvider } from './context/DataContext';
 import './index.css';
 
+// Register PWA Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('[PWA] ServiceWorker registration failed:', err);
+    });
+  });
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <SettingsProvider>
