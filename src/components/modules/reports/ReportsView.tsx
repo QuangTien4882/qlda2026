@@ -1,34 +1,139 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { AppCard } from '../../common/AppCard';
-import { AppButton } from '../../common/AppButton';
-import { AppBadge } from '../../common/AppBadge';
-import { VnDateInput } from '../../common/VnDateInput';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  BarChart3, 
-  Download, 
-  Printer, 
-  Filter, 
-  Building2, 
-  Calendar, 
-  CheckSquare, 
-  Square, 
-  RotateCcw, 
   Search, 
   ChevronDown, 
   ChevronUp, 
-  FileSpreadsheet,
-  Layers,
-  ArrowUpDown,
-  Percent,
-  DollarSign,
-  HelpCircle,
-  Briefcase
+  ChevronRight,
+  FileText, 
+  Download, 
+  Printer, 
+  X, 
+  Check, 
+  Calendar,
+  Building2,
+  FolderOpen
 } from 'lucide-react';
 import { formatVnNumber } from '../../../utils/numberUtils';
-import { parseCustomVnDate, formatCustomVnDate } from '../../../utils/dateUtils';
+import { parseCustomVnDate } from '../../../utils/dateUtils';
 import { useSettings } from '../../../context/SettingsContext';
 import { useData } from '../../../context/DataContext';
-import { CostCategory, CostType } from '../../../types/project';
+import { VnDateInput } from '../../common/VnDateInput';
+
+interface FilterDropdownProps {
+  label: string;
+  selectedCount: number;
+  totalCount: number;
+  displayText?: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClear: (e: React.MouseEvent) => void;
+  searchTerm: string;
+  onSearchChange: (val: string) => void;
+  onSelectAll: () => void;
+  isAllSelected: boolean;
+  children: React.ReactNode;
+}
+
+const FilterDropdown: React.FC<FilterDropdownProps> = ({
+  label,
+  selectedCount,
+  totalCount,
+  displayText,
+  isOpen,
+  onToggle,
+  onClear,
+  searchTerm,
+  onSearchChange,
+  onSelectAll,
+  isAllSelected,
+  children,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const titleText = displayText 
+    ? displayText 
+    : selectedCount === totalCount && totalCount > 0
+    ? `${totalCount} mục đã chọn`
+    : selectedCount === 0
+    ? '0 mục đã chọn'
+    : `${selectedCount} mục đã chọn`;
+
+  return (
+    <div className="relative flex-1 min-w-[130px]" ref={containerRef}>
+      <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1 truncate">
+        {label}
+      </label>
+      <div
+        onClick={onToggle}
+        className={`h-9 px-2.5 rounded-lg bg-[#060c18] border flex items-center justify-between cursor-pointer select-none transition-colors text-xs ${
+          isOpen ? 'border-blue-500 ring-1 ring-blue-500' : 'border-[#1e2c4c] hover:border-slate-500'
+        }`}
+      >
+        <span className="truncate text-slate-200 font-medium mr-1" title={titleText}>
+          {titleText}
+        </span>
+        <div className="flex items-center gap-1 shrink-0 text-slate-400">
+          {selectedCount > 0 && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="p-0.5 hover:text-rose-400 rounded transition-colors"
+              title="Xóa lựa chọn"
+            >
+              <X size={13} />
+            </button>
+          )}
+          <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? 'rotate-180 text-blue-400' : ''}`} />
+        </div>
+      </div>
+
+      {/* POPUP MENU */}
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1.5 w-72 max-w-[90vw] bg-[#0c1424] border border-[#232f4e] rounded-xl shadow-2xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+          {/* Search box in popup */}
+          <div className="relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Tìm kiếm..."
+              className="w-full bg-[#060c18] border border-[#1e2c4c] focus:border-blue-500 rounded-lg pl-7 pr-2.5 py-1 text-xs text-slate-100 placeholder:italic placeholder:text-slate-500 focus:outline-none"
+              autoFocus
+            />
+            <Search size={13} className="absolute left-2 top-2 text-slate-500" />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                className="absolute right-2 top-1.5 text-slate-400 hover:text-white"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* Select all option */}
+          <div
+            onClick={onSelectAll}
+            className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#142038] cursor-pointer text-xs font-semibold text-blue-300 border-b border-[#1b2b4c] pb-1.5"
+          >
+            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+              isAllSelected ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-500 bg-[#060c18]'
+            }`}>
+              {isAllSelected && <Check size={12} strokeWidth={3} />}
+            </div>
+            <span>Chọn tất cả</span>
+          </div>
+
+          {/* Options list */}
+          <div className="max-h-56 overflow-y-auto space-y-0.5 pr-1 custom-scrollbar text-xs">
+            {children}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ReportsView: React.FC = () => {
   const { setHeaderTitle } = useSettings();
@@ -41,897 +146,850 @@ export const ReportsView: React.FC = () => {
   } = useData();
 
   useEffect(() => {
-    setHeaderTitle('BÁO CÁO TỔNG HỢP SỐ LIỆU GÓI THẦU DỰ ÁN');
+    setHeaderTitle('BÁO CÁO NGHIỆM THU DỰ ÁN');
   }, [setHeaderTitle]);
 
-  // ==================== BỘ LỌC BÁO CÁO ====================
-  // 1. Lọc theo Dự án (Hỗ trợ 1 hoặc nhiều dự án, mặc định chọn tất cả)
+  // Search input ở góc trên phải
+  const [globalSearch, setGlobalSearch] = useState('');
+
+  // 1. Khoảng thời gian
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // 2. Dự án (multi-select)
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(() => projects.map((p) => p.id));
-  
-  // Tự động cập nhật nếu danh sách dự án thay đổi
+  const [projectSearch, setProjectSearch] = useState('');
+
+  // 3. Nội dung chi phí / Tên gói thầu (multi-select)
+  const [selectedCostContents, setSelectedCostContents] = useState<string[]>([]);
+  const [costContentSearch, setCostContentSearch] = useState('');
+
+  // 4. KMCP (Khoản mục chi phí: XD, TVXD, K, GPMB)
+  const [selectedKmcps, setSelectedKmcps] = useState<string[]>(['XD', 'TVXD', 'K', 'GPMB']);
+  const [kmcpSearch, setKmcpSearch] = useState('');
+
+  // 5. LOẠI CP (Loại chi phí: Chi phí, Phí/Lệ phí)
+  const [selectedCostTypes, setSelectedCostTypes] = useState<string[]>(['Chi phí', 'Phí']);
+  const [costTypeSearch, setCostTypeSearch] = useState('');
+
+  // Dropdown open states: 'project' | 'content' | 'kmcp' | 'costType' | null
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
+  // Thu gọn / mở rộng từng dự án trong bảng
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
+
+  const filterContainerRef = useRef<HTMLDivElement>(null);
+
+  // Đóng dropdown khi click ra ngoài
   useEffect(() => {
-    if (selectedProjectIds.length === 0 && projects.length > 0) {
+    const handleDocClick = (e: MouseEvent) => {
+      if (filterContainerRef.current && !filterContainerRef.current.contains(e.target as Node)) {
+        setActiveDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleDocClick);
+    return () => document.removeEventListener('mousedown', handleDocClick);
+  }, []);
+
+  // Lấy danh sách tất cả các tên gói thầu / nội dung chi phí độc nhất
+  const allUniqueCostContents = useMemo(() => {
+    const set = new Set<string>();
+    projects.forEach((proj) => {
+      const pkgs = costPackages[proj.id] || [];
+      pkgs.forEach((p) => {
+        if (p.content && p.content.trim()) {
+          set.add(p.content.trim());
+        }
+      });
+    });
+    return Array.from(set).sort();
+  }, [projects, costPackages]);
+
+  // Khởi tạo mặc định chọn tất cả nội dung chi phí
+  useEffect(() => {
+    if (allUniqueCostContents.length > 0 && selectedCostContents.length === 0) {
+      setSelectedCostContents(allUniqueCostContents);
+    }
+  }, [allUniqueCostContents]);
+
+  // Đồng bộ lại selectedProjectIds khi danh sách projects thay đổi
+  useEffect(() => {
+    if (projects.length > 0 && selectedProjectIds.length === 0) {
       setSelectedProjectIds(projects.map((p) => p.id));
     }
   }, [projects]);
 
-  // 2. Lọc theo Khoảng thời gian (Từ ngày - Đến ngày)
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  // Các tùy chọn KMCP chuẩn
+  const kmcpOptions = useMemo(() => [
+    { id: 'XD', label: 'Xây dựng' },
+    { id: 'TVXD', label: 'TVXD' },
+    { id: 'K', label: 'K' },
+    { id: 'GPMB', label: 'GPMB' },
+  ], []);
 
-  // 3. Lọc theo Phân loại Chi phí vs Phí
-  const [selectedCostType, setSelectedCostType] = useState<'all' | CostType>('all');
+  // Các tùy chọn LOẠI CP chuẩn
+  const costTypeOptions = useMemo(() => [
+    { id: 'Chi phí', label: 'Chi phí' },
+    { id: 'Phí', label: 'Phí/Lệ phí' },
+  ], []);
 
-  // 4. Lọc theo Loại chi phí / Khoản mục (TVXD, XD, K)
-  const [selectedCategories, setSelectedCategories] = useState<CostCategory[]>(['TVXD', 'XD', 'K']);
+  // ==================== TỔNG HỢP DỮ LIỆU BÁO CÁO THEO DỰ ÁN (HIERARCHY) ====================
+  const reportData = useMemo(() => {
+    const fromDate = startDate ? parseCustomVnDate(startDate) : null;
+    const toDate = endDate ? parseCustomVnDate(endDate) : null;
+    const kw = globalSearch.trim().toLowerCase();
 
-  // 5. Tìm kiếm từ khóa gói thầu / nhà thầu
-  const [keyword, setKeyword] = useState<string>('');
-
-  // 6. Lựa chọn các gói thầu cụ thể cần báo cáo (Set các packageId)
-  const [selectedPackageIds, setSelectedPackageIds] = useState<string[]>([]);
-  const [isAllPackagesSelected, setIsAllPackagesSelected] = useState<boolean>(true);
-
-  // Toggle thu gọn / mở rộng bộ lọc
-  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(true);
-  const [isProjectFilterOpen, setIsProjectFilterOpen] = useState<boolean>(false);
-  const [isPackageFilterOpen, setIsPackageFilterOpen] = useState<boolean>(false);
-
-  // ==================== TÍNH TOÁN DỮ LIỆU BÁO CÁO ====================
-  // Lấy toàn bộ danh sách gói thầu thô của các dự án được chọn
-  const rawPackagesList = useMemo(() => {
-    const list: Array<{
+    const resultProjects: Array<{
       projectId: string;
+      projectStt: number;
       projectCode: string;
       projectName: string;
-      packageId: string;
-      content: string;
-      category: CostCategory;
-      costType: CostType;
-      contractor: string;
-      contractNumber: string;
-      contractDate: string;
-      effectiveContractValue: number;
-      appendixCount: number;
+      contractTotal: number;
+      inspTotal: number;
+      payTotal: number;
+      ratioNtHd: number;
+      ratioTtNt: number;
+      packages: Array<{
+        packageId: string;
+        subStt: string;
+        content: string;
+        contractor: string;
+        category: string;
+        costType: string;
+        contractValue: number;
+        inspectionValue: number;
+        paymentValue: number;
+        ratioNtHd: number;
+        ratioTtNt: number;
+      }>;
     }> = [];
 
-    projects.forEach((proj) => {
-      // Chỉ xét các dự án nằm trong bộ lọc dự án
-      if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(proj.id)) {
+    let grandContract = 0;
+    let grandInsp = 0;
+    let grandPay = 0;
+
+    projects.forEach((proj, projIndex) => {
+      // 1. Lọc theo Dự án được chọn
+      if (!selectedProjectIds.includes(proj.id)) {
         return;
       }
 
       const pkgs = costPackages[proj.id] || [];
-      pkgs.forEach((cost) => {
-        // Lọc Phân loại Chi phí / Phí
-        if (selectedCostType !== 'all' && cost.costType !== selectedCostType) {
+      const projInsps = inspections[proj.id] || [];
+
+      const filteredPackages: Array<{
+        packageId: string;
+        subStt: string;
+        content: string;
+        contractor: string;
+        category: string;
+        costType: string;
+        contractValue: number;
+        inspectionValue: number;
+        paymentValue: number;
+        ratioNtHd: number;
+        ratioTtNt: number;
+      }> = [];
+
+      let pContract = 0;
+      let pInsp = 0;
+      let pPay = 0;
+
+      pkgs.forEach((cost, costIndex) => {
+        // 2. Lọc theo Nội dung chi phí
+        if (selectedCostContents.length > 0 && !selectedCostContents.includes(cost.content.trim())) {
           return;
         }
 
-        // Lọc Khoản mục TVXD, XD, K
-        if (!selectedCategories.includes(cost.category)) {
+        // 3. Lọc theo KMCP (XD, TVXD, K, GPMB)
+        const matchCategory = cost.category === 'XD' ? 'XD' 
+          : cost.category === 'TVXD' ? 'TVXD' 
+          : cost.category === 'K' ? 'K' 
+          : 'GPMB';
+        if (!selectedKmcps.includes(matchCategory)) {
           return;
         }
 
-        const effectiveVal = getEffectiveContractValue(proj.id, cost.id);
-        const apps = getContractAppendicesByPackage(proj.id, cost.id);
-
-        list.push({
-          projectId: proj.id,
-          projectCode: proj.code,
-          projectName: proj.name,
-          packageId: cost.id,
-          content: cost.content,
-          category: cost.category,
-          costType: cost.costType,
-          contractor: cost.contractor || 'Chưa xác định',
-          contractNumber: cost.contractNumber || '—',
-          contractDate: cost.contractDate || '—',
-          effectiveContractValue: effectiveVal,
-          appendixCount: apps.length,
-        });
-      });
-    });
-
-    return list;
-  }, [projects, selectedProjectIds, selectedCostType, selectedCategories, costPackages, getEffectiveContractValue, getContractAppendicesByPackage]);
-
-  // Khởi tạo danh sách gói thầu được chọn mặc định là tất cả
-  useEffect(() => {
-    if (isAllPackagesSelected) {
-      setSelectedPackageIds(rawPackagesList.map((p) => p.packageId));
-    }
-  }, [rawPackagesList, isAllPackagesSelected]);
-
-  // Tính toán số liệu báo cáo chi tiết sau khi lọc theo ngày và chọn gói thầu
-  const reportRows = useMemo(() => {
-    const fromDate = startDate ? parseCustomVnDate(startDate) : null;
-    const toDate = endDate ? parseCustomVnDate(endDate) : null;
-
-    return rawPackagesList
-      .filter((pkg) => {
-        // Lọc theo gói thầu được chọn
-        if (!isAllPackagesSelected && !selectedPackageIds.includes(pkg.packageId)) {
-          return false;
+        // 4. Lọc theo LOẠI CP (Chi phí vs Phí)
+        if (!selectedCostTypes.includes(cost.costType)) {
+          return;
         }
 
-        // Lọc theo từ khóa tìm kiếm
-        if (keyword.trim()) {
-          const kw = keyword.toLowerCase().trim();
-          const matchContent = pkg.content.toLowerCase().includes(kw);
-          const matchContractor = pkg.contractor.toLowerCase().includes(kw);
-          const matchProj = pkg.projectName.toLowerCase().includes(kw) || pkg.projectCode.toLowerCase().includes(kw);
+        // 5. Lọc theo từ khóa tìm kiếm (Tên gói thầu, nhà thầu, tên dự án)
+        if (kw) {
+          const matchContent = cost.content.toLowerCase().includes(kw);
+          const matchContractor = (cost.contractor || '').toLowerCase().includes(kw);
+          const matchProj = proj.name.toLowerCase().includes(kw) || proj.code.toLowerCase().includes(kw);
           if (!matchContent && !matchContractor && !matchProj) {
-            return false;
+            return;
           }
         }
 
-        return true;
-      })
-      .map((pkg) => {
-        // Lấy danh sách nghiệm thu của gói thầu này
-        const projInsps = inspections[pkg.projectId] || [];
+        // Giá trị hợp đồng hiệu lực sau PLHĐ
+        const effectiveVal = getEffectiveContractValue(proj.id, cost.id);
+
+        // Lấy danh sách nghiệm thu tương ứng
         const matchInsps = projInsps.filter((i) => {
-          if (i.costPackageId && i.costPackageId === pkg.packageId) return true;
-          return i.packageName.trim().toLowerCase() === pkg.content.trim().toLowerCase();
+          if (i.costPackageId && i.costPackageId === cost.id) return true;
+          return i.packageName.trim().toLowerCase() === cost.content.trim().toLowerCase();
         });
 
-        // Lọc các đợt nghiệm thu rơi vào khoảng thời gian chọn
-        const filteredInsps = matchInsps.filter((insp) => {
-          if (!insp.inspectionDate) return true;
-          const iDate = parseCustomVnDate(insp.inspectionDate);
+        // Lọc theo khoảng thời gian nghiệm thu
+        const inRangeInsps = matchInsps.filter((i) => {
+          if (!i.inspectionDate) return true;
+          const iDate = parseCustomVnDate(i.inspectionDate);
           if (!iDate) return true;
-
-          if (fromDate && iDate.getTime() < fromDate.getTime()) {
-            return false;
-          }
-          if (toDate && iDate.getTime() > toDate.getTime()) {
-            return false;
-          }
+          if (fromDate && iDate.getTime() < fromDate.getTime()) return false;
+          if (toDate && iDate.getTime() > toDate.getTime()) return false;
           return true;
         });
 
-        const totalInspVal = filteredInsps.reduce((s, i) => s + (Number(i.inspectionValue) || 0), 0);
-        const totalPayVal = filteredInsps.reduce((s, i) => s + (Number(i.paymentValue) || 0), 0);
+        const inspVal = inRangeInsps.reduce((s, i) => s + (Number(i.inspectionValue) || 0), 0);
+        const payVal = inRangeInsps.reduce((s, i) => s + (Number(i.paymentValue) || 0), 0);
 
-        // Tỷ lệ NT/HĐ: Nghiệm thu / Hợp đồng (%)
-        const ratioNtHd = pkg.effectiveContractValue > 0
-          ? Number(((totalInspVal / pkg.effectiveContractValue) * 100).toFixed(1))
-          : 0;
+        const ratioNtHd = effectiveVal > 0 ? Number(((inspVal / effectiveVal) * 100).toFixed(1)) : 0;
+        const ratioTtNt = inspVal > 0 
+          ? Number(((payVal / inspVal) * 100).toFixed(1))
+          : (effectiveVal > 0 && payVal > 0 ? Number(((payVal / effectiveVal) * 100).toFixed(1)) : 0);
 
-        // Tỷ lệ TT/NT: Thanh toán / Nghiệm thu (%)
-        const ratioTtNt = totalInspVal > 0
-          ? Number(((totalPayVal / totalInspVal) * 100).toFixed(1))
-          : (pkg.effectiveContractValue > 0 && totalPayVal > 0
-              ? Number(((totalPayVal / pkg.effectiveContractValue) * 100).toFixed(1))
-              : 0);
+        pContract += effectiveVal;
+        pInsp += inspVal;
+        pPay += payVal;
 
-        return {
-          ...pkg,
-          inspectionValue: totalInspVal,
-          paymentValue: totalPayVal,
+        filteredPackages.push({
+          packageId: cost.id,
+          subStt: `${projIndex + 1}.${costIndex + 1}`,
+          content: cost.content,
+          contractor: cost.contractor || '—',
+          category: cost.category,
+          costType: cost.costType,
+          contractValue: effectiveVal,
+          inspectionValue: inspVal,
+          paymentValue: payVal,
           ratioNtHd,
           ratioTtNt,
-          inspCount: filteredInsps.length,
-        };
+        });
       });
-  }, [rawPackagesList, isAllPackagesSelected, selectedPackageIds, keyword, inspections, startDate, endDate]);
 
-  // ==================== TỔNG CỘNG TOÀN BỘ BÁO CÁO ====================
-  const reportTotals = useMemo(() => {
-    let contractTotal = 0;
-    let inspTotal = 0;
-    let payTotal = 0;
+      // Nếu có gói thầu thỏa mãn thì đưa dự án vào danh sách báo cáo
+      if (filteredPackages.length > 0) {
+        const pRatioNtHd = pContract > 0 ? Number(((pInsp / pContract) * 100).toFixed(1)) : 0;
+        const pRatioTtNt = pInsp > 0 
+          ? Number(((pPay / pInsp) * 100).toFixed(1))
+          : (pContract > 0 && pPay > 0 ? Number(((pPay / pContract) * 100).toFixed(1)) : 0);
 
-    reportRows.forEach((row) => {
-      contractTotal += row.effectiveContractValue;
-      inspTotal += row.inspectionValue;
-      payTotal += row.paymentValue;
+        grandContract += pContract;
+        grandInsp += pInsp;
+        grandPay += pPay;
+
+        resultProjects.push({
+          projectId: proj.id,
+          projectStt: projIndex + 1,
+          projectCode: proj.code,
+          projectName: proj.name,
+          contractTotal: pContract,
+          inspTotal: pInsp,
+          payTotal: pPay,
+          ratioNtHd: pRatioNtHd,
+          ratioTtNt: pRatioTtNt,
+          packages: filteredPackages,
+        });
+      }
     });
 
-    const avgRatioNtHd = contractTotal > 0
-      ? Number(((inspTotal / contractTotal) * 100).toFixed(1))
-      : 0;
-
-    const avgRatioTtNt = inspTotal > 0
-      ? Number(((payTotal / inspTotal) * 100).toFixed(1))
-      : 0;
+    const grandRatioNtHd = grandContract > 0 ? Number(((grandInsp / grandContract) * 100).toFixed(1)) : 0;
+    const grandRatioTtNt = grandInsp > 0 ? Number(((grandPay / grandInsp) * 100).toFixed(1)) : 0;
 
     return {
-      contractTotal,
-      inspTotal,
-      payTotal,
-      avgRatioNtHd,
-      avgRatioTtNt,
-      rowCount: reportRows.length,
+      projects: resultProjects,
+      grandContract,
+      grandInsp,
+      grandPay,
+      grandRatioNtHd,
+      grandRatioTtNt,
     };
-  }, [reportRows]);
+  }, [projects, costPackages, inspections, selectedProjectIds, selectedCostContents, selectedKmcps, selectedCostTypes, startDate, endDate, globalSearch, getEffectiveContractValue]);
 
-  // ==================== CÁC HÀM XỬ LÝ SỰ KIỆN LỌC ====================
-  // Chọn / bỏ chọn 1 dự án
-  const handleToggleProject = (projId: string) => {
-    setSelectedProjectIds((prev) => {
-      if (prev.includes(projId)) {
-        // Không cho phép bỏ chọn hết (giữ lại ít nhất 1)
-        if (prev.length === 1) return prev;
-        return prev.filter((id) => id !== projId);
-      } else {
-        return [...prev, projId];
-      }
-    });
+  // Toggle thu gọn dự án
+  const toggleProjectCollapse = (projectId: string) => {
+    setCollapsedProjects((prev) => ({
+      ...prev,
+      [projectId]: !prev[projectId],
+    }));
   };
 
-  const handleSelectAllProjects = () => {
-    setSelectedProjectIds(projects.map((p) => p.id));
-  };
-
-  // Chọn / bỏ chọn khoản mục TVXD, XD, K
-  const handleToggleCategory = (cat: CostCategory) => {
-    setSelectedCategories((prev) => {
-      if (prev.includes(cat)) {
-        if (prev.length === 1) return prev;
-        return prev.filter((c) => c !== cat);
-      } else {
-        return [...prev, cat];
-      }
-    });
-  };
-
-  // Chọn / bỏ chọn gói thầu
-  const handleTogglePackage = (pkgId: string) => {
-    setIsAllPackagesSelected(false);
-    setSelectedPackageIds((prev) => {
-      if (prev.includes(pkgId)) {
-        return prev.filter((id) => id !== pkgId);
-      } else {
-        return [...prev, pkgId];
-      }
-    });
-  };
-
-  const handleSelectAllPackages = () => {
-    setIsAllPackagesSelected(true);
-    setSelectedPackageIds(rawPackagesList.map((p) => p.packageId));
-  };
-
-  const handleDeselectAllPackages = () => {
-    setIsAllPackagesSelected(false);
-    setSelectedPackageIds([]);
-  };
-
-  // Đặt lại toàn bộ bộ lọc về mặc định
-  const handleResetFilters = () => {
-    setSelectedProjectIds(projects.map((p) => p.id));
-    setStartDate('');
-    setEndDate('');
-    setSelectedCostType('all');
-    setSelectedCategories(['TVXD', 'XD', 'K']);
-    setKeyword('');
-    setIsAllPackagesSelected(true);
-    setSelectedPackageIds(rawPackagesList.map((p) => p.packageId));
-  };
-
-  // Xuất file CSV (Tương thích Excel tiếng Việt UTF-8 BOM)
-  const handleExportCsv = () => {
-    if (reportRows.length === 0) {
-      alert('Không có dữ liệu gói thầu nào trong báo cáo để xuất.');
+  // ==================== XUẤT FILE WORD (.DOC) ====================
+  const handleExportWord = () => {
+    if (reportData.projects.length === 0) {
+      alert('Không có dữ liệu nào trong báo cáo để xuất Word.');
       return;
     }
 
-    const headers = [
-      'STT',
-      'Mã Dự Án',
-      'Tên Dự Án',
-      'Tên Gói Thầu / Nội Dung Chi Phí',
-      'Khoản Mục',
-      'Phân Loại',
-      'Đơn Vị Thực Hiện (Nhà Thầu)',
-      'Số Hợp Đồng',
-      'Ngày Ký HĐ',
-      'Giá Trị Hợp Đồng (đồng)',
-      'Giá Trị Nghiệm Thu (đồng)',
-      'Giá Trị Thanh Toán (đồng)',
-      'Tỷ Lệ NT/HĐ (%)',
-      'Tỷ Lệ TT/NT (%)'
-    ];
+    let rowsHtml = '';
+    reportData.projects.forEach((proj) => {
+      // Dòng Dự án
+      rowsHtml += `
+        <tr style="background-color: #f1f5f9; font-weight: bold;">
+          <td style="text-align: center; padding: 6px; border: 1px solid #cbd5e1;">${proj.projectStt}</td>
+          <td colspan="2" style="padding: 6px; border: 1px solid #cbd5e1; color: #1e40af;">${proj.projectName}</td>
+          <td style="text-align: right; padding: 6px; border: 1px solid #cbd5e1;">${formatVnNumber(proj.contractTotal)}</td>
+          <td style="text-align: right; padding: 6px; border: 1px solid #cbd5e1;">${formatVnNumber(proj.inspTotal)}</td>
+          <td style="text-align: right; padding: 6px; border: 1px solid #cbd5e1;">${formatVnNumber(proj.payTotal)}</td>
+          <td style="text-align: center; padding: 6px; border: 1px solid #cbd5e1;">${proj.ratioNtHd}%</td>
+          <td style="text-align: center; padding: 6px; border: 1px solid #cbd5e1;">${proj.ratioTtNt}%</td>
+        </tr>
+      `;
 
-    const rows = reportRows.map((r, idx) => [
-      idx + 1,
-      `"${r.projectCode}"`,
-      `"${r.projectName.replace(/"/g, '""')}"`,
-      `"${r.content.replace(/"/g, '""')}"`,
-      r.category,
-      r.costType,
-      `"${r.contractor.replace(/"/g, '""')}"`,
-      `"${r.contractNumber}"`,
-      r.contractDate,
-      r.effectiveContractValue,
-      r.inspectionValue,
-      r.paymentValue,
-      r.ratioNtHd,
-      r.ratioTtNt
-    ]);
+      // Các gói thầu con
+      proj.packages.forEach((pkg) => {
+        rowsHtml += `
+          <tr>
+            <td style="text-align: center; padding: 5px; border: 1px solid #cbd5e1;">${pkg.subStt}</td>
+            <td style="padding: 5px; border: 1px solid #cbd5e1;">${pkg.content}</td>
+            <td style="padding: 5px; border: 1px solid #cbd5e1;">${pkg.contractor}</td>
+            <td style="text-align: right; padding: 5px; border: 1px solid #cbd5e1;">${formatVnNumber(pkg.contractValue)}</td>
+            <td style="text-align: right; padding: 5px; border: 1px solid #cbd5e1;">${formatVnNumber(pkg.inspectionValue)}</td>
+            <td style="text-align: right; padding: 5px; border: 1px solid #cbd5e1;">${formatVnNumber(pkg.paymentValue)}</td>
+            <td style="text-align: center; padding: 5px; border: 1px solid #cbd5e1;">${pkg.ratioNtHd}%</td>
+            <td style="text-align: center; padding: 5px; border: 1px solid #cbd5e1;">${pkg.ratioTtNt}%</td>
+          </tr>
+        `;
+      });
+    });
 
-    // Thêm dòng tổng cộng
-    rows.push([
-      'TỔNG CỘNG',
-      '',
-      '',
-      `"${reportTotals.rowCount} gói thầu"`,
-      '',
-      '',
-      '',
-      '',
-      '',
-      reportTotals.contractTotal,
-      reportTotals.inspTotal,
-      reportTotals.payTotal,
-      reportTotals.avgRatioNtHd,
-      reportTotals.avgRatioTtNt
-    ]);
+    const wordContent = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset='utf-8'>
+        <title>Báo cáo Nghiệm thu</title>
+        <style>
+          body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #000; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          th { background-color: #e2e8f0; font-weight: bold; border: 1px solid #94a3b8; padding: 8px; text-align: center; }
+          td { border: 1px solid #cbd5e1; }
+        </style>
+      </head>
+      <body>
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="margin: 0; text-transform: uppercase;">BÁO CÁO NGHIỆM THU VÀ GIẢI NGÂN CÁC GÓI THẦU</h2>
+          <p style="margin: 5px 0; font-style: italic;">Tổng hợp số liệu thực hiện và nghiệm thu dự án đầu tư xây dựng</p>
+          <p style="margin: 3px 0; font-size: 10pt;">Ngày lập báo cáo: ${new Date().toLocaleDateString('vi-VN')}</p>
+        </div>
 
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 45px;">STT</th>
+              <th>DỰ ÁN / NỘI DUNG CHI PHÍ</th>
+              <th style="width: 200px;">ĐƠN VỊ THỰC HIỆN</th>
+              <th style="width: 120px;">GIÁ TRỊ HỢP ĐỒNG (ĐỒNG)</th>
+              <th style="width: 120px;">GIÁ TRỊ NGHIỆM THU (ĐỒNG)</th>
+              <th style="width: 120px;">GIÁ TRỊ THANH TOÁN (ĐỒNG)</th>
+              <th style="width: 70px;">TỶ LỆ NT/HĐ (%)</th>
+              <th style="width: 70px;">TỶ LỆ TT/NT (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+            <tr style="background-color: #cbd5e1; font-weight: bold;">
+              <td colspan="3" style="text-align: right; padding: 8px;">TỔNG CỘNG:</td>
+              <td style="text-align: right; padding: 8px;">${formatVnNumber(reportData.grandContract)}</td>
+              <td style="text-align: right; padding: 8px;">${formatVnNumber(reportData.grandInsp)}</td>
+              <td style="text-align: right; padding: 8px;">${formatVnNumber(reportData.grandPay)}</td>
+              <td style="text-align: center; padding: 8px;">${reportData.grandRatioNtHd}%</td>
+              <td style="text-align: center; padding: 8px;">${reportData.grandRatioTtNt}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob(['\uFEFF' + wordContent], { type: 'application/msword;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Bao_Cao_Goi_Thau_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Bao_Cao_Nghiem_Thu_${new Date().toISOString().slice(0, 10)}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   return (
-    <div className="space-y-4 overflow-y-auto h-full pr-1 pb-10 print:p-0 print:overflow-visible">
-      {/* 1. TIÊU ĐỀ TRANG & CÁC NÚT THAO TÁC XUẤT BÁO CÁO */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0c1322] p-4 rounded-xl border border-[#232f4e] shadow-md print:hidden">
+    <div className="space-y-3.5 overflow-y-auto h-full pr-1 pb-10 print:p-0 print:overflow-visible">
+      {/* 1. HEADER TITLE & SEARCH (Y HỆT HÌNH ẢNH SỐ 1) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-blue-600/20 text-blue-400">
-              <BarChart3 size={20} />
-            </div>
-            <div>
-              <h2 className="text-lg md:text-xl font-bold text-white tracking-wide">
-                Báo Cáo Tổng Hợp Số Liệu Các Gói Thầu
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Kiểm soát đơn vị thực hiện, giá trị hợp đồng, nghiệm thu, thanh toán và tỷ lệ giải ngân
-              </p>
-            </div>
-          </div>
+          <h2 className="text-lg md:text-xl font-bold text-slate-100 tracking-wide">
+            Báo cáo Nghiệm thu
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Tổng hợp số liệu thực hiện và nghiệm thu dự án
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <AppButton 
-            variant="outline" 
-            size="sm" 
-            icon={<Printer size={15} />} 
-            onClick={handlePrint}
-            className="text-xs"
-          >
-            In báo cáo
-          </AppButton>
-          <AppButton
-            variant="success"
-            size="sm"
-            icon={<Download size={15} />}
-            onClick={handleExportCsv}
-            className="text-xs font-semibold shadow-md shadow-emerald-950/60"
-          >
-            Xuất Excel (.CSV)
-          </AppButton>
+        {/* Ô Tìm dự án, nhà thầu... */}
+        <div className="relative w-full sm:w-80">
+          <input
+            type="text"
+            value={globalSearch}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            placeholder="Tìm dự án, nhà thầu..."
+            className="w-full bg-[#080e1c] border border-[#1e2c4c] focus:border-blue-500 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors"
+          />
+          <Search size={14} className="absolute left-2.5 top-2 text-slate-500" />
+          {globalSearch && (
+            <button
+              onClick={() => setGlobalSearch('')}
+              className="absolute right-2 top-1.5 text-slate-400 hover:text-white text-xs"
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 2. BỘ LỌC ĐA TIÊU CHÍ (PROJECTS, KHOẢNG THỜI GIAN, GÓI THẦU, TVXD/XD/K, CHI PHÍ/PHÍ) */}
-      <div className="bg-[#0c1424] border border-[#232f4e] rounded-xl p-3.5 space-y-3.5 shadow-md print:hidden">
-        <div className="flex items-center justify-between border-b border-[#1b2b4c] pb-2.5">
-          <div className="flex items-center gap-2">
-            <Filter size={16} className="text-blue-400" />
-            <span className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wide">
-              Bộ Lọc Báo Cáo Chuyên Sâu
-            </span>
-            <span className="text-[11px] text-slate-400 font-mono bg-[#142038] px-2 py-0.5 rounded border border-[#2b3e66]">
-              {reportRows.length} gói thầu phù hợp
-            </span>
+      {/* 2. THANH BỘ LỌC NGANG DUY NHẤT (THEO ĐÚNG HÌNH ẢNH 1, 2, 3, 4, 5) */}
+      <div 
+        ref={filterContainerRef}
+        className="bg-[#0b1322] border border-[#232f4e] rounded-xl p-3 shadow-lg"
+      >
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 items-end">
+          {/* TỪ NGÀY */}
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+              Từ Ngày
+            </label>
+            <VnDateInput
+              value={startDate}
+              onChange={(val) => setStartDate(val)}
+              placeholder="Từ ngày"
+              inputClassName="!h-9 !py-0 !text-xs !bg-[#060c18] !border-[#1e2c4c] hover:!border-slate-500 focus:!border-blue-500 font-mono"
+            />
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleResetFilters}
-              className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors px-2 py-1 rounded hover:bg-[#16233d]"
-              title="Đặt lại bộ lọc về mặc định"
-            >
-              <RotateCcw size={12} />
-              <span>Đặt lại</span>
-            </button>
-            <button
-              onClick={() => setIsFilterExpanded(!isFilterExpanded)}
-              className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-[#16233d] transition-colors"
-            >
-              {isFilterExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
+          {/* ĐẾN NGÀY */}
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+              Đến Ngày
+            </label>
+            <VnDateInput
+              value={endDate}
+              onChange={(val) => setEndDate(val)}
+              placeholder="Đến ngày"
+              inputClassName="!h-9 !py-0 !text-xs !bg-[#060c18] !border-[#1e2c4c] hover:!border-slate-500 focus:!border-blue-500 font-mono"
+            />
           </div>
-        </div>
 
-        {isFilterExpanded && (
-          <div className="space-y-3 text-xs">
-            {/* Hàng 1: Bộ lọc Dự án & Khoảng thời gian */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-              {/* Cột chọn Dự án (5 cols) */}
-              <div className="md:col-span-6 p-2.5 rounded-lg bg-[#070d18] border border-[#1e2e4c] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-                    <Building2 size={14} className="text-blue-400" />
-                    <span>Dự án báo cáo ({selectedProjectIds.length}/{projects.length}):</span>
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={handleSelectAllProjects}
-                      className="text-[10px] text-blue-400 hover:text-blue-300 font-medium px-1.5 py-0.5 rounded hover:bg-blue-950/60"
-                    >
-                      Chọn tất cả
-                    </button>
+          {/* DỰ ÁN */}
+          <FilterDropdown
+            label="Dự Án"
+            selectedCount={selectedProjectIds.length}
+            totalCount={projects.length}
+            isOpen={activeDropdown === 'project'}
+            onToggle={() => setActiveDropdown(activeDropdown === 'project' ? null : 'project')}
+            onClear={(e) => {
+              e.stopPropagation();
+              setSelectedProjectIds([]);
+            }}
+            searchTerm={projectSearch}
+            onSearchChange={setProjectSearch}
+            onSelectAll={() => {
+              if (selectedProjectIds.length === projects.length) {
+                setSelectedProjectIds([]);
+              } else {
+                setSelectedProjectIds(projects.map((p) => p.id));
+              }
+            }}
+            isAllSelected={selectedProjectIds.length === projects.length && projects.length > 0}
+          >
+            {projects
+              .filter((p) => p.name.toLowerCase().includes(projectSearch.toLowerCase()) || p.code.toLowerCase().includes(projectSearch.toLowerCase()))
+              .map((p) => {
+                const isSelected = selectedProjectIds.includes(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      setSelectedProjectIds((prev) =>
+                        prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                      );
+                    }}
+                    className="flex items-center gap-2 p-1.5 rounded hover:bg-[#142038] cursor-pointer text-xs text-slate-200 transition-colors"
+                  >
+                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                      isSelected ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-500 bg-[#060c18]'
+                    }`}>
+                      {isSelected && <Check size={11} strokeWidth={3} />}
+                    </div>
+                    <span className="truncate" title={p.name}>{p.name}</span>
                   </div>
-                </div>
+                );
+              })}
+          </FilterDropdown>
 
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                  {projects.map((p) => {
-                    const isSelected = selectedProjectIds.includes(p.id);
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleToggleProject(p.id)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-mono font-medium flex items-center gap-1.5 transition-colors border ${
-                          isSelected
-                            ? 'bg-blue-600/30 text-blue-200 border-blue-500/80 shadow-sm'
-                            : 'bg-[#0f172a] text-slate-400 border-[#232f4e] hover:text-slate-200'
-                        }`}
-                        title={p.name}
-                      >
-                        {isSelected ? <CheckSquare size={13} className="text-blue-400" /> : <Square size={13} />}
-                        <span className="font-bold">{p.code}</span>
-                        <span className="truncate max-w-[140px] text-[11px] font-sans opacity-90">{p.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Cột Khoảng thời gian (7 cols) */}
-              <div className="md:col-span-6 p-2.5 rounded-lg bg-[#070d18] border border-[#1e2e4c] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-                    <Calendar size={14} className="text-cyan-400" />
-                    <span>Khoảng thời gian báo cáo (Nghiệm thu / Thanh toán):</span>
-                  </span>
-                  {(startDate || endDate) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStartDate('');
-                        setEndDate('');
-                      }}
-                      className="text-[10px] text-rose-400 hover:text-rose-300 font-medium px-1.5 py-0.5 rounded hover:bg-rose-950/60"
-                    >
-                      Xóa khoảng ngày
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
-                  <VnDateInput
-                    label="Từ ngày"
-                    value={startDate}
-                    onChange={(val) => setStartDate(val)}
-                    placeholder="VD: 01/01/2026"
-                  />
-                  <VnDateInput
-                    label="Đến ngày"
-                    value={endDate}
-                    onChange={(val) => setEndDate(val)}
-                    placeholder="VD: 31/12/2026"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Hàng 2: Phân loại Chi phí/Phí, Khoản mục TVXD/XD/K & Tìm kiếm */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
-              {/* Phân loại: Chi phí vs Phí (4 cols) */}
-              <div className="sm:col-span-4 p-2.5 rounded-lg bg-[#070d18] border border-[#1e2e4c] space-y-1.5">
-                <span className="text-[11px] text-slate-400 font-semibold block">Phân loại chi phí:</span>
-                <div className="flex rounded-lg border border-[#232f4e] overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCostType('all')}
-                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                      selectedCostType === 'all'
-                        ? 'bg-blue-600 text-white font-bold'
-                        : 'bg-[#0f172a] text-slate-400 hover:text-slate-200'
-                    }`}
+          {/* NỘI DUNG CHI PHÍ */}
+          <FilterDropdown
+            label="Nội Dung Chi Phí"
+            selectedCount={selectedCostContents.length}
+            totalCount={allUniqueCostContents.length}
+            isOpen={activeDropdown === 'content'}
+            onToggle={() => setActiveDropdown(activeDropdown === 'content' ? null : 'content')}
+            onClear={(e) => {
+              e.stopPropagation();
+              setSelectedCostContents([]);
+            }}
+            searchTerm={costContentSearch}
+            onSearchChange={setCostContentSearch}
+            onSelectAll={() => {
+              if (selectedCostContents.length === allUniqueCostContents.length) {
+                setSelectedCostContents([]);
+              } else {
+                setSelectedCostContents(allUniqueCostContents);
+              }
+            }}
+            isAllSelected={selectedCostContents.length === allUniqueCostContents.length && allUniqueCostContents.length > 0}
+          >
+            {allUniqueCostContents
+              .filter((c) => c.toLowerCase().includes(costContentSearch.toLowerCase()))
+              .map((content) => {
+                const isSelected = selectedCostContents.includes(content);
+                return (
+                  <div
+                    key={content}
+                    onClick={() => {
+                      setSelectedCostContents((prev) =>
+                        prev.includes(content) ? prev.filter((c) => c !== content) : [...prev, content]
+                      );
+                    }}
+                    className="flex items-center gap-2 p-1.5 rounded hover:bg-[#142038] cursor-pointer text-xs text-slate-200 transition-colors"
                   >
-                    Tất cả
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCostType('Chi phí')}
-                    className={`flex-1 py-1.5 text-xs font-medium transition-colors border-x border-[#232f4e] ${
-                      selectedCostType === 'Chi phí'
-                        ? 'bg-blue-600 text-white font-bold'
-                        : 'bg-[#0f172a] text-slate-400 hover:text-slate-200'
-                    }`}
+                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                      isSelected ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-500 bg-[#060c18]'
+                    }`}>
+                      {isSelected && <Check size={11} strokeWidth={3} />}
+                    </div>
+                    <span className="truncate" title={content}>{content}</span>
+                  </div>
+                );
+              })}
+          </FilterDropdown>
+
+          {/* KMCP */}
+          <FilterDropdown
+            label="KMCP"
+            selectedCount={selectedKmcps.length}
+            totalCount={kmcpOptions.length}
+            displayText={selectedKmcps.length === kmcpOptions.length ? '4 mục...' : `${selectedKmcps.length} mục...`}
+            isOpen={activeDropdown === 'kmcp'}
+            onToggle={() => setActiveDropdown(activeDropdown === 'kmcp' ? null : 'kmcp')}
+            onClear={(e) => {
+              e.stopPropagation();
+              setSelectedKmcps([]);
+            }}
+            searchTerm={kmcpSearch}
+            onSearchChange={setKmcpSearch}
+            onSelectAll={() => {
+              if (selectedKmcps.length === kmcpOptions.length) {
+                setSelectedKmcps([]);
+              } else {
+                setSelectedKmcps(kmcpOptions.map((k) => k.id));
+              }
+            }}
+            isAllSelected={selectedKmcps.length === kmcpOptions.length}
+          >
+            {kmcpOptions
+              .filter((k) => k.label.toLowerCase().includes(kmcpSearch.toLowerCase()))
+              .map((item) => {
+                const isSelected = selectedKmcps.includes(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      setSelectedKmcps((prev) =>
+                        prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+                      );
+                    }}
+                    className="flex items-center gap-2 p-1.5 rounded hover:bg-[#142038] cursor-pointer text-xs text-slate-200 transition-colors"
                   >
-                    Chi phí
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCostType('Phí')}
-                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                      selectedCostType === 'Phí'
-                        ? 'bg-blue-600 text-white font-bold'
-                        : 'bg-[#0f172a] text-slate-400 hover:text-slate-200'
-                    }`}
+                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                      isSelected ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-500 bg-[#060c18]'
+                    }`}>
+                      {isSelected && <Check size={11} strokeWidth={3} />}
+                    </div>
+                    <span>{item.label}</span>
+                  </div>
+                );
+              })}
+          </FilterDropdown>
+
+          {/* LOẠI CP */}
+          <FilterDropdown
+            label="Loại CP"
+            selectedCount={selectedCostTypes.length}
+            totalCount={costTypeOptions.length}
+            displayText={selectedCostTypes.length === costTypeOptions.length ? 'Chi phí...' : `${selectedCostTypes.join(', ')}`}
+            isOpen={activeDropdown === 'costType'}
+            onToggle={() => setActiveDropdown(activeDropdown === 'costType' ? null : 'costType')}
+            onClear={(e) => {
+              e.stopPropagation();
+              setSelectedCostTypes([]);
+            }}
+            searchTerm={costTypeSearch}
+            onSearchChange={setCostTypeSearch}
+            onSelectAll={() => {
+              if (selectedCostTypes.length === costTypeOptions.length) {
+                setSelectedCostTypes([]);
+              } else {
+                setSelectedCostTypes(costTypeOptions.map((c) => c.id));
+              }
+            }}
+            isAllSelected={selectedCostTypes.length === costTypeOptions.length}
+          >
+            {costTypeOptions
+              .filter((c) => c.label.toLowerCase().includes(costTypeSearch.toLowerCase()))
+              .map((item) => {
+                const isSelected = selectedCostTypes.includes(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      setSelectedCostTypes((prev) =>
+                        prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+                      );
+                    }}
+                    className="flex items-center gap-2 p-1.5 rounded hover:bg-[#142038] cursor-pointer text-xs text-slate-200 transition-colors"
                   >
-                    Phí
-                  </button>
-                </div>
-              </div>
-
-              {/* Khoản mục: TVXD, XD, K (4 cols) */}
-              <div className="sm:col-span-4 p-2.5 rounded-lg bg-[#070d18] border border-[#1e2e4c] space-y-1.5">
-                <span className="text-[11px] text-slate-400 font-semibold block">Khoản mục chi phí:</span>
-                <div className="flex items-center gap-1.5">
-                  {(['TVXD', 'XD', 'K'] as CostCategory[]).map((cat) => {
-                    const isSelected = selectedCategories.includes(cat);
-                    const label = cat === 'TVXD' ? 'TVXD (Tư vấn)' : cat === 'XD' ? 'XD (Xây dựng)' : 'K (Khác)';
-                    return (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => handleToggleCategory(cat)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                          isSelected
-                            ? 'bg-cyan-600/30 text-cyan-200 border-cyan-500 font-bold'
-                            : 'bg-[#0f172a] text-slate-400 border-[#232f4e] hover:text-slate-200'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Tìm kiếm từ khóa (4 cols) */}
-              <div className="sm:col-span-4 p-2.5 rounded-lg bg-[#070d18] border border-[#1e2e4c] space-y-1.5">
-                <span className="text-[11px] text-slate-400 font-semibold block">Tìm kiếm gói thầu / Nhà thầu:</span>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
-                    placeholder="Nhập tên gói thầu, nhà thầu..."
-                    className="w-full bg-[#0c1424] border border-[#232f4e] focus:border-blue-500 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder:italic placeholder:text-slate-500"
-                  />
-                  <Search size={14} className="absolute left-2.5 top-2 text-slate-400" />
-                  {keyword && (
-                    <button
-                      onClick={() => setKeyword('')}
-                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-200 text-xs"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Hàng 3: Chọn các Gói thầu cụ thể đưa vào báo cáo */}
-            <div className="p-2.5 rounded-lg bg-[#070d18] border border-[#1e2e4c] space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Briefcase size={14} className="text-amber-400" />
-                  <span className="font-semibold text-slate-200">
-                    Lựa chọn gói thầu báo cáo ({selectedPackageIds.length}/{rawPackagesList.length} gói thầu):
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={handleSelectAllPackages}
-                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                      isAllPackagesSelected
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-[#142038] text-blue-300 hover:bg-[#1a2b4c]'
-                    }`}
-                  >
-                    Chọn tất cả gói thầu
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDeselectAllPackages}
-                    className="px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 bg-[#142038] hover:bg-[#1a2b4c] transition-colors"
-                  >
-                    Bỏ chọn tất cả
-                  </button>
-                </div>
-              </div>
-
-              {/* Danh sách gói thầu dạng pills checkbox */}
-              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
-                {rawPackagesList.map((pkg) => {
-                  const isChecked = selectedPackageIds.includes(pkg.packageId);
-                  return (
-                    <button
-                      key={pkg.packageId}
-                      type="button"
-                      onClick={() => handleTogglePackage(pkg.packageId)}
-                      className={`px-2 py-1 rounded-lg text-[11px] flex items-center gap-1.5 transition-colors border text-left ${
-                        isChecked
-                          ? 'bg-amber-600/20 text-amber-200 border-amber-500/70'
-                          : 'bg-[#0b1222] text-slate-400 border-[#1e2c4c] hover:text-slate-300'
-                      }`}
-                    >
-                      {isChecked ? <CheckSquare size={12} className="text-amber-400 shrink-0" /> : <Square size={12} className="shrink-0" />}
-                      <span className="font-medium truncate max-w-[200px]" title={pkg.content}>{pkg.content}</span>
-                      <span className="text-[10px] font-mono text-slate-400">({pkg.contractor})</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 3. CÁC THẺ KPI TỔNG HỢP NHANH (SUMMARY STATS CARDS) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 print:grid-cols-4">
-        {/* Thẻ 1: Số lượng gói thầu */}
-        <div className="p-3.5 rounded-xl bg-[#0b1426] border border-blue-500/40 space-y-1 shadow-md">
-          <span className="text-xs text-slate-400 font-medium">Số gói thầu trong báo cáo:</span>
-          <div className="text-2xl font-bold font-mono text-blue-300">
-            {reportTotals.rowCount} <span className="text-xs font-normal text-slate-400 font-sans">gói thầu</span>
-          </div>
-          <span className="text-[11px] text-blue-400 block truncate">
-            Thuộc {selectedProjectIds.length} dự án được chọn
-          </span>
-        </div>
-
-        {/* Thẻ 2: Tổng giá trị Hợp đồng */}
-        <div className="p-3.5 rounded-xl bg-[#071720] border border-cyan-500/40 space-y-1 shadow-md">
-          <span className="text-xs text-slate-400 font-medium">Tổng Giá trị Hợp đồng:</span>
-          <div className="text-xl font-bold font-mono text-cyan-300 truncate" title={`${formatVnNumber(reportTotals.contractTotal)} đồng`}>
-            {formatVnNumber(reportTotals.contractTotal)} đ
-          </div>
-          <span className="text-[11px] text-cyan-400 block">
-            Đã tính đầy đủ các Phụ lục HĐ (PLHĐ)
-          </span>
-        </div>
-
-        {/* Thẻ 3: Tổng giá trị Nghiệm thu & Tỷ lệ NT/HĐ */}
-        <div className="p-3.5 rounded-xl bg-[#091b1a] border border-emerald-500/40 space-y-1 shadow-md">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Tổng Giá trị Nghiệm thu:</span>
-            <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-700/60">
-              NT/HĐ: {reportTotals.avgRatioNtHd}%
-            </span>
-          </div>
-          <div className="text-xl font-bold font-mono text-emerald-300 truncate" title={`${formatVnNumber(reportTotals.inspTotal)} đồng`}>
-            {formatVnNumber(reportTotals.inspTotal)} đ
-          </div>
-          <span className="text-[11px] text-emerald-400 block">
-            {startDate || endDate ? 'Theo kỳ thời gian được chọn' : 'Lũy kế toàn bộ các đợt nghiệm thu'}
-          </span>
-        </div>
-
-        {/* Thẻ 4: Tổng giá trị Thanh toán & Tỷ lệ TT/NT */}
-        <div className="p-3.5 rounded-xl bg-[#140f26] border border-purple-500/40 space-y-1 shadow-md">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Tổng Giá trị Thanh toán:</span>
-            <span className="text-[11px] font-mono font-bold text-purple-300 bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-700/60">
-              TT/NT: {reportTotals.avgRatioTtNt}%
-            </span>
-          </div>
-          <div className="text-xl font-bold font-mono text-purple-300 truncate" title={`${formatVnNumber(reportTotals.payTotal)} đồng`}>
-            {formatVnNumber(reportTotals.payTotal)} đ
-          </div>
-          <span className="text-[11px] text-purple-400 block">
-            Đã thanh toán giải ngân thực tế
-          </span>
+                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                      isSelected ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-500 bg-[#060c18]'
+                    }`}>
+                      {isSelected && <Check size={11} strokeWidth={3} />}
+                    </div>
+                    <span>{item.label}</span>
+                  </div>
+                );
+              })}
+          </FilterDropdown>
         </div>
       </div>
 
-      {/* 4. BẢNG DỮ LIỆU BÁO CÁO CÁC GÓI THẦU (DATA GRID) */}
-      <div className="bg-[#0b1222] border border-[#232f4e] rounded-xl overflow-hidden shadow-lg">
-        <div className="p-3 bg-[#101b33] border-b border-[#232f4e] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet size={16} className="text-blue-400" />
-            <h3 className="font-bold text-sm text-slate-100 uppercase tracking-wide">
-              Bảng Số Liệu Chi Tiết Các Gói Thầu
-            </h3>
-            <span className="text-xs text-slate-400">
-              ({reportRows.length} gói thầu)
-            </span>
-          </div>
-
-          <div className="text-[11px] text-slate-400 flex items-center gap-3">
-            <span>* Đơn vị tính: <strong>đồng</strong></span>
-            <span>• NT: <strong>Nghiệm thu</strong></span>
-            <span>• TT: <strong>Thanh toán</strong></span>
-            <span>• HĐ: <strong>Hợp đồng</strong></span>
+      {/* 3. NĂM THẺ KPI MÀU RỰC RỠ NẰM NGANG (THEO ĐÚNG HÌNH ẢNH 1) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* Thẻ 1: TỔNG GT HỢP ĐỒNG (Xanh dương) */}
+        <div className="bg-[#1d4ed8] text-white p-3 rounded-xl shadow-md space-y-1">
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-90 block">
+            TỔNG GT HỢP ĐỒNG
+          </span>
+          <div className="text-sm sm:text-base md:text-lg font-bold font-mono truncate" title={`${formatVnNumber(reportData.grandContract)} đ`}>
+            {formatVnNumber(reportData.grandContract)} đ
           </div>
         </div>
 
+        {/* Thẻ 2: TỔNG GT NGHIỆM THU (Xanh lá) */}
+        <div className="bg-[#059669] text-white p-3 rounded-xl shadow-md space-y-1">
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-90 block">
+            TỔNG GT NGHIỆM THU
+          </span>
+          <div className="text-sm sm:text-base md:text-lg font-bold font-mono truncate" title={`${formatVnNumber(reportData.grandInsp)} đ`}>
+            {formatVnNumber(reportData.grandInsp)} đ
+          </div>
+        </div>
+
+        {/* Thẻ 3: TỔNG GT THANH TOÁN (Xanh Cyan) */}
+        <div className="bg-[#0284c7] text-white p-3 rounded-xl shadow-md space-y-1">
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-90 block">
+            TỔNG GT THANH TOÁN
+          </span>
+          <div className="text-sm sm:text-base md:text-lg font-bold font-mono truncate" title={`${formatVnNumber(reportData.grandPay)} đ`}>
+            {formatVnNumber(reportData.grandPay)} đ
+          </div>
+        </div>
+
+        {/* Thẻ 4: TỶ LỆ NT/HĐ (Tím) */}
+        <div className="bg-[#9333ea] text-white p-3 rounded-xl shadow-md space-y-1">
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-90 block">
+            TỶ LỆ NT/HĐ
+          </span>
+          <div className="text-sm sm:text-base md:text-lg font-bold font-mono">
+            {reportData.grandRatioNtHd.toFixed(1).replace('.', ',')}%
+          </div>
+        </div>
+
+        {/* Thẻ 5: TỶ LỆ TT/NT (Cam / Vàng) */}
+        <div className="bg-[#d97706] text-white p-3 rounded-xl shadow-md space-y-1">
+          <span className="text-[10px] uppercase font-bold tracking-wider opacity-90 block">
+            TỶ LỆ TT/NT
+          </span>
+          <div className="text-sm sm:text-base md:text-lg font-bold font-mono">
+            {reportData.grandRatioTtNt.toFixed(1).replace('.', ',')}%
+          </div>
+        </div>
+      </div>
+
+      {/* 4. NÚT XUẤT WORD GÓC PHẢI (THEO ĐÚNG HÌNH ẢNH 1) */}
+      <div className="flex items-center justify-end gap-2 pt-0.5">
+        <button
+          onClick={handleExportWord}
+          className="px-3.5 py-1.5 rounded-lg bg-[#2563eb] hover:bg-blue-600 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-blue-900/40 transition-colors"
+        >
+          <FileText size={15} />
+          <span>Xuất Word</span>
+        </button>
+      </div>
+
+      {/* 5. BẢNG PHÂN CẤP DỰ ÁN & GÓI THẦU (HIERARCHY DATA GRID THEO ĐÚNG HÌNH ẢNH 1) */}
+      <div className="bg-[#0c1424] border border-[#232f4e] rounded-xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse table-data-grid text-xs">
-            <thead className="bg-[#0f172a] text-slate-200 uppercase font-semibold border-b border-[#232f4e] sticky top-0 z-10 select-none">
+          <table className="w-full text-left border-collapse text-xs">
+            {/* Header Columns */}
+            <thead className="bg-[#0f172a] text-slate-300 uppercase font-semibold border-b border-[#232f4e] select-none text-[11px]">
               <tr>
-                <th className="py-2.5 px-3 text-center w-12">STT</th>
-                <th className="py-2.5 px-3 w-40">Dự án</th>
-                <th className="py-2.5 px-3 min-w-[220px]">Tên gói thầu / Nội dung chi phí</th>
-                <th className="py-2.5 px-3 text-center w-28">Khoản mục</th>
-                <th className="py-2.5 px-3 w-48">Đơn vị thực hiện (Nhà thầu)</th>
-                <th className="py-2.5 px-3 text-right w-40">Giá trị hợp đồng (đồng)</th>
-                <th className="py-2.5 px-3 text-right w-40">Giá trị nghiệm thu (đồng)</th>
-                <th className="py-2.5 px-3 text-right w-40">Giá trị thanh toán (đồng)</th>
-                <th className="py-2.5 px-3 text-center w-24">Tỷ lệ NT/HĐ</th>
-                <th className="py-2.5 px-3 text-center w-24">Tỷ lệ TT/NT</th>
+                <th className="py-3 px-3 text-center w-12 border-r border-[#1e2a4a]/50">STT</th>
+                <th className="py-3 px-4 min-w-[280px] border-r border-[#1e2a4a]/50">DỰ ÁN / NỘI DUNG CHI PHÍ</th>
+                <th className="py-3 px-4 w-60 border-r border-[#1e2a4a]/50">ĐƠN VỊ THỰC HIỆN</th>
+                <th className="py-3 px-3 text-right w-36 border-r border-[#1e2a4a]/50">
+                  <div>GIÁ TRỊ HỢP ĐỒNG</div>
+                  <div className="text-[9px] font-normal text-slate-400 lowercase">(đồng)</div>
+                </th>
+                <th className="py-3 px-3 text-right w-36 border-r border-[#1e2a4a]/50">
+                  <div>GIÁ TRỊ NGHIỆM THU</div>
+                  <div className="text-[9px] font-normal text-slate-400 lowercase">(đồng)</div>
+                </th>
+                <th className="py-3 px-3 text-right w-36 border-r border-[#1e2a4a]/50">
+                  <div>GIÁ TRỊ THANH TOÁN</div>
+                  <div className="text-[9px] font-normal text-slate-400 lowercase">(đồng)</div>
+                </th>
+                <th className="py-3 px-2.5 text-center w-20 border-r border-[#1e2a4a]/50">
+                  <div>TỶ LỆ NT/HĐ</div>
+                  <div className="text-[9px] font-normal text-slate-400">(%)</div>
+                </th>
+                <th className="py-3 px-2.5 text-center w-20">
+                  <div>TỶ LỆ TT/NT</div>
+                  <div className="text-[9px] font-normal text-slate-400">(%)</div>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1b2b4c]/70 text-slate-200">
-              {reportRows.length === 0 ? (
+
+            {/* Body */}
+            <tbody className="divide-y divide-[#1e2a4a]/60">
+              {reportData.projects.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400 italic">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <HelpCircle size={28} className="text-slate-500 opacity-60" />
-                      <span>Không tìm thấy gói thầu nào phù hợp với bộ lọc hiện tại.</span>
-                      <span className="text-[11px] text-slate-500">
-                        Vui lòng kiểm tra lại bộ lọc Dự án, Khoảng thời gian hoặc Phân loại chi phí.
-                      </span>
-                    </div>
+                  <td colSpan={8} className="py-12 text-center text-slate-400 italic">
+                    Không tìm thấy dữ liệu nào phù hợp với bộ lọc hiện tại.
                   </td>
                 </tr>
               ) : (
-                reportRows.map((row, idx) => (
-                  <tr key={row.packageId} className="hover:bg-[#121e38] transition-colors">
-                    {/* STT */}
-                    <td className="py-2.5 px-3 text-center font-mono text-slate-400 font-semibold">
-                      {idx + 1}
-                    </td>
+                reportData.projects.map((proj) => {
+                  const isCollapsed = !!collapsedProjects[proj.projectId];
+                  return (
+                    <React.Fragment key={proj.projectId}>
+                      {/* DÒNG CẤP 1: DỰ ÁN (MÀU XANH DƯƠNG ĐẶC TRƯNG NHƯ HÌNH 1) */}
+                      <tr 
+                        onClick={() => toggleProjectCollapse(proj.projectId)}
+                        className="bg-[#0f1b33] hover:bg-[#142342] cursor-pointer transition-colors font-bold text-slate-100 border-b border-[#232f4e]"
+                      >
+                        {/* STT Dự án */}
+                        <td className="py-2.5 px-3 text-center font-mono text-slate-300 border-r border-[#1e2a4a]/50">
+                          {proj.projectStt}
+                        </td>
 
-                    {/* Dự án */}
-                    <td className="py-2.5 px-3">
-                      <div className="font-mono font-bold text-blue-300 text-[11px]">{row.projectCode}</div>
-                      <div className="text-[11px] text-slate-400 truncate max-w-[150px]" title={row.projectName}>
-                        {row.projectName}
-                      </div>
-                    </td>
+                        {/* Tên Dự án kèm icon mở rộng / thu gọn */}
+                        <td className="py-2.5 px-4 text-blue-400 border-r border-[#1e2a4a]/50">
+                          <div className="flex items-center gap-1.5">
+                            {isCollapsed ? (
+                              <ChevronRight size={15} className="text-blue-400 shrink-0" />
+                            ) : (
+                              <ChevronDown size={15} className="text-blue-400 shrink-0" />
+                            )}
+                            <span className="hover:underline">{proj.projectName}</span>
+                          </div>
+                        </td>
 
-                    {/* Tên gói thầu */}
-                    <td className="py-2.5 px-3 font-medium text-slate-100">
-                      <div>{row.content}</div>
-                      <div className="text-[10px] text-slate-400 font-mono flex items-center gap-2 mt-0.5">
-                        <span>Số HĐ: {row.contractNumber}</span>
-                        {row.appendixCount > 0 && (
-                          <span className="text-blue-400">({row.appendixCount} PLHĐ)</span>
-                        )}
-                      </div>
-                    </td>
+                        {/* Đơn vị thực hiện (Dự án để trống) */}
+                        <td className="py-2.5 px-4 text-slate-400 font-normal border-r border-[#1e2a4a]/50">
+                          —
+                        </td>
 
-                    {/* Khoản mục & Phân loại */}
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                        row.category === 'XD'
-                          ? 'bg-amber-950/60 text-amber-300 border-amber-700/60'
-                          : row.category === 'TVXD'
-                          ? 'bg-blue-950/60 text-blue-300 border-blue-700/60'
-                          : 'bg-slate-800 text-slate-300 border-slate-700'
-                      }`}>
-                        {row.category}
-                      </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        {row.costType}
-                      </span>
-                    </td>
+                        {/* Tổng HĐ Dự án */}
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-100 border-r border-[#1e2a4a]/50">
+                          {formatVnNumber(proj.contractTotal)}
+                        </td>
 
-                    {/* Đơn vị thực hiện (Nhà thầu) */}
-                    <td className="py-2.5 px-3 text-slate-300 text-[11px] leading-relaxed">
-                      {row.contractor}
-                    </td>
+                        {/* Tổng NT Dự án */}
+                        <td className="py-2.5 px-3 text-right font-mono text-emerald-400 border-r border-[#1e2a4a]/50">
+                          {formatVnNumber(proj.inspTotal)}
+                        </td>
 
-                    {/* Giá trị hợp đồng */}
-                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-100">
-                      {formatVnNumber(row.effectiveContractValue)}
-                    </td>
+                        {/* Tổng TT Dự án */}
+                        <td className="py-2.5 px-3 text-right font-mono text-cyan-400 border-r border-[#1e2a4a]/50">
+                          {formatVnNumber(proj.payTotal)}
+                        </td>
 
-                    {/* Giá trị nghiệm thu */}
-                    <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-400">
-                      {formatVnNumber(row.inspectionValue)}
-                      {row.inspCount > 0 && (
-                        <span className="text-[10px] text-slate-400 block font-normal">
-                          ({row.inspCount} đợt NT)
-                        </span>
-                      )}
-                    </td>
+                        {/* Tỷ lệ NT/HĐ Dự án */}
+                        <td className="py-2.5 px-2.5 text-center font-mono text-slate-200 border-r border-[#1e2a4a]/50">
+                          {proj.ratioNtHd.toFixed(1).replace('.', ',')}%
+                        </td>
 
-                    {/* Giá trị thanh toán */}
-                    <td className="py-2.5 px-3 text-right font-mono font-bold text-purple-400">
-                      {formatVnNumber(row.paymentValue)}
-                    </td>
+                        {/* Tỷ lệ TT/NT Dự án */}
+                        <td className="py-2.5 px-2.5 text-center font-mono text-slate-200">
+                          {proj.ratioTtNt.toFixed(1).replace('.', ',')}%
+                        </td>
+                      </tr>
 
-                    {/* Tỷ lệ NT/HĐ */}
-                    <td className="py-2.5 px-3 text-center font-mono font-bold">
-                      <span className={`px-2 py-0.5 rounded text-xs border ${
-                        row.ratioNtHd >= 100
-                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600'
-                          : row.ratioNtHd >= 50
-                          ? 'bg-blue-950/80 text-blue-300 border-blue-600'
-                          : row.ratioNtHd > 0
-                          ? 'bg-amber-950/80 text-amber-300 border-amber-600'
-                          : 'bg-slate-900 text-slate-500 border-slate-800'
-                      }`}>
-                        {row.ratioNtHd}%
-                      </span>
-                    </td>
+                      {/* DÒNG CẤP 2: CÁC GÓI THẦU / CHI PHÍ TRỰC THUỘC (HIỂN THỊ KHI KHÔNG BỊ COLLAPSED) */}
+                      {!isCollapsed &&
+                        proj.packages.map((pkg) => (
+                          <tr 
+                            key={pkg.packageId}
+                            className="bg-[#080d1a] hover:bg-[#0d162b] transition-colors text-slate-300"
+                          >
+                            {/* STT Gói thầu (1.1, 1.2...) */}
+                            <td className="py-2 px-3 text-center font-mono text-slate-400 border-r border-[#1e2a4a]/40">
+                              {pkg.subStt}
+                            </td>
 
-                    {/* Tỷ lệ TT/NT */}
-                    <td className="py-2.5 px-3 text-center font-mono font-bold">
-                      <span className={`px-2 py-0.5 rounded text-xs border ${
-                        row.ratioTtNt >= 90
-                          ? 'bg-purple-950/80 text-purple-300 border-purple-600'
-                          : row.ratioTtNt >= 50
-                          ? 'bg-indigo-950/80 text-indigo-300 border-indigo-600'
-                          : row.ratioTtNt > 0
-                          ? 'bg-slate-900 text-slate-300 border-slate-700'
-                          : 'bg-slate-900 text-slate-500 border-slate-800'
-                      }`}>
-                        {row.ratioTtNt}%
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                            {/* Tên Gói thầu / Nội dung chi phí (thụt đầu dòng nhẹ) */}
+                            <td className="py-2 px-4 pl-8 font-normal text-slate-200 border-r border-[#1e2a4a]/40">
+                              {pkg.content}
+                            </td>
+
+                            {/* Đơn vị thực hiện (Nhà thầu) */}
+                            <td className="py-2 px-4 text-slate-300 text-[11px] leading-relaxed border-r border-[#1e2a4a]/40">
+                              {pkg.contractor}
+                            </td>
+
+                            {/* Giá trị HĐ */}
+                            <td className="py-2 px-3 text-right font-mono text-slate-200 border-r border-[#1e2a4a]/40">
+                              {formatVnNumber(pkg.contractValue)}
+                            </td>
+
+                            {/* Giá trị NT */}
+                            <td className="py-2 px-3 text-right font-mono text-emerald-400 border-r border-[#1e2a4a]/40">
+                              {formatVnNumber(pkg.inspectionValue)}
+                            </td>
+
+                            {/* Giá trị TT */}
+                            <td className="py-2 px-3 text-right font-mono text-cyan-400 border-r border-[#1e2a4a]/40">
+                              {formatVnNumber(pkg.paymentValue)}
+                            </td>
+
+                            {/* Tỷ lệ NT/HĐ */}
+                            <td className="py-2 px-2.5 text-center font-mono border-r border-[#1e2a4a]/40">
+                              {pkg.ratioNtHd.toFixed(1).replace('.', ',')}%
+                            </td>
+
+                            {/* Tỷ lệ TT/NT */}
+                            <td className="py-2 px-2.5 text-center font-mono">
+                              {pkg.ratioTtNt.toFixed(1).replace('.', ',')}%
+                            </td>
+                          </tr>
+                        ))}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
-
-            {/* DÒNG TỔNG CỘNG TOÀN BỘ BÁO CÁO (FOOTER ROW) */}
-            {reportRows.length > 0 && (
-              <tfoot className="bg-[#091122] border-t-2 border-blue-500/60 font-bold text-xs sticky bottom-0 z-10 shadow-lg">
-                <tr>
-                  <td colSpan={5} className="py-3 px-4 text-slate-200 uppercase tracking-wider text-right">
-                    TỔNG CỘNG ({reportTotals.rowCount} GÓI THẦU):
-                  </td>
-                  {/* Tổng HĐ */}
-                  <td className="py-3 px-3 text-right font-mono text-sm text-cyan-300">
-                    {formatVnNumber(reportTotals.contractTotal)}
-                  </td>
-                  {/* Tổng NT */}
-                  <td className="py-3 px-3 text-right font-mono text-sm text-emerald-300">
-                    {formatVnNumber(reportTotals.inspTotal)}
-                  </td>
-                  {/* Tổng TT */}
-                  <td className="py-3 px-3 text-right font-mono text-sm text-purple-300">
-                    {formatVnNumber(reportTotals.payTotal)}
-                  </td>
-                  {/* Tỷ lệ NT/HĐ tổng */}
-                  <td className="py-3 px-3 text-center font-mono text-sm text-emerald-400 bg-emerald-950/40">
-                    {reportTotals.avgRatioNtHd}%
-                  </td>
-                  {/* Tỷ lệ TT/NT tổng */}
-                  <td className="py-3 px-3 text-center font-mono text-sm text-purple-400 bg-purple-950/40">
-                    {reportTotals.avgRatioTtNt}%
-                  </td>
-                </tr>
-              </tfoot>
-            )}
           </table>
         </div>
       </div>
