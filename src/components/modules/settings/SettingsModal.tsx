@@ -35,7 +35,11 @@ import {
   Layers
 } from 'lucide-react';
 import { BackupManagerModal } from './BackupManagerModal';
-import { getNetworkInfo } from '../../../services/storage/localBridgeService';
+import { 
+  getNetworkInfo, 
+  browseSaveLocationViaBridge, 
+  browseFolderLocationViaBridge 
+} from '../../../services/storage/localBridgeService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -112,6 +116,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setDiskFilePath(inputDiskPath.trim());
     setNotification({ type: 'success', message: 'Đã cập nhật đường dẫn lưu trữ ổ cứng.' });
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  // Mở hộp thoại Windows SaveFileDialog để người dùng chọn vị trí file mới
+  const handleBrowseSaveLocation = async () => {
+    const res = await browseSaveLocationViaBridge(inputDiskPath);
+    if (res.success && res.filePath) {
+      setInputDiskPath(res.filePath);
+      setDiskFilePath(res.filePath);
+      updateGoogleDrivePath(res.filePath);
+      setDrivePath(res.filePath);
+      // Ghi ngay dữ liệu vào file mới
+      const syncRes = await syncNowToDisk(res.filePath);
+      setNotification({
+        type: syncRes.success ? 'success' : 'error',
+        message: syncRes.success 
+          ? `Đã chọn và thiết lập vị trí lưu mới: ${res.filePath}`
+          : `Đã thiết lập vị trí: ${res.filePath} (${syncRes.message})`
+      });
+    } else if (!res.cancelled && res.message) {
+      setNotification({ type: 'error', message: res.message });
+    }
+    setTimeout(() => setNotification(null), 6000);
+  };
+
+  // Mở hộp thoại Windows FolderBrowserDialog để người dùng chọn thư mục
+  const handleBrowseFolderLocation = async () => {
+    const res = await browseFolderLocationViaBridge(inputDiskPath);
+    if (res.success && res.filePath) {
+      setInputDiskPath(res.filePath);
+      setDiskFilePath(res.filePath);
+      updateGoogleDrivePath(res.filePath);
+      setDrivePath(res.filePath);
+      // Ghi ngay dữ liệu vào file mới
+      const syncRes = await syncNowToDisk(res.filePath);
+      setNotification({
+        type: syncRes.success ? 'success' : 'error',
+        message: syncRes.success 
+          ? `Đã chọn thư mục và thiết lập lưu vào: ${res.filePath}`
+          : `Đã thiết lập vị trí: ${res.filePath} (${syncRes.message})`
+      });
+    } else if (!res.cancelled && res.message) {
+      setNotification({ type: 'error', message: res.message });
+    }
+    setTimeout(() => setNotification(null), 6000);
   };
 
   const handleSyncToDiskNow = async () => {
@@ -348,13 +396,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         className="w-full bg-[#060c18] border border-emerald-600/50 rounded-lg px-3 py-2 text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all placeholder:text-slate-600"
                       />
                     </div>
+                    <button
+                      type="button"
+                      onClick={handleBrowseSaveLocation}
+                      className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-950/50 transition-colors shrink-0 cursor-pointer"
+                      title="Mở hộp thoại Windows để tự do đặt tên và chọn nơi lưu file mới"
+                    >
+                      <Save size={14} />
+                      <span>Chọn vị trí mới (Hộp thoại Windows)...</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBrowseFolderLocation}
+                      className="px-3 py-2 rounded-lg bg-[#142542] hover:bg-[#1e3660] text-blue-300 border border-blue-500/50 font-medium text-xs flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                      title="Mở hộp thoại Windows để chọn thư mục lưu"
+                    >
+                      <FolderOpen size={14} />
+                      <span>Chọn thư mục...</span>
+                    </button>
                     <AppButton
                       size="sm"
                       variant="outline"
                       onClick={handleApplyDiskPath}
                       className="shrink-0 text-xs border-emerald-600/60 text-emerald-300 hover:bg-emerald-950/50"
                     >
-                      Áp dụng đường dẫn
+                      Áp dụng
                     </AppButton>
                   </div>
 

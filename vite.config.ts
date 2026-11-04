@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { exec } from 'child_process';
 
 /**
  * Local Storage Bridge Plugin:
@@ -200,6 +201,135 @@ function localStorageBridgePlugin(): Plugin {
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ success: false, message: err?.message }));
           }
+          return;
+        }
+
+        // 5. API Mở hộp thoại chọn vị trí lưu file mới (SaveFileDialog của Windows)
+        if (req.url === '/api/storage/browse-save' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', () => {
+            try {
+              let defaultPath = '';
+              try {
+                const parsed = JSON.parse(body || '{}');
+                defaultPath = parsed.defaultPath || '';
+              } catch (_) {}
+
+              let initialDir = '';
+              let defaultFileName = 'du_lieu_du_an.json';
+              if (defaultPath) {
+                try {
+                  const resolved = path.resolve(defaultPath);
+                  initialDir = path.dirname(resolved);
+                  defaultFileName = path.basename(resolved);
+                } catch (_) {}
+              }
+
+              const psScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$dlg = New-Object System.Windows.Forms.SaveFileDialog
+$dlg.Title = "Chọn nơi lưu file cơ sở dữ liệu ProjectM (.json)"
+$dlg.Filter = "File JSON CSDL (*.json)|*.json|Tất cả các file (*.*)|*.*"
+$dlg.FileName = "${defaultFileName}"
+${initialDir && fs.existsSync(initialDir) ? `$dlg.InitialDirectory = "${initialDir.replace(/\\/g, '\\\\')}"` : ''}
+$dlg.OverwritePrompt = $false
+$result = $dlg.ShowDialog()
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+  [Console]::Out.WriteLine($dlg.FileName)
+}
+`;
+              const b64 = Buffer.from(psScript, 'utf16le').toString('base64');
+              exec(
+                `powershell.exe -NoProfile -ExecutionPolicy Bypass -Sta -EncodedCommand ${b64}`,
+                { encoding: 'utf-8' },
+                (err, stdout) => {
+                  res.setHeader('Content-Type', 'application/json');
+                  if (err) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, message: `Lỗi mở hộp thoại Windows: ${err.message}` }));
+                    return;
+                  }
+                  const chosenPath = (stdout || '').trim();
+                  if (chosenPath) {
+                    res.end(JSON.stringify({ success: true, filePath: chosenPath }));
+                  } else {
+                    res.end(JSON.stringify({ success: false, cancelled: true, message: 'Người dùng đã hủy chọn.' }));
+                  }
+                }
+              );
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, message: err?.message }));
+            }
+          });
+          return;
+        }
+
+        // 6. API Mở hộp thoại chọn thư mục lưu (FolderBrowserDialog của Windows)
+        if (req.url === '/api/storage/browse-folder' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', () => {
+            try {
+              let defaultPath = '';
+              try {
+                const parsed = JSON.parse(body || '{}');
+                defaultPath = parsed.defaultPath || '';
+              } catch (_) {}
+
+              let initialDir = '';
+              if (defaultPath) {
+                try {
+                  const resolved = path.resolve(defaultPath);
+                  initialDir = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
+                } catch (_) {}
+              }
+
+              const psScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+$dlg.Description = "Chọn thư mục lưu cơ sở dữ liệu ProjectM"
+$dlg.ShowNewFolderButton = $true
+${initialDir && fs.existsSync(initialDir) ? `$dlg.SelectedPath = "${initialDir.replace(/\\/g, '\\\\')}"` : ''}
+$result = $dlg.ShowDialog()
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+  [Console]::Out.WriteLine($dlg.SelectedPath)
+}
+`;
+              const b64 = Buffer.from(psScript, 'utf16le').toString('base64');
+              exec(
+                `powershell.exe -NoProfile -ExecutionPolicy Bypass -Sta -EncodedCommand ${b64}`,
+                { encoding: 'utf-8' },
+                (err, stdout) => {
+                  res.setHeader('Content-Type', 'application/json');
+                  if (err) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, message: `Lỗi mở hộp thoại Windows: ${err.message}` }));
+                    return;
+                  }
+                  const chosenFolder = (stdout || '').trim();
+                  if (chosenFolder) {
+                    const fullPath = path.join(chosenFolder, 'du_lieu_du_an.json');
+                    res.end(JSON.stringify({ success: true, folderPath: chosenFolder, filePath: fullPath }));
+                  } else {
+                    res.end(JSON.stringify({ success: false, cancelled: true, message: 'Người dùng đã hủy chọn.' }));
+                  }
+                }
+              );
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, message: err?.message }));
+            }
+          });
           return;
         }
 

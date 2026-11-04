@@ -142,3 +142,58 @@ export async function requestPersistentStorage(): Promise<boolean> {
   }
   return false;
 }
+
+
+/**
+ * Mở hộp thoại SaveFileDialog của Windows thông qua Local Bridge
+ * Cho phép người dùng duyệt thư mục, đặt tên file và chọn vị trí lưu mới
+ */
+export async function browseSaveLocationViaBridge(
+  defaultPath?: string
+): Promise<{ success: boolean; filePath?: string; message?: string; cancelled?: boolean }> {
+  try {
+    const res = await fetch('/api/storage/browse-save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ defaultPath }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Không thể mở hộp thoại Windows: ${err?.message || 'Lỗi mạng nội bộ'}`,
+    };
+  }
+}
+
+/**
+ * Mở hộp thoại FolderBrowserDialog của Windows thông qua Local Bridge
+ * Cho phép người dùng click chọn trực tiếp một thư mục trên ổ cứng (C:, D:, E:...)
+ */
+export async function browseFolderLocationViaBridge(
+  defaultPath?: string
+): Promise<{
+  success: boolean;
+  folderPath?: string;
+  filePath?: string;
+  message?: string;
+  cancelled?: boolean;
+}> {
+  try {
+    const res = await fetch('/api/storage/browse-folder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ defaultPath }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Không thể mở hộp thoại chọn thư mục: ${err?.message || 'Lỗi mạng nội bộ'}`,
+    };
+  }
+}
