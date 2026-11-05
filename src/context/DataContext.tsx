@@ -912,6 +912,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             legalDocs: parsed.legalDocs || {},
             companies: parsed.companies || [],
             planTasks: parsed.planTasks || {},
+            costBreakdowns: parsed.costBreakdowns || {},
+            contractAppendices: parsed.contractAppendices || {},
           };
 
           setDatabase(validDatabase);

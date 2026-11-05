@@ -2,16 +2,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, 
   ChevronDown, 
-  ChevronUp, 
   ChevronRight,
   FileText, 
-  Download, 
-  Printer, 
   X, 
   Check, 
-  Calendar,
-  Building2,
-  FolderOpen
+  Building2
 } from 'lucide-react';
 import { formatVnNumber } from '../../../utils/numberUtils';
 import { parseCustomVnDate } from '../../../utils/dateUtils';
@@ -55,6 +50,7 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isMobileDropdown = useIsMobile(640);
 
   // Focus ô tìm kiếm mà không làm cuộn khung nhìn ngang/dọc
   useEffect(() => {
@@ -72,6 +68,65 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({
     : selectedCount === 0
     ? '0 mục đã chọn'
     : `${selectedCount} mục đã chọn`;
+
+  // Nội dung bên trong popup (dùng chung cho cả mobile overlay và desktop dropdown)
+  const popupContent = (
+    <>
+      {/* Tiêu đề popup trên mobile */}
+      {isMobileDropdown && (
+        <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-[#232f4e]">
+          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">{label}</span>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Search box in popup */}
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={searchTerm}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Tìm kiếm..."
+          className="w-full bg-[#060c18] border border-[#1e2c4c] focus:border-blue-500 rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-slate-100 placeholder:italic placeholder:text-slate-500 focus:outline-none"
+        />
+        <Search size={13} className="absolute left-2 top-2.5 text-slate-500" />
+        {searchTerm && (
+          <button
+            type="button"
+            onClick={() => onSearchChange('')}
+            className="absolute right-2 top-2 text-slate-400 hover:text-white"
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+
+      {/* Select all option */}
+      <div
+        onClick={onSelectAll}
+        className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#142038] cursor-pointer text-xs font-semibold text-blue-300 border-b border-[#1b2b4c] pb-1.5"
+      >
+        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+          isAllSelected ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-500 bg-[#060c18]'
+        }`}>
+          {isAllSelected && <Check size={12} strokeWidth={3} />}
+        </div>
+        <span>Chọn tất cả</span>
+      </div>
+
+      {/* Options list */}
+      <div className="max-h-56 overflow-y-auto space-y-0.5 pr-1 custom-scrollbar text-xs">
+        {children}
+      </div>
+    </>
+  );
 
   return (
     <div className="relative flex-1 min-w-[130px]" ref={containerRef}>
@@ -102,53 +157,29 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({
         </div>
       </div>
 
-      {/* POPUP MENU - Mở hướng vào trong (right-0 cho các cột bên phải), không làm tràn màn hình */}
+      {/* POPUP MENU */}
       {isOpen && (
-        <div 
-          className={`absolute top-full mt-1.5 ${popupWidth} max-w-[90vw] bg-[#0c1424] border border-[#232f4e] rounded-xl shadow-2xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 ${
-            align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'
-          }`}
-        >
-          {/* Search box in popup */}
-          <div className="relative">
-            <input
-              ref={inputRef}
-              type="text"
-              value={searchTerm}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Tìm kiếm..."
-              className="w-full bg-[#060c18] border border-[#1e2c4c] focus:border-blue-500 rounded-lg pl-7 pr-2.5 py-1 text-xs text-slate-100 placeholder:italic placeholder:text-slate-500 focus:outline-none"
-            />
-            <Search size={13} className="absolute left-2 top-2 text-slate-500" />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => onSearchChange('')}
-                className="absolute right-2 top-1.5 text-slate-400 hover:text-white"
-              >
-                <X size={12} />
-              </button>
-            )}
-          </div>
-
-          {/* Select all option */}
-          <div
-            onClick={onSelectAll}
-            className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#142038] cursor-pointer text-xs font-semibold text-blue-300 border-b border-[#1b2b4c] pb-1.5"
-          >
-            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
-              isAllSelected ? 'bg-blue-600 border-blue-500 text-white' : 'border-slate-500 bg-[#060c18]'
-            }`}>
-              {isAllSelected && <Check size={12} strokeWidth={3} />}
+        isMobileDropdown ? (
+          /* ===== MOBILE: Fixed overlay giữa màn hình ===== */
+          <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onToggle}>
+            <div className="absolute inset-0 bg-black/50" />
+            <div 
+              className="relative w-full max-w-md bg-[#0c1424] border border-[#232f4e] rounded-t-2xl shadow-2xl p-3 space-y-1.5 animate-in slide-in-from-bottom duration-200 mb-0 pb-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {popupContent}
             </div>
-            <span>Chọn tất cả</span>
           </div>
-
-          {/* Options list */}
-          <div className="max-h-56 overflow-y-auto space-y-0.5 pr-1 custom-scrollbar text-xs">
-            {children}
+        ) : (
+          /* ===== DESKTOP: Absolute dropdown ===== */
+          <div 
+            className={`absolute top-full mt-1.5 ${popupWidth} max-w-[90vw] bg-[#0c1424] border border-[#232f4e] rounded-xl shadow-2xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 ${
+              align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'
+            }`}
+          >
+            {popupContent}
           </div>
-        </div>
+        )
       )}
     </div>
   );

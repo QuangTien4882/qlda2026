@@ -82,8 +82,8 @@ export async function saveDatabaseToIdb(dbData: AppDatabase): Promise<boolean> {
       const store = tx.objectStore(STORE_MAIN);
       const req = store.put(dbData, 'current');
 
-      req.onsuccess = () => resolve(true);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => { db.close(); resolve(true); };
+      req.onerror = () => { db.close(); reject(req.error); };
     });
   } catch (error) {
     console.error('Lỗi khi ghi dữ liệu vào IndexedDB:', error);
@@ -103,9 +103,10 @@ export async function loadDatabaseFromIdb(): Promise<AppDatabase | null> {
       const req = store.get('current');
 
       req.onsuccess = () => {
+        db.close();
         resolve((req.result as AppDatabase) || null);
       };
-      req.onerror = () => reject(req.error);
+      req.onerror = () => { db.close(); reject(req.error); };
     });
   } catch (error) {
     console.error('Lỗi khi tải dữ liệu từ IndexedDB:', error);
@@ -124,8 +125,8 @@ export async function saveFileBlobToIdb(record: FileBlobRecord): Promise<boolean
       const store = tx.objectStore(STORE_FILES);
       const req = store.put(record);
 
-      req.onsuccess = () => resolve(true);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => { db.close(); resolve(true); };
+      req.onerror = () => { db.close(); reject(req.error); };
     });
   } catch (error) {
     console.error('Lỗi khi lưu tệp đính kèm vào IndexedDB:', error);
@@ -144,8 +145,8 @@ export async function loadFileBlobFromIdb(fileId: string): Promise<FileBlobRecor
       const store = tx.objectStore(STORE_FILES);
       const req = store.get(fileId);
 
-      req.onsuccess = () => resolve((req.result as FileBlobRecord) || null);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => { db.close(); resolve((req.result as FileBlobRecord) || null); };
+      req.onerror = () => { db.close(); reject(req.error); };
     });
   } catch (error) {
     console.error('Lỗi khi đọc tệp từ IndexedDB:', error);
@@ -164,8 +165,8 @@ export async function saveBackupSnapshotToIdb(snapshot: BackupSnapshotItem): Pro
       const store = tx.objectStore(STORE_BACKUPS);
       const req = store.put(snapshot);
 
-      req.onsuccess = () => resolve(true);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => { db.close(); resolve(true); };
+      req.onerror = () => { db.close(); reject(req.error); };
     });
   } catch (error) {
     console.error('Lỗi khi lưu snapshot sao lưu vào IndexedDB:', error);
@@ -185,11 +186,12 @@ export async function getBackupSnapshotsFromIdb(): Promise<BackupSnapshotItem[]>
       const req = store.getAll();
 
       req.onsuccess = () => {
+        db.close();
         const list = (req.result as BackupSnapshotItem[]) || [];
         list.sort((a, b) => b.timestamp - a.timestamp);
         resolve(list);
       };
-      req.onerror = () => reject(req.error);
+      req.onerror = () => { db.close(); reject(req.error); };
     });
   } catch (error) {
     console.error('Lỗi khi lấy danh sách bản sao lưu từ IndexedDB:', error);
@@ -208,8 +210,8 @@ export async function deleteBackupSnapshotFromIdb(backupId: string): Promise<boo
       const store = tx.objectStore(STORE_BACKUPS);
       const req = store.delete(backupId);
 
-      req.onsuccess = () => resolve(true);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => { db.close(); resolve(true); };
+      req.onerror = () => { db.close(); reject(req.error); };
     });
   } catch (error) {
     console.error('Lỗi khi xóa bản sao lưu trong IndexedDB:', error);
