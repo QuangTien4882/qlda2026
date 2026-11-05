@@ -18,6 +18,7 @@ import { parseCustomVnDate } from '../../../utils/dateUtils';
 import { useSettings } from '../../../context/SettingsContext';
 import { useData } from '../../../context/DataContext';
 import { VnDateInput } from '../../common/VnDateInput';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 interface FilterDropdownProps {
   label: string;
@@ -162,6 +163,7 @@ export const ReportsView: React.FC = () => {
     getEffectiveContractValue,
     getContractAppendicesByPackage
   } = useData();
+  const isMobile = useIsMobile(1024);
 
   useEffect(() => {
     setHeaderTitle('BÁO CÁO NGHIỆM THU DỰ ÁN');
@@ -860,7 +862,115 @@ export const ReportsView: React.FC = () => {
         </button>
       </div>
 
-      {/* 5. BẢNG PHÂN CẤP DỰ ÁN & GÓI THẦU (HIERARCHY DATA GRID THEO ĐÚNG HÌNH ẢNH 1) */}
+      {/* 5. BẢNG PHÂN CẤP DỰ ÁN & GÓI THẦU */}
+      {isMobile ? (
+        /* ==================== MOBILE CARD VIEW (<1024px) ==================== */
+        <div className="space-y-3">
+          {reportData.projects.length === 0 ? (
+            <div className="bg-[#0c1424] border border-[#232f4e] rounded-xl p-8 text-center text-slate-400 italic text-sm">
+              Không tìm thấy dữ liệu nào phù hợp với bộ lọc hiện tại.
+            </div>
+          ) : (
+            reportData.projects.map((proj) => {
+              const isCollapsed = !!collapsedProjects[proj.projectId];
+              return (
+                <div key={proj.projectId} className="bg-[#0c1424] border border-[#232f4e] rounded-xl overflow-hidden shadow-lg">
+                  {/* Header dự án - bấm để mở rộng/thu gọn */}
+                  <div 
+                    onClick={() => toggleProjectCollapse(proj.projectId)}
+                    className="flex items-start gap-2 p-3 bg-[#0f1b33] cursor-pointer active:bg-[#142342] transition-colors"
+                  >
+                    <span className="shrink-0 bg-blue-900/60 text-blue-300 text-[10px] font-mono font-bold w-6 h-6 flex items-center justify-center rounded-md border border-blue-700/40 mt-0.5">
+                      {proj.projectStt}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 text-sm font-bold text-blue-400 leading-snug">
+                        {isCollapsed ? (
+                          <ChevronRight size={14} className="shrink-0" />
+                        ) : (
+                          <ChevronDown size={14} className="shrink-0" />
+                        )}
+                        <span className="break-words">{proj.projectName}</span>
+                      </div>
+                      {/* Tóm tắt số liệu dự án */}
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 text-[11px]">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">GT HĐ:</span>
+                          <span className="text-slate-100 font-mono font-semibold">{formatVnNumber(proj.contractTotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">GT NT:</span>
+                          <span className="text-emerald-400 font-mono font-semibold">{formatVnNumber(proj.inspTotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">GT TT:</span>
+                          <span className="text-cyan-400 font-mono font-semibold">{formatVnNumber(proj.payTotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">NT/HĐ:</span>
+                          <span className="text-purple-400 font-mono font-semibold">{proj.ratioNtHd.toFixed(1).replace('.', ',')}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Các gói thầu con */}
+                  {!isCollapsed && proj.packages.length > 0 && (
+                    <div className="divide-y divide-[#1e2a4a]/40">
+                      {proj.packages.map((pkg) => (
+                        <div key={pkg.packageId} className="p-3 bg-[#080d1a] space-y-1.5">
+                          {/* Dòng 1: STT + Tên gói thầu */}
+                          <div className="flex items-start gap-2">
+                            <span className="shrink-0 text-[10px] font-mono text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded mt-0.5">
+                              {pkg.subStt}
+                            </span>
+                            <span className="text-xs font-medium text-slate-200 break-words leading-snug">
+                              {pkg.content}
+                            </span>
+                          </div>
+
+                          {/* Dòng 2: Nhà thầu */}
+                          {pkg.contractor && pkg.contractor !== '—' && (
+                            <div className="flex items-start gap-1.5 pl-1 text-[11px]">
+                              <Building2 size={11} className="text-slate-500 shrink-0 mt-0.5" />
+                              <span className="text-slate-400 break-words">{pkg.contractor}</span>
+                            </div>
+                          )}
+
+                          {/* Dòng 3: Số liệu dạng grid 2 cột */}
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] pl-1">
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">GT HĐ:</span>
+                              <span className="text-slate-200 font-mono">{formatVnNumber(pkg.contractValue)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">GT NT:</span>
+                              <span className="text-emerald-400 font-mono">{formatVnNumber(pkg.inspectionValue)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">GT TT:</span>
+                              <span className="text-cyan-400 font-mono">{formatVnNumber(pkg.paymentValue)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">NT/HĐ:</span>
+                              <span className="text-slate-300 font-mono">{pkg.ratioNtHd.toFixed(1).replace('.', ',')}%</span>
+                            </div>
+                            <div className="flex justify-between col-span-2 sm:col-span-1">
+                              <span className="text-slate-500">TT/NT:</span>
+                              <span className="text-slate-300 font-mono">{pkg.ratioTtNt.toFixed(1).replace('.', ',')}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : (
+      /* ==================== DESKTOP TABLE VIEW (>=1024px) ==================== */
       <div className="bg-[#0c1424] border border-[#232f4e] rounded-xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
@@ -906,17 +1016,14 @@ export const ReportsView: React.FC = () => {
                   const isCollapsed = !!collapsedProjects[proj.projectId];
                   return (
                     <React.Fragment key={proj.projectId}>
-                      {/* DÒNG CẤP 1: DỰ ÁN (MÀU XANH DƯƠNG ĐẶC TRƯNG NHƯ HÌNH 1) */}
+                      {/* DÒNG CẤP 1: DỰ ÁN */}
                       <tr 
                         onClick={() => toggleProjectCollapse(proj.projectId)}
                         className="bg-[#0f1b33] hover:bg-[#142342] cursor-pointer transition-colors font-bold text-slate-100 border-b border-[#232f4e]"
                       >
-                        {/* STT Dự án */}
                         <td className="py-2.5 px-3 text-center font-mono text-slate-300 border-r border-[#1e2a4a]/50">
                           {proj.projectStt}
                         </td>
-
-                        {/* Tên Dự án kèm icon mở rộng / thu gọn */}
                         <td className="py-2.5 px-4 text-blue-400 border-r border-[#1e2a4a]/50">
                           <div className="flex items-center gap-1.5">
                             {isCollapsed ? (
@@ -927,81 +1034,52 @@ export const ReportsView: React.FC = () => {
                             <span className="hover:underline">{proj.projectName}</span>
                           </div>
                         </td>
-
-                        {/* Đơn vị thực hiện (Dự án để trống) */}
-                        <td className="py-2.5 px-4 text-slate-400 font-normal border-r border-[#1e2a4a]/50">
-                          —
-                        </td>
-
-                        {/* Tổng HĐ Dự án */}
+                        <td className="py-2.5 px-4 text-slate-400 font-normal border-r border-[#1e2a4a]/50">—</td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-100 border-r border-[#1e2a4a]/50">
                           {formatVnNumber(proj.contractTotal)}
                         </td>
-
-                        {/* Tổng NT Dự án */}
                         <td className="py-2.5 px-3 text-right font-mono text-emerald-400 border-r border-[#1e2a4a]/50">
                           {formatVnNumber(proj.inspTotal)}
                         </td>
-
-                        {/* Tổng TT Dự án */}
                         <td className="py-2.5 px-3 text-right font-mono text-cyan-400 border-r border-[#1e2a4a]/50">
                           {formatVnNumber(proj.payTotal)}
                         </td>
-
-                        {/* Tỷ lệ NT/HĐ Dự án */}
                         <td className="py-2.5 px-2.5 text-center font-mono text-slate-200 border-r border-[#1e2a4a]/50">
                           {proj.ratioNtHd.toFixed(1).replace('.', ',')}%
                         </td>
-
-                        {/* Tỷ lệ TT/NT Dự án */}
                         <td className="py-2.5 px-2.5 text-center font-mono text-slate-200">
                           {proj.ratioTtNt.toFixed(1).replace('.', ',')}%
                         </td>
                       </tr>
 
-                      {/* DÒNG CẤP 2: CÁC GÓI THẦU / CHI PHÍ TRỰC THUỘC (HIỂN THỊ KHI KHÔNG BỊ COLLAPSED) */}
+                      {/* DÒNG CẤP 2: CÁC GÓI THẦU */}
                       {!isCollapsed &&
                         proj.packages.map((pkg) => (
                           <tr 
                             key={pkg.packageId}
                             className="bg-[#080d1a] hover:bg-[#0d162b] transition-colors text-slate-300"
                           >
-                            {/* STT Gói thầu (1.1, 1.2...) */}
                             <td className="py-2 px-3 text-center font-mono text-slate-400 border-r border-[#1e2a4a]/40">
                               {pkg.subStt}
                             </td>
-
-                            {/* Tên Gói thầu / Nội dung chi phí (thụt đầu dòng nhẹ) */}
                             <td className="py-2 px-4 pl-8 font-normal text-slate-200 border-r border-[#1e2a4a]/40">
                               {pkg.content}
                             </td>
-
-                            {/* Đơn vị thực hiện (Nhà thầu) */}
                             <td className="py-2 px-4 text-slate-300 text-[11px] leading-relaxed border-r border-[#1e2a4a]/40">
                               {pkg.contractor}
                             </td>
-
-                            {/* Giá trị HĐ */}
                             <td className="py-2 px-3 text-right font-mono text-slate-200 border-r border-[#1e2a4a]/40">
                               {formatVnNumber(pkg.contractValue)}
                             </td>
-
-                            {/* Giá trị NT */}
                             <td className="py-2 px-3 text-right font-mono text-emerald-400 border-r border-[#1e2a4a]/40">
                               {formatVnNumber(pkg.inspectionValue)}
                             </td>
-
-                            {/* Giá trị TT */}
                             <td className="py-2 px-3 text-right font-mono text-cyan-400 border-r border-[#1e2a4a]/40">
                               {formatVnNumber(pkg.paymentValue)}
                             </td>
-
-                            {/* Tỷ lệ NT/HĐ */}
                             <td className="py-2 px-2.5 text-center font-mono border-r border-[#1e2a4a]/40">
                               {pkg.ratioNtHd.toFixed(1).replace('.', ',')}%
                             </td>
-
-                            {/* Tỷ lệ TT/NT */}
                             <td className="py-2 px-2.5 text-center font-mono">
                               {pkg.ratioTtNt.toFixed(1).replace('.', ',')}%
                             </td>
@@ -1015,6 +1093,7 @@ export const ReportsView: React.FC = () => {
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 };

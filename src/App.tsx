@@ -54,7 +54,7 @@ export const AppContent: React.FC = () => {
         />
 
         {/* Right Main Content */}
-        <main className="flex-1 min-w-0 min-h-0 h-full flex flex-col overflow-hidden p-3 md:p-5 bg-[#090d16]">
+        <main className="flex-1 min-w-0 min-h-0 h-full flex flex-col overflow-hidden p-3 pb-[68px] md:p-5 md:pb-[68px] lg:pb-5 bg-[#090d16]">
           <div className="flex-1 min-h-0 flex flex-col w-full h-full">
             {currentMenu === 'projects' && <ProjectsModuleView />}
             {currentMenu === 'reports' && <ReportsView />}

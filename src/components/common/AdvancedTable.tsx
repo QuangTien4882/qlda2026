@@ -11,6 +11,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { AppButton } from './AppButton';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 export interface AdvancedColumn<T> {
   id: string;
@@ -24,6 +25,10 @@ export interface AdvancedColumn<T> {
   canResize?: boolean;     // Cho phép kéo dãn hay không (mặc định true)
   render?: (item: T, index: number) => React.ReactNode;
   searchValue?: (item: T) => string; // Chuỗi dùng để tìm kiếm
+  /** Hiển thị cột này trên thẻ mobile (mặc định true cho 4 cột đầu tiên) */
+  showOnMobileCard?: boolean;
+  /** Nếu true, giá trị cột này sẽ là tiêu đề chính của thẻ mobile */
+  mobileCardTitle?: boolean;
 }
 
 interface AdvancedTableProps<T> {
@@ -254,6 +259,23 @@ export function AdvancedTable<T>({
     }
   };
 
+  // Phát hiện thiết bị di động để chuyển sang giao diện thẻ (card)
+  const isMobile = useIsMobile(1024);
+
+  // Xác định các cột hiển thị trên mobile card
+  const mobileVisibleColumns = useMemo(() => {
+    // Nếu cột nào có showOnMobileCard=true thì ưu tiên
+    const explicitCols = initialColumns.filter((c) => c.showOnMobileCard === true);
+    if (explicitCols.length > 0) return explicitCols;
+    // Mặc định hiển thị tất cả các cột (trừ STT)
+    return initialColumns.filter((c) => c.id !== 'stt');
+  }, [initialColumns]);
+
+  // Tìm cột tiêu đề chính cho mobile card
+  const mobileTitleColumn = useMemo(() => {
+    return initialColumns.find((c) => c.mobileCardTitle) || initialColumns.find((c) => c.id === 'name') || initialColumns[1] || initialColumns[0];
+  }, [initialColumns]);
+
   return (
     <div className={`flex flex-col flex-1 min-h-0 h-full overflow-hidden ${className}`}>
       {/* Thanh công cụ gọn gàng: Số bản ghi + Nút cuộn ngang + Tìm kiếm Out-of-order + Nút Thêm mới */}
@@ -339,12 +361,94 @@ export function AdvancedTable<T>({
         </div>
       </div>
 
-      {/* Bảng Dữ Liệu Nâng Cao: 
-          - Tự động chiếm trọn chiều cao còn lại (flex-1 min-h-0)
-          - Thanh cuộn ngang luôn ghim cố định ở đáy bảng ngay tầm nhìn
-          - Cột ghim lũy tiến (Freeze Panes) chuẩn Excel
-          - Khi resize cột, chữ tự động xuống dòng (whitespace-normal break-words)
-          - Kẻ khung dòng & cột sắc nét, chống hoàn toàn rò rỉ khi cuộn dọc và cuộn ngang */}
+      {/* ==================== MOBILE CARD VIEW (< 1024px) ==================== */}
+      {isMobile ? (
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pb-2">
+          {filteredData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+              <Search size={24} className="text-slate-500 mb-2" />
+              <span className="text-sm">{emptyMessage}</span>
+            </div>
+          ) : (
+            filteredData.map((item, index) => (
+              <div
+                key={keyExtractor(item, index)}
+                onClick={() => onRowClick && onRowClick(item)}
+                className={`bg-[#0d1527] border border-[#232f4e] rounded-xl p-3 space-y-2 transition-colors ${
+                  onRowClick ? 'cursor-pointer active:bg-[#162544]' : ''
+                }`}
+              >
+                {/* Dòng đầu: STT + Tiêu đề chính + Nút thao tác */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    {/* STT badge nhỏ */}
+                    {initialColumns.find((c) => c.id === 'stt') && (
+                      <span className="shrink-0 bg-slate-700/60 text-slate-300 text-[10px] font-mono font-bold w-6 h-6 flex items-center justify-center rounded-md border border-slate-600/50">
+                        {(() => {
+                          const sttCol = initialColumns.find((c) => c.id === 'stt');
+                          if (sttCol?.render) return sttCol.render(item, index);
+                          return String((item as Record<string, unknown>)['stt'] ?? (index + 1));
+                        })()}
+                      </span>
+                    )}
+                    {/* Tiêu đề chính */}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-slate-100 leading-snug break-words">
+                        {mobileTitleColumn.render
+                          ? mobileTitleColumn.render(item, index)
+                          : String((item as Record<string, unknown>)[mobileTitleColumn.id] ?? '')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nút Sửa / Xóa */}
+                  {showActionsColumn && (onEdit || onDelete) && (
+                    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {onEdit && (
+                        <button
+                          onClick={() => onEdit(item)}
+                          className="p-1.5 text-blue-400 hover:text-white hover:bg-blue-600 rounded-lg transition-colors"
+                          title="Sửa"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          onClick={() => onDelete(item)}
+                          className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-600 rounded-lg transition-colors"
+                          title="Xóa"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Các trường dữ liệu còn lại dạng label: value */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  {mobileVisibleColumns
+                    .filter((col) => col.id !== mobileTitleColumn.id && col.id !== 'stt')
+                    .map((col) => (
+                      <div key={col.id} className="flex items-start gap-1.5 py-0.5">
+                        <span className="text-slate-500 shrink-0 min-w-[70px]">
+                          {col.title}{col.unit ? ` ${col.unit}` : ''}:
+                        </span>
+                        <span className="text-slate-200 break-words min-w-0">
+                          {col.render
+                            ? col.render(item, index)
+                            : String((item as Record<string, unknown>)[col.id] ?? '—')}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+      /* ==================== DESKTOP TABLE VIEW (>= 1024px) ==================== */
       <div 
         ref={tableScrollRef}
         className="flex-1 min-h-0 w-full overflow-auto rounded-lg border border-slate-600 bg-[#080e1a] shadow-xl relative"
@@ -539,6 +643,7 @@ export function AdvancedTable<T>({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
