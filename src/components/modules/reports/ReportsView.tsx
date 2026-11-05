@@ -216,7 +216,7 @@ export const ReportsView: React.FC = () => {
   const [costContentSearch, setCostContentSearch] = useState('');
 
   // 4. KMCP (Khoản mục chi phí: XD, TVXD, K, GPMB)
-  const [selectedKmcps, setSelectedKmcps] = useState<string[]>(['XD', 'TVXD', 'K', 'GPMB']);
+  const [selectedKmcps, setSelectedKmcps] = useState<string[]>(['XD', 'TVXD', 'K']);
   const [kmcpSearch, setKmcpSearch] = useState('');
 
   // 5. LOẠI CP (Loại chi phí: Chi phí, Phí/Lệ phí)
@@ -275,7 +275,6 @@ export const ReportsView: React.FC = () => {
     { id: 'XD', label: 'Xây dựng' },
     { id: 'TVXD', label: 'TVXD' },
     { id: 'K', label: 'K' },
-    { id: 'GPMB', label: 'GPMB' },
   ], []);
 
   // Các tùy chọn LOẠI CP chuẩn
@@ -352,12 +351,8 @@ export const ReportsView: React.FC = () => {
           return;
         }
 
-        // 3. Lọc theo KMCP (XD, TVXD, K, GPMB)
-        const matchCategory = cost.category === 'XD' ? 'XD' 
-          : cost.category === 'TVXD' ? 'TVXD' 
-          : cost.category === 'K' ? 'K' 
-          : 'GPMB';
-        if (!selectedKmcps.includes(matchCategory)) {
+        // 3. Lọc theo KMCP (XD, TVXD, K)
+        if (!selectedKmcps.includes(cost.category)) {
           return;
         }
 
@@ -732,7 +727,7 @@ export const ReportsView: React.FC = () => {
             label="KMCP"
             selectedCount={selectedKmcps.length}
             totalCount={kmcpOptions.length}
-            displayText={selectedKmcps.length === kmcpOptions.length ? '4 mục...' : `${selectedKmcps.length} mục...`}
+            displayText={selectedKmcps.length === kmcpOptions.length ? '3 mục...' : `${selectedKmcps.length} mục...`}
             isOpen={activeDropdown === 'kmcp'}
             onToggle={() => setActiveDropdown(activeDropdown === 'kmcp' ? null : 'kmcp')}
             onClear={(e) => {

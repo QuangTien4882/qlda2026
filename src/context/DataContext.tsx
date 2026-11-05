@@ -308,9 +308,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [calculateStorage, diskFilePath]);
 
-  // Lưu tự động mỗi khi database thay đổi
+  // Debounce timer ref để tránh ghi đĩa quá nhiều khi database thay đổi liên tục
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Lưu tự động mỗi khi database thay đổi (debounce 800ms để giảm tải ghi đĩa)
   useEffect(() => {
-    persistDatabase(database);
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = setTimeout(() => {
+      persistDatabase(database);
+    }, 800);
+
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+      }
+    };
   }, [database, persistDatabase]);
 
   // Khởi động hệ thống: Bảo vệ lưu trữ bền vững, nạp từ ổ cứng / IndexedDB & kích hoạt Auto-backup hàng ngày
