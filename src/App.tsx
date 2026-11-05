@@ -1,17 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { MainMenuType } from './types/project';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
 import { MobileNav } from './components/layout/MobileNav';
 import { ProjectsModuleView } from './components/modules/projects/ProjectsModuleView';
 import { ReportsView } from './components/modules/reports/ReportsView';
-import { DraftingView } from './components/modules/drafting/DraftingView';
 import { CompaniesView } from './components/modules/companies/CompaniesView';
 import { SettingsModal } from './components/modules/settings/SettingsModal';
 import { BackupManagerModal } from './components/modules/settings/BackupManagerModal';
 import { ShortcutsGuideModal } from './components/common/ShortcutsGuideModal';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { Save, CheckCircle2 } from 'lucide-react';
+import { Save, CheckCircle2, Loader2 } from 'lucide-react';
+
+// Lazy load module soạn thảo văn bản (giảm initial bundle ~200KB)
+const LazyDraftingView = React.lazy(() =>
+  import('./components/modules/drafting/DraftingView').then(m => ({ default: m.DraftingView }))
+);
 
 export const AppContent: React.FC = () => {
   const [currentMenu, setCurrentMenu] = useState<MainMenuType>('projects');
@@ -58,7 +62,16 @@ export const AppContent: React.FC = () => {
           <div className="flex-1 min-h-0 flex flex-col w-full h-full">
             {currentMenu === 'projects' && <ProjectsModuleView />}
             {currentMenu === 'reports' && <ReportsView />}
-            {currentMenu === 'drafting' && <DraftingView />}
+            {currentMenu === 'drafting' && (
+              <Suspense fallback={
+                <div className="flex-1 flex items-center justify-center text-slate-400 gap-3">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">Đang tải module Soạn thảo văn bản...</span>
+                </div>
+              }>
+                <LazyDraftingView />
+              </Suspense>
+            )}
             {currentMenu === 'companies' && <CompaniesView />}
           </div>
         </main>

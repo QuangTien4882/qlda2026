@@ -11,6 +11,7 @@ import {
   CostBreakdownItem,
   ContractAppendixItem,
 } from './project';
+import { DraftingDatabase } from './drafting';
 
 export interface DatabaseMetadata {
   version: string;
@@ -33,5 +34,6 @@ export interface AppDatabase {
   costBreakdowns?: Record<string, CostBreakdownItem[]>;
   contractAppendices?: Record<string, ContractAppendixItem[]>;
   tasks?: Record<string, ProjectTask[]>;
+  drafting?: DraftingDatabase;
 }
 

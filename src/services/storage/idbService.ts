@@ -1,11 +1,13 @@
 import { AppDatabase } from '../../types/database';
+import { DraftingDatabase } from '../../types/drafting';
 
 const DB_NAME = 'ProjectM_OfflineDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const STORE_MAIN = 'app_database';
 export const STORE_FILES = 'file_blobs';
 export const STORE_BACKUPS = 'database_backups';
+export const STORE_DRAFTING = 'drafting_database';
 
 export interface BackupSnapshotItem {
   id: string; // "backup_2026-11-03_205000"
@@ -58,6 +60,11 @@ export function openIndexedDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_BACKUPS)) {
         const backupStore = db.createObjectStore(STORE_BACKUPS, { keyPath: 'id' });
         backupStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // 4. Store lưu dữ liệu module soạn thảo văn bản (templates, drafts)
+      if (!db.objectStoreNames.contains(STORE_DRAFTING)) {
+        db.createObjectStore(STORE_DRAFTING);
       }
     };
 
@@ -273,3 +280,54 @@ export async function autoMigrateFromLocalStorageIfEmpty(storageKey: string): Pr
   }
 }
 
+
+// ==================== DRAFTING MODULE STORAGE ====================
+
+const DEFAULT_DRAFTING_DB: DraftingDatabase = {
+  templateFolders: [],
+  docTemplates: [],
+  draftDocuments: [],
+};
+
+/**
+ * Lưu toàn bộ dữ liệu module soạn thảo văn bản vào IndexedDB
+ */
+export async function saveDraftingToIdb(data: DraftingDatabase): Promise<boolean> {
+  try {
+    const db = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_DRAFTING, 'readwrite');
+      const store = tx.objectStore(STORE_DRAFTING);
+      const req = store.put(data, 'current');
+
+      req.onsuccess = () => { db.close(); resolve(true); };
+      req.onerror = () => { db.close(); reject(req.error); };
+    });
+  } catch (error) {
+    console.error('Lỗi khi ghi dữ liệu soạn thảo vào IndexedDB:', error);
+    return false;
+  }
+}
+
+/**
+ * Tải toàn bộ dữ liệu module soạn thảo từ IndexedDB
+ */
+export async function loadDraftingFromIdb(): Promise<DraftingDatabase> {
+  try {
+    const db = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_DRAFTING, 'readonly');
+      const store = tx.objectStore(STORE_DRAFTING);
+      const req = store.get('current');
+
+      req.onsuccess = () => {
+        db.close();
+        resolve((req.result as DraftingDatabase) || { ...DEFAULT_DRAFTING_DB });
+      };
+      req.onerror = () => { db.close(); reject(req.error); };
+    });
+  } catch (error) {
+    console.error('Lỗi khi tải dữ liệu soạn thảo từ IndexedDB:', error);
+    return { ...DEFAULT_DRAFTING_DB };
+  }
+}

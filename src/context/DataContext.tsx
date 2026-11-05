@@ -21,7 +21,9 @@ import {
   deleteBackupSnapshotFromIdb, 
   pruneOldBackups, 
   autoMigrateFromLocalStorageIfEmpty, 
-  BackupSnapshotItem 
+  BackupSnapshotItem,
+  loadDraftingFromIdb,
+  saveDraftingToIdb
 } from '../services/storage/idbService';
 import { 
   writeDatabaseToFileViaBridge, 
@@ -114,7 +116,7 @@ interface DataContextType {
   deleteCompany: (id: string) => void;
 
   // Sao lưu / Phục hồi / File Google Drive
-  exportDatabaseToJson: (filename?: string) => void;
+  exportDatabaseToJson: (filename?: string) => Promise<void>;
   importDatabaseFromJson: (file: File) => Promise<{ success: boolean; message: string }>;
   resetDatabaseToDefaults: () => void;
   selectSaveDirectory: () => Promise<{ success: boolean; message: string; dirName?: string }>;
@@ -865,8 +867,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // ==================== SAO LƯU & XUẤT FILE JSON ====================
-  const exportDatabaseToJson = (filename = 'du_lieu_du_an.json') => {
+  const exportDatabaseToJson = async (filename = 'du_lieu_du_an.json') => {
     try {
+      // Lấy dữ liệu soạn thảo văn bản từ IndexedDB
+      const draftingData = await loadDraftingFromIdb();
+
       const exportData: AppDatabase = {
         ...database,
         metadata: {
@@ -875,6 +880,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lastSavedAt: new Date().toISOString(),
           totalProjects: database.projects.length,
         },
+        drafting: draftingData,
       };
 
       const jsonStr = JSON.stringify(exportData, null, 2);
@@ -896,7 +902,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const importDatabaseFromJson = (file: File): Promise<{ success: boolean; message: string }> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const content = e.target?.result as string;
           const parsed = JSON.parse(content);
@@ -931,6 +937,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
 
           setDatabase(validDatabase);
+
+          // Nạp dữ liệu soạn thảo văn bản (nếu có) vào IndexedDB
+          if (parsed.drafting) {
+            await saveDraftingToIdb(parsed.drafting);
+          }
+
           resolve({
             success: true,
             message: `Nạp thành công ${validDatabase.projects.length} dự án từ file ${file.name}.`,

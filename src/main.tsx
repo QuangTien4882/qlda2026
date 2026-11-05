@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { AppContent } from './App';
 import { SettingsProvider } from './context/SettingsContext';
 import { DataProvider } from './context/DataContext';
+import { DraftingProvider } from './context/DraftingContext';
 import './index.css';
 
 // Register PWA Service Worker
@@ -18,7 +19,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <SettingsProvider>
       <DataProvider>
-        <AppContent />
+        <DraftingProvider>
+          <AppContent />
+        </DraftingProvider>
       </DataProvider>
     </SettingsProvider>
   </React.StrictMode>
