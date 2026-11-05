@@ -16,27 +16,28 @@ body,
 }
 
 /* Ép buộc tất cả các phần tử kế thừa font family được người dùng lựa chọn */
+/* Loại trừ .docx-wrapper để docx-preview giữ font gốc của file Word */
 html,
 body,
 #root,
-table,
-th,
-td,
+table:not(.docx-wrapper table),
+th:not(.docx-wrapper th),
+td:not(.docx-wrapper td),
 input,
 select,
 textarea,
 button,
-span,
-div,
-p,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-a,
-label {
+span:not(.docx-wrapper span),
+div:not(.docx-wrapper div):not(.docx-wrapper),
+p:not(.docx-wrapper p),
+h1:not(.docx-wrapper h1),
+h2:not(.docx-wrapper h2),
+h3:not(.docx-wrapper h3),
+h4:not(.docx-wrapper h4),
+h5:not(.docx-wrapper h5),
+h6:not(.docx-wrapper h6),
+a:not(.docx-wrapper a),
+label:not(.docx-wrapper label) {
   font-family: var(--app-font-family) !important;
 }
 
@@ -123,4 +124,76 @@ select option[value=""] {
 
 * {
   box-sizing: border-box;
+}
+
+/* ========================================================================
+   DOCX-PREVIEW: Khôi phục style gốc của tài liệu Word bên trong vùng preview.
+   Tailwind preflight + font-family !important của app sẽ phá vỡ định dạng docx-preview,
+   nên cần "un-reset" toàn bộ bên trong .docx-wrapper.
+   ======================================================================== */
+
+/* 1. Reset font: cho phép docx-preview sử dụng font gốc của file Word */
+.docx-wrapper,
+.docx-wrapper *,
+.docx-wrapper span,
+.docx-wrapper div,
+.docx-wrapper p,
+.docx-wrapper h1,
+.docx-wrapper h2,
+.docx-wrapper h3,
+.docx-wrapper h4,
+.docx-wrapper h5,
+.docx-wrapper h6,
+.docx-wrapper table,
+.docx-wrapper th,
+.docx-wrapper td,
+.docx-wrapper a,
+.docx-wrapper label {
+  font-family: inherit !important;
+}
+
+/* 2. Reset font-size: docx-preview tự quản lý cỡ chữ qua inline styles */
+.docx-wrapper {
+  font-size: initial !important;
+  line-height: normal !important;
+  color: #000 !important;
+  background: #fff !important;
+}
+
+/* 3. Cho phép bôi đen text để gán biến */
+.docx-wrapper,
+.docx-wrapper * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text;
+}
+
+/* 4. Khôi phục default styles cho các element bị Tailwind preflight reset */
+.docx-wrapper p {
+  margin: 0;
+}
+
+.docx-wrapper table {
+  border-collapse: collapse;
+}
+
+.docx-wrapper td,
+.docx-wrapper th {
+  padding: 0;
+  border: none;
+}
+
+/* 5. Đảm bảo section pages có nền trắng và hiển thị đúng */
+.docx-wrapper > section.docx {
+  background: #fff !important;
+  color: #000 !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  margin-bottom: 16px;
+}
+
+/* 6. Highlight biến đã gán (override lại để nổi bật trên nền trắng) */
+.docx-wrapper span[data-var-id] {
+  cursor: pointer !important;
+  position: relative;
+  z-index: 1;
 }

@@ -18,6 +18,20 @@ import { VariableForm } from './components/VariableForm';
 import { DraftSaveLoadPanel } from './components/DraftSaveLoadPanel';
 import { JointVenturePicker, JV_STT_WORDS } from './components/JointVenturePicker';
 
+/** Options chung cho docx-preview renderAsync */
+const DOCX_PREVIEW_OPTIONS = {
+  className: 'docx-wrapper',      // CSS class cho wrapper div (dùng để un-reset Tailwind)
+  ignoreWidth: false,               // Giữ nguyên độ rộng trang Word
+  ignoreHeight: false,              // Giữ nguyên độ cao trang Word
+  ignoreFonts: false,               // Giữ nguyên font chữ gốc
+  breakPages: true,                 // Ngắt trang giống Word
+  useBase64URL: true,               // Embed hình ảnh bằng Base64
+  renderHeaders: true,              // Render header
+  renderFooters: true,              // Render footer
+  renderFootnotes: true,            // Render footnote
+  renderEndnotes: true,             // Render endnote
+};
+
 // ==================== MAIN COMPONENT ====================
 
 export const DraftingView: React.FC = () => {
@@ -74,13 +88,7 @@ export const DraftingView: React.FC = () => {
       setIsRendering(true);
       try {
         const arrayBuffer = await file.arrayBuffer();
-        await renderAsync(arrayBuffer, previewContainerRef.current, undefined, {
-          ignoreWidth: false,
-          ignoreHeight: false,
-          ignoreFonts: false,
-          breakPages: true,
-          useBase64URL: true,
-        });
+        await renderAsync(arrayBuffer, previewContainerRef.current, undefined, DOCX_PREVIEW_OPTIONS);
       } catch (err) {
         console.error('Lỗi render docx preview:', err);
       }
@@ -189,9 +197,7 @@ export const DraftingView: React.FC = () => {
           previewContainerRef.current.innerHTML = tpl.previewHtml;
         } else if (tpl.fileBase64) {
           const buf = base64ToArrayBuffer(tpl.fileBase64);
-          await renderAsync(buf, previewContainerRef.current, undefined, {
-            ignoreWidth: false, ignoreHeight: false, ignoreFonts: false, breakPages: true, useBase64URL: true,
-          });
+          await renderAsync(buf, previewContainerRef.current, undefined, DOCX_PREVIEW_OPTIONS);
         }
       }
     }, 100);
@@ -211,9 +217,7 @@ export const DraftingView: React.FC = () => {
       setIsRendering(true);
       try {
         const buf = base64ToArrayBuffer(template.fileBase64);
-        await renderAsync(buf, draftPreviewContainerRef.current, undefined, {
-          ignoreWidth: false, ignoreHeight: false, ignoreFonts: false, breakPages: true, useBase64URL: true,
-        });
+        await renderAsync(buf, draftPreviewContainerRef.current, undefined, DOCX_PREVIEW_OPTIONS);
         draftPristineHtmlRef.current = draftPreviewContainerRef.current.innerHTML;
       } catch (err) {
         console.error('Lỗi render draft preview:', err);
@@ -827,7 +831,7 @@ export const DraftingView: React.FC = () => {
                   <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Soạn mẫu biến</span>
                   <span className="text-[9px] text-amber-400 font-bold bg-amber-400/10 px-2 py-1 rounded-full">Bôi đen chữ bên dưới để gán biến</span>
                 </div>
-                <div className="flex-1 overflow-y-auto bg-[#e5e7eb] flex justify-center py-6">
+                <div className="flex-1 overflow-y-auto bg-[#b0b3ba] flex justify-center py-6 px-4">
                   {isRendering && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-10">
                       <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
@@ -836,8 +840,7 @@ export const DraftingView: React.FC = () => {
                   <div
                     ref={previewContainerRef}
                     onMouseUp={handleMouseUpOnPreview}
-                    className="w-full max-w-4xl mx-auto bg-white shadow-2xl"
-                    style={{ minHeight: '29.7cm', padding: '2cm' }}
+                    className="w-full max-w-4xl mx-auto"
                   />
                 </div>
               </div>
@@ -960,7 +963,7 @@ export const DraftingView: React.FC = () => {
               <div className="bg-[#0c1424] px-4 py-2 border-b border-[#232f4e] shrink-0">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center block">Xem trước</span>
               </div>
-              <div className="flex-1 overflow-y-auto bg-[#53565e] flex justify-center py-6">
+              <div className="flex-1 overflow-y-auto bg-[#b0b3ba] flex justify-center py-6 px-4">
                 {!selectedTemplateId ? (
                   <div className="flex items-center justify-center h-full text-slate-400 text-xs font-medium">
                     Chọn mẫu văn bản bên trái để xem trước
@@ -974,8 +977,7 @@ export const DraftingView: React.FC = () => {
                     )}
                     <div
                       ref={draftPreviewContainerRef}
-                      className="w-full max-w-4xl mx-auto bg-white shadow-2xl relative"
-                      style={{ minHeight: '29.7cm', padding: '2cm', paddingBottom: '5cm' }}
+                      className="w-full max-w-4xl mx-auto relative"
                     />
                   </>
                 )}
