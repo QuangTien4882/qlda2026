@@ -351,5 +351,15 @@ export default defineConfig({
     port: 3000,
     host: true,
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'docx-vendor': ['docxtemplater', 'pizzip', 'docx-preview', 'file-saver'],
+        },
+      },
+    },
+  },
 });
 

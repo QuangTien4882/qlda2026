@@ -1,220 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { FileEdit, FolderPlus, Upload, Trash2, FileText, Search, ChevronDown, Save, Download, Plus, Eye, X, Settings2, Loader2 } from 'lucide-react';
+import { FileEdit, Upload, Trash2, FileText, Search, Save, Download, Plus, Eye, X, Loader2 } from 'lucide-react';
 import { useSettings } from '../../../context/SettingsContext';
 import { useData } from '../../../context/DataContext';
 import { useDrafting } from '../../../context/DraftingContext';
-import { DocTemplate, TemplateVariable, TemplateFolder, JVMember } from '../../../types/drafting';
-import { generateId, arrayBufferToBase64, base64ToArrayBuffer, numberToWordsVN, formatVNDateString, encodeXML, findPlainTextInXml } from '../../../utils/docxUtils';
+import { DocTemplate, TemplateVariable, JVMember, DraftDocument } from '../../../types/drafting';
+import { generateId, arrayBufferToBase64, base64ToArrayBuffer, numberToWordsVN, formatVNDateString, encodeXML } from '../../../utils/docxUtils';
 import { formatVnNumber, parseVnNumber } from '../../../utils/numberUtils';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { renderAsync } from 'docx-preview';
 import { saveAs } from 'file-saver';
 
-// ==================== SUB-COMPONENTS ====================
-
-/** Sidebar thư mục template */
-const TemplateFolderSidebar: React.FC<{
-  folders: TemplateFolder[];
-  selectedFolderId: string | null;
-  onSelectFolder: (id: string | null) => void;
-  onAddFolder: () => void;
-  onDeleteFolder: (id: string) => void;
-}> = ({ folders, selectedFolderId, onSelectFolder, onAddFolder, onDeleteFolder }) => (
-  <div className="space-y-1">
-    <div className="flex items-center justify-between mb-2">
-      <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Thư mục</span>
-      <button onClick={onAddFolder} className="text-blue-400 hover:text-blue-300 p-1 rounded hover:bg-blue-500/10" title="Tạo thư mục mới">
-        <FolderPlus size={14} />
-      </button>
-    </div>
-    <button
-      onClick={() => onSelectFolder(null)}
-      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${selectedFolderId === null ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
-    >
-      📁 Tất cả mẫu
-    </button>
-    {folders.map(f => (
-      <div key={f.id} className="group flex items-center">
-        <button
-          onClick={() => onSelectFolder(f.id)}
-          className={`flex-1 text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors truncate ${selectedFolderId === f.id ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
-        >
-          📂 {f.name}
-        </button>
-        <button
-          onClick={() => onDeleteFolder(f.id)}
-          className="opacity-0 group-hover:opacity-100 p-1 text-red-500/60 hover:text-red-400 hover:bg-red-500/10 rounded transition-all shrink-0"
-          title="Xóa thư mục"
-        >
-          <Trash2 size={12} />
-        </button>
-      </div>
-    ))}
-  </div>
-);
-
-/** Variable Config Dialog - Cấu hình biến khi admin bôi đen text */
-const VariableConfigDialog: React.FC<{
-  isOpen: boolean;
-  selectedText: string;
-  onSave: (variable: Partial<TemplateVariable>) => void;
-  onClose: () => void;
-}> = ({ isOpen, selectedText, onSave, onClose }) => {
-  const [name, setName] = useState('');
-  const [label, setLabel] = useState('');
-  const [type, setType] = useState<TemplateVariable['type']>('text');
-  const [optionsStr, setOptionsStr] = useState('');
-  const [sourceVariableId, setSourceVariableId] = useState('');
-  const [dependentConfig, setDependentConfig] = useState('');
-  const [formulaExpression, setFormulaExpression] = useState('');
-  const [jvField, setJvField] = useState('');
-  const [paragraphIndent, setParagraphIndent] = useState('');
-
-  useEffect(() => {
-    if (isOpen) {
-      setName('');
-      setLabel(selectedText.substring(0, 50));
-      setType('text');
-      setOptionsStr('');
-      setSourceVariableId('');
-      setDependentConfig('');
-      setFormulaExpression('');
-      setJvField('');
-      setParagraphIndent('');
-    }
-  }, [isOpen, selectedText]);
-
-  if (!isOpen) return null;
-
-  const handleSave = () => {
-    if (!name.trim()) return;
-    onSave({
-      name: name.trim(),
-      label: label.trim() || name.trim(),
-      type,
-      originalText: selectedText,
-      value: '',
-      optionsStr: optionsStr || undefined,
-      sourceVariableId: sourceVariableId || undefined,
-      dependentConfig: dependentConfig || undefined,
-      formulaExpression: formulaExpression || undefined,
-      jvField: jvField || undefined,
-      paragraphIndent: paragraphIndent || undefined,
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-[#0c1424] border border-[#232f4e] rounded-xl shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto p-5" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Settings2 size={16} className="text-blue-400" /> Cấu hình biến mới
-          </h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300"><X size={18} /></button>
-        </div>
-
-        <div className="mb-3 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-          <p className="text-[10px] text-amber-400 uppercase font-bold mb-1">Text đã chọn</p>
-          <p className="text-xs text-amber-200 font-medium break-words">"{selectedText}"</p>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Tên biến (không dấu, duy nhất) *</label>
-            <input value={name} onChange={e => setName(e.target.value.replace(/\s/g, '_'))} placeholder="vd: ten_du_an" className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" autoFocus />
-          </div>
-          <div>
-            <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Nhãn hiển thị</label>
-            <input value={label} onChange={e => setLabel(e.target.value)} placeholder="vd: Tên dự án" className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
-          </div>
-          <div>
-            <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Loại biến</label>
-            <select value={type} onChange={e => setType(e.target.value as TemplateVariable['type'])} className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500">
-              <option value="text">Văn bản ngắn</option>
-              <option value="long_text">Đoạn văn bản (nhiều dòng)</option>
-              <option value="number">Số (định dạng VN)</option>
-              <option value="number_to_words">Đọc số thành chữ</option>
-              <option value="date">Ngày tháng</option>
-              <option value="formula">Công thức tính toán</option>
-              <option value="dropdown">Danh sách chọn</option>
-              <option value="dependent_dropdown">Danh sách phụ thuộc</option>
-              <option value="project">Chọn dự án</option>
-              <option value="contractor">Chọn nhà thầu</option>
-              <option value="project_dependent">Tự động từ dự án</option>
-              <option value="contractor_dependent">Tự động từ nhà thầu</option>
-              <option value="joint_venture">Liên danh</option>
-              <option value="table">Bảng động</option>
-            </select>
-          </div>
-
-          {/* Conditional fields based on type */}
-          {type === 'dropdown' && (
-            <div>
-              <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Danh sách lựa chọn (phân cách bằng dấu phẩy)</label>
-              <input value={optionsStr} onChange={e => setOptionsStr(e.target.value)} placeholder="Lựa chọn A, Lựa chọn B, Lựa chọn C" className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
-            </div>
-          )}
-          {(type === 'number_to_words' || type === 'dependent_dropdown' || type === 'project_dependent' || type === 'contractor_dependent') && (
-            <div>
-              <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">ID biến nguồn</label>
-              <input value={sourceVariableId} onChange={e => setSourceVariableId(e.target.value)} placeholder="ID biến cha" className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
-            </div>
-          )}
-          {(type === 'dependent_dropdown' || type === 'project_dependent' || type === 'contractor_dependent') && (
-            <div>
-              <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Cấu hình phụ thuộc</label>
-              <input value={dependentConfig} onChange={e => setDependentConfig(e.target.value)} placeholder="vd: location hoặc GiaTri1:Con1,Con2" className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
-            </div>
-          )}
-          {type === 'formula' && (
-            <div>
-              <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Biểu thức công thức</label>
-              <input value={formulaExpression} onChange={e => setFormulaExpression(e.target.value)} placeholder="{{bien_a}} + {{bien_b}}" className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
-            </div>
-          )}
-          {type === 'joint_venture' && (
-            <div>
-              <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">JV Field mapping</label>
-              <select value={jvField} onChange={e => setJvField(e.target.value)} className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500">
-                <option value="">-- Chọn field --</option>
-                <option value="company_name">Tên công ty</option>
-                <option value="representative">Người đại diện</option>
-                <option value="position">Chức vụ</option>
-                <option value="address">Địa chỉ</option>
-                <option value="tax_code">MST</option>
-                <option value="bank_account">Số TK</option>
-                <option value="bank_name">Ngân hàng</option>
-                <option value="phone">Điện thoại</option>
-                <option value="email">Email</option>
-                <option value="_custom_text">Tuỳ chỉnh (text)</option>
-                <option value="_custom_number">Tuỳ chỉnh (số)</option>
-                <option value="_custom_date">Tuỳ chỉnh (ngày)</option>
-              </select>
-            </div>
-          )}
-          {type === 'long_text' && (
-            <div>
-              <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Thụt đầu dòng (cm)</label>
-              <input value={paragraphIndent} onChange={e => setParagraphIndent(e.target.value)} placeholder="0" className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
-            </div>
-          )}
-          {type === 'table' && (
-            <div>
-              <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Cột bảng (phân cách phẩy, col:type)</label>
-              <input value={optionsStr} onChange={e => setOptionsStr(e.target.value)} placeholder="stt, noi_dung, gia_tri:number" className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose} className="flex-1 px-3 py-2 rounded-lg border border-[#232f4e] text-xs font-medium text-slate-400 hover:bg-slate-800 transition-colors">Hủy</button>
-          <button onClick={handleSave} disabled={!name.trim()} className="flex-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Tạo biến</button>
-        </div>
-      </div>
-    </div>
-  );
-};
+// Sub-components
+import { TemplateFolderSidebar } from './components/TemplateFolderSidebar';
+import { VariableConfigDialog } from './components/VariableConfigDialog';
+import { VariableForm } from './components/VariableForm';
+import { DraftSaveLoadPanel } from './components/DraftSaveLoadPanel';
+import { JointVenturePicker, JV_STT_WORDS } from './components/JointVenturePicker';
 
 // ==================== MAIN COMPONENT ====================
 
@@ -432,7 +234,29 @@ export const DraftingView: React.FC = () => {
     handleDraftVariableChange(varName, numStr);
   };
 
-  // Auto-compute derived variables (number_to_words, formula, project_dependent, contractor_dependent)
+  // ==================== DRAFT SAVE/LOAD ====================
+  const handleSaveDraftDocument = (draft: DraftDocument) => {
+    saveDraft(draft);
+  };
+
+  const handleLoadDraft = (draft: DraftDocument) => {
+    // Restore variables
+    setDraftVariables(draft.variables.map(v => ({ ...v })));
+    // Restore JV members
+    setJvMembers(draft.jvMembers ? draft.jvMembers.map(m => ({ ...m })) : []);
+    // Restore project
+    if (draft.projectId) setSelectedProjectId(draft.projectId);
+    // Make sure template is selected and preview is rendered
+    if (draft.templateId !== selectedTemplateId) {
+      handleSelectTemplate(draft.templateId).then(() => {
+        // After re-render, apply saved variable values
+        setDraftVariables(draft.variables.map(v => ({ ...v })));
+        if (draft.jvMembers) setJvMembers(draft.jvMembers.map(m => ({ ...m })));
+      });
+    }
+  };
+
+  // ==================== AUTO-COMPUTE DERIVED VARIABLES ====================
   useEffect(() => {
     let updated = false;
     const newDraft = [...draftVariables];
@@ -510,7 +334,7 @@ export const DraftingView: React.FC = () => {
     if (updated) setDraftVariables(newDraft);
   }, [draftVariables, selectedProjectId, projects, projectDetails, companies]);
 
-  // Update live preview when draft variables change
+  // ==================== UPDATE LIVE PREVIEW ====================
   useEffect(() => {
     if (!draftPreviewContainerRef.current || !selectedTemplateId) return;
 
@@ -521,13 +345,29 @@ export const DraftingView: React.FC = () => {
 
     // Update each variable span
     draftVariables.forEach(v => {
+      if (v.type === 'joint_venture') return; // handled by JV block cloning
+
       const elements = draftPreviewContainerRef.current?.querySelectorAll(`span[data-var-id="${v.id}"]`);
       elements?.forEach(el => {
         let displayValue = v.value;
         if (v.type === 'number' && v.value) displayValue = formatVnNumber(v.value);
         else if (v.type === 'date' && v.value) displayValue = formatVNDateString(v.value);
 
-        if (displayValue) {
+        if (v.type === 'long_text' && displayValue) {
+          // Long text: render each line as a div with optional indent
+          (el as HTMLElement).innerHTML = '';
+          const lines = displayValue.split('\n');
+          lines.forEach(line => {
+            const p = document.createElement('div');
+            p.textContent = line;
+            p.style.margin = '0';
+            if (v.paragraphIndent && Number(v.paragraphIndent) > 0) {
+              p.style.textIndent = `${v.paragraphIndent}cm`;
+            }
+            el.appendChild(p);
+          });
+          (el as HTMLElement).className = 'bg-green-100 px-1 rounded text-green-800 border-b border-green-300';
+        } else if (displayValue) {
           el.textContent = displayValue;
           (el as HTMLElement).className = 'bg-green-100 px-1 rounded text-green-800 border-b border-green-300';
         } else {
@@ -536,7 +376,124 @@ export const DraftingView: React.FC = () => {
         }
       });
     });
-  }, [draftVariables, selectedTemplateId]);
+
+    // ==================== JV BLOCK CLONING IN PREVIEW ====================
+    if (jvMembers.length > 0) {
+      const container = draftPreviewContainerRef.current;
+      if (!container) return;
+
+      // Remove old JV clones
+      container.querySelectorAll('[data-jv-clone]').forEach(el => el.remove());
+
+      // Find [BAT_DAU_LIEN_DANH] and [KET_THUC_LIEN_DANH] marker elements
+      const findMarkerElement = (markerText: string): HTMLElement | null => {
+        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+        let node: Node | null;
+        while ((node = walker.nextNode())) {
+          const normalized = (node.textContent || '').replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+          if (normalized.includes(markerText.replace(/[\s\u200B-\u200D\uFEFF]/g, ''))) {
+            // Walk up to block-level parent (P, DIV, LI, TR)
+            let el = node.parentElement;
+            while (el && el !== container && !['P', 'DIV', 'LI', 'TR'].includes(el.tagName)) {
+              el = el.parentElement;
+            }
+            return el || (node.parentElement as HTMLElement);
+          }
+        }
+        return null;
+      };
+
+      const startMarker = findMarkerElement('[BAT_DAU_LIEN_DANH]');
+      const endMarker = findMarkerElement('[KET_THUC_LIEN_DANH]');
+
+      if (startMarker && endMarker) {
+        // Find common parent
+        let commonParent = startMarker.parentElement;
+        while (commonParent && !commonParent.contains(endMarker)) {
+          commonParent = commonParent.parentElement;
+        }
+
+        if (commonParent) {
+          // Collect template elements between markers
+          const templateElements: HTMLElement[] = [];
+          let collecting = false;
+          const children = Array.from(commonParent.children) as HTMLElement[];
+
+          for (const child of children) {
+            if (child === startMarker || child.contains(startMarker)) {
+              collecting = true;
+              child.style.display = 'none'; // Hide start marker
+              child.setAttribute('data-jv-marker', 'start');
+              continue;
+            }
+            if (child === endMarker || child.contains(endMarker)) {
+              collecting = false;
+              child.style.display = 'none'; // Hide end marker
+              child.setAttribute('data-jv-marker', 'end');
+              continue;
+            }
+            if (collecting) {
+              templateElements.push(child);
+              child.style.display = 'none'; // Hide template
+              child.setAttribute('data-jv-template', 'true');
+            }
+          }
+
+          // Clone for each JV member
+          const insertBefore = endMarker;
+          jvMembers.forEach((member, memberIdx) => {
+            // Separator between members
+            if (memberIdx > 0) {
+              const sep = document.createElement('div');
+              sep.setAttribute('data-jv-clone', 'separator');
+              sep.style.cssText = 'border-top: 1px dashed #f97316; margin: 8px 0; opacity: 0.5;';
+              commonParent!.insertBefore(sep, insertBefore);
+            }
+
+            templateElements.forEach(templateEl => {
+              const clone = templateEl.cloneNode(true) as HTMLElement;
+              clone.style.display = '';
+              clone.setAttribute('data-jv-clone', `member-${memberIdx}`);
+              clone.removeAttribute('data-jv-template');
+
+              // Replace JV virtual vars in text
+              const replaceInHtml = (html: string) => {
+                let result = html;
+                result = result.replace(/\[JV_STT\]/g, String(memberIdx + 1));
+                result = result.replace(/\[JV_TEN_STT\]/g, JV_STT_WORDS[memberIdx] || `thứ ${memberIdx + 1}`);
+                return result;
+              };
+              clone.innerHTML = replaceInHtml(clone.innerHTML);
+
+              // Replace JV variable spans
+              clone.querySelectorAll('span[data-var-id]').forEach(span => {
+                const varId = span.getAttribute('data-var-id');
+                const matchingVar = draftVariables.find(v => v.id === varId && v.type === 'joint_venture');
+                if (matchingVar && matchingVar.jvField) {
+                  let fieldValue = '';
+                  const field = matchingVar.jvField;
+                  if (field.startsWith('_custom_')) {
+                    fieldValue = member._custom_fields?.[matchingVar.id] || '';
+                  } else {
+                    fieldValue = String(member[field] || '');
+                  }
+                  if (fieldValue) {
+                    span.textContent = fieldValue;
+                    (span as HTMLElement).className = 'bg-purple-100 px-1 rounded text-purple-800 border-b border-purple-300';
+                  } else {
+                    span.textContent = `{{${matchingVar.name}}}`;
+                    (span as HTMLElement).className = 'bg-yellow-200 px-1 rounded text-blue-800 border-b border-yellow-400';
+                  }
+                }
+              });
+
+              commonParent!.insertBefore(clone, insertBefore);
+            });
+          });
+        }
+      }
+    }
+  }, [draftVariables, selectedTemplateId, jvMembers]);
 
   // ==================== EXPORT WORD ====================
   const handleExport = async () => {
@@ -562,11 +519,6 @@ export const DraftingView: React.FC = () => {
         if (v.type === 'number') displayValueRaw = formatVnNumber(v.value || '');
         else if (v.type === 'date') displayValueRaw = formatVNDateString(v.value || '');
 
-        if (v.type !== 'long_text') {
-          displayValueRaw = displayValueRaw.replace(/[\n\r]+/g, ' ');
-        }
-
-        const displayValue = encodeXML(displayValueRaw);
         const targetStr = encodeXML(v.originalText).replace(/[\s\u00A0\n]+/g, ' ').trim();
         if (!targetStr) return;
 
@@ -598,7 +550,49 @@ export const DraftingView: React.FC = () => {
         const actualEnd = matchedIndices[matchedIndices.length - 1] + 1;
 
         let newXml = xmlContent.substring(0, startXmlIdx);
-        newXml += displayValue;
+
+        // ---- Long text: paragraph-level XML splitting ----
+        if (v.type === 'long_text' && displayValueRaw.includes('\n')) {
+          const displayValue = encodeXML(displayValueRaw);
+          // Capture paragraph properties (pPr) and run properties (rPr)
+          const textBefore = xmlContent.substring(0, startXmlIdx);
+          const lastPStart = Math.max(textBefore.lastIndexOf('<w:p '), textBefore.lastIndexOf('<w:p>'));
+          let pPrMatch = '';
+          let rPrMatch = '';
+          if (lastPStart !== -1) {
+            const pContent = textBefore.substring(lastPStart);
+            const pPrRes = pContent.match(/<w:pPr>.*?<\/w:pPr>/);
+            if (pPrRes) pPrMatch = pPrRes[0];
+            const lastRStart = Math.max(textBefore.lastIndexOf('<w:r '), textBefore.lastIndexOf('<w:r>'));
+            if (lastRStart !== -1 && lastRStart > lastPStart) {
+              const rContent = textBefore.substring(lastRStart);
+              const rPrRes = rContent.match(/<w:rPr>.*?<\/w:rPr>/);
+              if (rPrRes) rPrMatch = rPrRes[0];
+            }
+          }
+
+          // Apply paragraph indent if configured
+          let customPPr = pPrMatch;
+          if (v.paragraphIndent && Number(v.paragraphIndent) > 0) {
+            const twips = Math.round(Number(v.paragraphIndent) * 567); // 1cm = 567 twips
+            if (customPPr) {
+              if (customPPr.includes('<w:ind ')) {
+                customPPr = customPPr.replace(/<w:ind [^>]*\/>/, `<w:ind w:firstLine="${twips}"/>`);
+              } else {
+                customPPr = customPPr.replace('</w:pPr>', `<w:ind w:firstLine="${twips}"/></w:pPr>`);
+              }
+            } else {
+              customPPr = `<w:pPr><w:ind w:firstLine="${twips}"/></w:pPr>`;
+            }
+          }
+
+          // Split \n into separate Word XML paragraphs
+          newXml += displayValue.split('\n').join(`</w:t></w:r></w:p><w:p>${customPPr}<w:r>${rPrMatch}<w:t xml:space="preserve">`);
+        } else {
+          // Normal (non-long-text) replacement
+          const displayValue = encodeXML(displayValueRaw.replace(/[\n\r]+/g, ' '));
+          newXml += displayValue;
+        }
 
         for (let i = startXmlIdx; i < actualEnd; i++) {
           if (!indicesToDelete.has(i)) newXml += xmlContent[i];
@@ -606,6 +600,11 @@ export const DraftingView: React.FC = () => {
         newXml += xmlContent.substring(actualEnd);
         xmlContent = newXml;
       });
+
+      // ==================== JV BLOCK CLONING IN WORD XML ====================
+      if (jvMembers.length > 0) {
+        xmlContent = cloneJvBlockInXml(xmlContent, jvMembers, draftVariables);
+      }
 
       zip.file('word/document.xml', xmlContent);
 
@@ -670,6 +669,12 @@ export const DraftingView: React.FC = () => {
     !t.isDraft &&
     (!searchTemplateQuery || t.name.toLowerCase().includes(searchTemplateQuery.toLowerCase()))
   );
+
+  const currentTemplateName = docTemplates.find(t => t.id === selectedTemplateId)?.name;
+  const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name;
+
+  // Check if template has JV variables
+  const hasJvVariables = draftVariables.some(v => v.type === 'joint_venture');
 
   // ==================== RENDER ====================
   return (
@@ -865,7 +870,7 @@ export const DraftingView: React.FC = () => {
 
           {/* Main 2-pane layout */}
           <div className="flex-1 min-h-0 flex gap-3 overflow-hidden">
-            {/* Left Panel: Template selector + Variable form */}
+            {/* Left Panel: Template selector + Variable form + Draft save/load + JV */}
             <div className="w-80 lg:w-96 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
               {/* Template selector */}
               <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl shrink-0">
@@ -882,7 +887,7 @@ export const DraftingView: React.FC = () => {
 
                 {selectedTemplateId && (
                   <div className="mb-2 text-[10px] p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-lg font-semibold flex items-center gap-1.5">
-                    <FileText size={12} /> Đang soạn: {docTemplates.find(t => t.id === selectedTemplateId)?.name}
+                    <FileText size={12} /> Đang soạn: {currentTemplateName}
                   </div>
                 )}
 
@@ -907,55 +912,13 @@ export const DraftingView: React.FC = () => {
                 <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl space-y-3">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Bước 3: Điền thông tin</p>
 
-                  {(() => {
-                    // Deduplicate by name
-                    const unique: TemplateVariable[] = [];
-                    draftVariables.forEach(v => { if (!unique.find(u => u.name === v.name)) unique.push(v); });
-                    return unique.map(v => (
-                      <div key={v.id} className="space-y-1">
-                        <label className="text-[10px] font-semibold text-slate-400">{v.label || v.name}</label>
-
-                        {v.type === 'text' && (
-                          <input value={v.value} onChange={e => handleDraftVariableChange(v.name, e.target.value)} placeholder="Nhập văn bản..." className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
-                        )}
-                        {v.type === 'long_text' && (
-                          <textarea value={v.value} onChange={e => handleDraftVariableChange(v.name, e.target.value)} placeholder="Nhập đoạn văn bản..." rows={3} className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 resize-y" />
-                        )}
-                        {v.type === 'number' && (
-                          <input value={formatVnNumber(v.value)} onChange={e => handleDraftNumberInput(v.name, e.target.value)} placeholder="0" className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-blue-300 font-mono font-bold focus:outline-none focus:border-blue-500" />
-                        )}
-                        {v.type === 'date' && (
-                          <input type="date" value={v.value} onChange={e => handleDraftVariableChange(v.name, e.target.value)} className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500" />
-                        )}
-                        {v.type === 'dropdown' && (
-                          <select value={v.value} onChange={e => handleDraftVariableChange(v.name, e.target.value)} className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500">
-                            <option value="">-- Chọn --</option>
-                            {(v.optionsStr || '').split(',').map((o, i) => <option key={i} value={o.trim()}>{o.trim()}</option>)}
-                          </select>
-                        )}
-                        {v.type === 'project' && (
-                          <select value={v.value} onChange={e => handleDraftVariableChange(v.name, e.target.value)} className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500">
-                            <option value="">-- Chọn dự án --</option>
-                            {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                          </select>
-                        )}
-                        {v.type === 'contractor' && (
-                          <select value={v.value} onChange={e => handleDraftVariableChange(v.name, e.target.value)} className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500">
-                            <option value="">-- Chọn nhà thầu --</option>
-                            {companies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                          </select>
-                        )}
-                        {(v.type === 'number_to_words' || v.type === 'formula' || v.type === 'project_dependent' || v.type === 'contractor_dependent') && (
-                          <div className="px-3 py-2 bg-[#080d1a] border border-[#232f4e] rounded-lg text-xs text-slate-400 italic min-h-[36px] flex items-center">
-                            {v.type === 'number_to_words' && <span className="text-slate-500 mr-1.5">🤖</span>}
-                            {v.type === 'formula' && <span className="text-slate-500 mr-1.5">∑</span>}
-                            {(v.type === 'project_dependent' || v.type === 'contractor_dependent') && <span className="text-slate-500 mr-1.5">🧬</span>}
-                            <span className="truncate">{v.value || 'Tự động...'}</span>
-                          </div>
-                        )}
-                      </div>
-                    ));
-                  })()}
+                  <VariableForm
+                    draftVariables={draftVariables}
+                    projects={projects}
+                    companies={companies}
+                    onVariableChange={handleDraftVariableChange}
+                    onNumberInput={handleDraftNumberInput}
+                  />
 
                   {/* Action buttons */}
                   <div className="flex gap-2 pt-2 border-t border-[#232f4e]">
@@ -964,6 +927,31 @@ export const DraftingView: React.FC = () => {
                     </button>
                   </div>
                 </div>
+              )}
+
+              {/* Joint Venture Picker (only if template has JV vars) */}
+              {selectedTemplateId && hasJvVariables && (
+                <JointVenturePicker
+                  jvMembers={jvMembers}
+                  companies={companies}
+                  onMembersChange={setJvMembers}
+                />
+              )}
+
+              {/* Draft Save/Load Panel */}
+              {selectedTemplateId && (
+                <DraftSaveLoadPanel
+                  draftDocuments={draftDocuments}
+                  selectedTemplateId={selectedTemplateId}
+                  selectedProjectId={selectedProjectId}
+                  draftVariables={draftVariables}
+                  jvMembers={jvMembers}
+                  templateName={currentTemplateName}
+                  projectName={currentProjectName}
+                  onSaveDraft={handleSaveDraftDocument}
+                  onDeleteDraft={deleteDraft}
+                  onLoadDraft={handleLoadDraft}
+                />
               )}
             </div>
 
@@ -1007,3 +995,163 @@ export const DraftingView: React.FC = () => {
     </div>
   );
 };
+
+// ==================== JV BLOCK CLONING IN WORD XML ====================
+/**
+ * Clone khối liên danh trong XML Word.
+ * Tìm [BAT_DAU_LIEN_DANH] và [KET_THUC_LIEN_DANH], clone template block cho mỗi JV member.
+ */
+function cloneJvBlockInXml(
+  xmlContent: string,
+  jvMembers: JVMember[],
+  draftVariables: TemplateVariable[],
+): string {
+  const startMarkerText = '[BAT_DAU_LIEN_DANH]';
+  const endMarkerText = '[KET_THUC_LIEN_DANH]';
+
+  // Helper: find marker in XML by stripping tags
+  const findMarkerInXml = (xml: string, marker: string): number => {
+    let plain = '';
+    let inTag = false;
+    const mapping: number[] = [];
+    for (let i = 0; i < xml.length; i++) {
+      if (xml[i] === '<') { inTag = true; continue; }
+      if (xml[i] === '>') { inTag = false; continue; }
+      if (!inTag) { mapping.push(i); plain += xml[i]; }
+    }
+    const normalized = plain.replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+    const markerNorm = marker.replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+    const idx = normalized.indexOf(markerNorm);
+    if (idx >= 0 && mapping[idx] !== undefined) return mapping[idx];
+    return -1;
+  };
+
+  const startIdx = findMarkerInXml(xmlContent, startMarkerText);
+  const endIdx = findMarkerInXml(xmlContent, endMarkerText);
+
+  if (startIdx < 0 || endIdx < 0 || endIdx <= startIdx) return xmlContent;
+
+  // Expand to enclosing <w:p> tags
+  const expandToParagraph = (xml: string, idx: number, direction: 'start' | 'end'): number => {
+    if (direction === 'start') {
+      // Search backwards for <w:p or <w:p>
+      let i = idx;
+      while (i > 0) {
+        if (xml.substring(i, i + 4) === '<w:p' && (xml[i + 4] === ' ' || xml[i + 4] === '>')) {
+          return i;
+        }
+        i--;
+      }
+      return idx;
+    } else {
+      // Search forwards for </w:p>
+      let i = idx;
+      while (i < xml.length - 5) {
+        if (xml.substring(i, i + 6) === '</w:p>') {
+          return i + 6;
+        }
+        i++;
+      }
+      return idx;
+    }
+  };
+
+  const blockStart = expandToParagraph(xmlContent, startIdx, 'start');
+  const blockEnd = expandToParagraph(xmlContent, endIdx, 'end');
+
+  const blockXml = xmlContent.substring(blockStart, blockEnd);
+
+  // Extract paragraphs within block
+  const paragraphs = blockXml.match(/<w:p[\s>][\s\S]*?<\/w:p>/g) || [];
+
+  // Separate marker paragraphs from template paragraphs
+  const stripTags = (xml: string) => xml.replace(/<[^>]+>/g, '').replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+
+  const templateParagraphs: string[] = [];
+  for (const p of paragraphs) {
+    const plainText = stripTags(p);
+    if (plainText.includes(startMarkerText.replace(/[\s]/g, '')) ||
+        plainText.includes(endMarkerText.replace(/[\s]/g, ''))) {
+      continue; // Skip marker paragraphs
+    }
+    templateParagraphs.push(p);
+  }
+
+  if (templateParagraphs.length === 0) return xmlContent;
+
+  // Clone for each member
+  const clonedBlocks: string[] = [];
+  jvMembers.forEach((member, memberIdx) => {
+    templateParagraphs.forEach(templateP => {
+      let clonedP = templateP;
+
+      // Replace virtual variables
+      clonedP = replaceTextInXml(clonedP, '[JV_STT]', String(memberIdx + 1));
+      clonedP = replaceTextInXml(clonedP, '[JV_TEN_STT]', JV_STT_WORDS[memberIdx] || `thứ ${memberIdx + 1}`);
+
+      // Replace JV field variables
+      draftVariables.forEach(v => {
+        if (v.type !== 'joint_venture' || !v.jvField || !v.originalText) return;
+        let fieldValue = '';
+        const field = v.jvField;
+        if (field.startsWith('_custom_')) {
+          fieldValue = member._custom_fields?.[v.id] || '';
+        } else {
+          fieldValue = String(member[field] || '');
+        }
+        if (fieldValue) {
+          clonedP = replaceTextInXml(clonedP, v.originalText, fieldValue);
+        }
+      });
+
+      clonedBlocks.push(clonedP);
+    });
+  });
+
+  // Reassemble
+  const xmlBefore = xmlContent.substring(0, blockStart);
+  const xmlAfter = xmlContent.substring(blockEnd);
+  return xmlBefore + clonedBlocks.join('') + xmlAfter;
+}
+
+/**
+ * Replace plain text in Word XML, handling text split across multiple <w:t> runs.
+ */
+function replaceTextInXml(xml: string, searchText: string, replacement: string): string {
+  // Build plain-text-to-XML-index mapping
+  let plainText = '';
+  const plainToXml: number[] = [];
+  let inTag = false;
+
+  for (let i = 0; i < xml.length; i++) {
+    if (xml[i] === '<') { inTag = true; continue; }
+    if (xml[i] === '>') { inTag = false; continue; }
+    if (!inTag) { plainToXml.push(i); plainText += xml[i]; }
+  }
+
+  const encoded = encodeXML(searchText).replace(/[\s\u00A0\n]+/g, ' ').trim();
+  const matchIdx = plainText.indexOf(encoded);
+  if (matchIdx < 0) return xml;
+
+  const matchedIndices: number[] = [];
+  for (let k = 0; k < encoded.length; k++) {
+    matchedIndices.push(plainToXml[matchIdx + k]);
+  }
+
+  const indicesToDelete = new Set<number>();
+  matchedIndices.forEach(idx => {
+    if (xml[idx] !== '<') indicesToDelete.add(idx);
+  });
+
+  const startXmlIdx = matchedIndices[0];
+  const actualEnd = matchedIndices[matchedIndices.length - 1] + 1;
+
+  let result = xml.substring(0, startXmlIdx);
+  result += encodeXML(replacement);
+
+  for (let i = startXmlIdx; i < actualEnd; i++) {
+    if (!indicesToDelete.has(i)) result += xml[i];
+  }
+  result += xml.substring(actualEnd);
+  return result;
+}
