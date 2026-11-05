@@ -21,13 +21,8 @@ import {
   FileSpreadsheet,
   Download, 
   Paperclip, 
-  ArrowRight,
-  Calculator,
-  Calendar,
   X,
-  Clock,
   Layers,
-  FileCheck
 } from 'lucide-react';
 
 interface ContractAppendixModalProps {

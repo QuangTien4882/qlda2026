@@ -23,16 +23,10 @@ import {
   Link2,
   FolderOpen,
   Save,
-  FileCheck,
   Database,
-  HelpCircle,
   RefreshCw,
-  FileText,
-  AlertTriangle,
   Wifi,
   Copy,
-  ExternalLink,
-  Layers
 } from 'lucide-react';
 import { BackupManagerModal } from './BackupManagerModal';
 import { 
@@ -187,7 +181,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       setDrivePath(settings.googleDrivePath);
     }
   }, [settings.googleDrivePath]);
-  const [savePathSuccess, setSavePathSuccess] = useState(false);
+
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
@@ -202,8 +196,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const handleSaveDrivePath = () => {
     updateGoogleDrivePath(drivePath);
-    setSavePathSuccess(true);
-    setTimeout(() => setSavePathSuccess(false), 2000);
+    setNotification({ type: 'success', message: 'Đã lưu đường dẫn Google Drive.' });
+    setTimeout(() => setNotification(null), 2000);
   };
 
   // Chọn thư mục lưu trữ Windows Explorer
