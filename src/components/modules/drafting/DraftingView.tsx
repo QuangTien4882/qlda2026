@@ -336,25 +336,54 @@ export const DraftingView: React.FC = () => {
     setSelectedTemplateId(templateId);
     setDraftVariables(template.variables.map((v) => ({ ...v, value: '' })));
     setJvMembers([]);
+  };
 
-    // Render preview
-    if (draftPreviewContainerRef.current && template.fileBase64) {
+  // Tự động render văn bản xem trước khi chọn mẫu (đảm bảo ref luôn sẵn sàng, không bị race condition)
+  useEffect(() => {
+    if (!selectedTemplateId) {
+      if (draftPreviewContainerRef.current) draftPreviewContainerRef.current.innerHTML = '';
+      draftPristineHtmlRef.current = '';
+      return;
+    }
+
+    const template = docTemplates.find((t) => t.id === selectedTemplateId);
+    if (!template) return;
+
+    let isMounted = true;
+    const renderPreview = async () => {
+      // Đợi ngắn 60ms để DOM ref chắc chắn đã sẵn sàng
+      await new Promise((r) => setTimeout(r, 60));
+      if (!draftPreviewContainerRef.current || !isMounted) return;
+
       setIsRendering(true);
       try {
-        const buf = base64ToArrayBuffer(template.fileBase64);
-        await renderAsync(buf, draftPreviewContainerRef.current, undefined, DOCX_PREVIEW_OPTIONS);
-        fixDocxPreviewStyles(draftPreviewContainerRef.current);
-        draftPristineHtmlRef.current = draftPreviewContainerRef.current.innerHTML;
+        if (template.fileBase64) {
+          const buf = base64ToArrayBuffer(template.fileBase64);
+          await renderAsync(buf, draftPreviewContainerRef.current, undefined, DOCX_PREVIEW_OPTIONS);
+          if (isMounted) {
+            fixDocxPreviewStyles(draftPreviewContainerRef.current);
+            draftPristineHtmlRef.current = draftPreviewContainerRef.current.innerHTML;
+          }
+        } else if (template.previewHtml) {
+          draftPreviewContainerRef.current.innerHTML = template.previewHtml;
+          if (isMounted) {
+            fixDocxPreviewStyles(draftPreviewContainerRef.current);
+            draftPristineHtmlRef.current = template.previewHtml;
+          }
+        }
       } catch (err) {
         console.error('Lỗi render draft preview:', err);
+      } finally {
+        if (isMounted) setIsRendering(false);
       }
-      setIsRendering(false);
-    } else if (draftPreviewContainerRef.current && template.previewHtml) {
-      draftPreviewContainerRef.current.innerHTML = template.previewHtml;
-      fixDocxPreviewStyles(draftPreviewContainerRef.current);
-      draftPristineHtmlRef.current = template.previewHtml;
-    }
-  };
+    };
+
+    renderPreview();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedTemplateId, docTemplates]);
 
   const handleDraftVariableChange = (varName: string, value: string) => {
     setDraftVariables((prev) => prev.map((v) => (v.name === varName ? { ...v, value } : v)));
@@ -597,6 +626,8 @@ export const DraftingView: React.FC = () => {
     // Restore pristine HTML first
     if (draftPristineHtmlRef.current) {
       draftPreviewContainerRef.current.innerHTML = draftPristineHtmlRef.current;
+    } else {
+      return;
     }
 
     // Update each variable span (tìm tất cả span cùng data-var-id hoặc data-var-name)
@@ -867,40 +898,43 @@ export const DraftingView: React.FC = () => {
   // ==================== RENDER ====================
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3 shrink-0">
-        <div>
-          <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-            <FileEdit size={20} className="text-blue-400" /> Soạn Thảo Văn Bản
-          </h2>
-          <p className="text-[10px] md:text-xs text-slate-500 mt-0.5">
-            Quản lý mẫu .docx → Ráp biến tự động → Chọn dự án → Điền dữ liệu → Xuất file Word
-          </p>
+      {/* Header Bar: Tiêu đề + Chuyển Tab gọn trên 1 hàng để tối ưu chiều cao văn bản */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-2 shrink-0">
+        <div className="flex items-center gap-2">
+          <FileEdit size={20} className="text-blue-400 shrink-0" />
+          <div>
+            <h2 className="text-base md:text-lg font-bold text-white leading-tight">
+              Soạn Thảo Văn Bản Theo Biểu Mẫu
+            </h2>
+            <p className="text-[10px] md:text-xs text-slate-500">
+              Quản lý mẫu .docx → Ráp biến tự động → Chọn dự án → Điền dữ liệu → Xuất Word
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Tab switcher */}
-      <div className="flex gap-1 mb-3 shrink-0 bg-[#0b1222] p-1 rounded-lg border border-[#232f4e] w-fit">
-        <button
-          onClick={() => setActiveTab('templates')}
-          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-            activeTab === 'templates'
-              ? 'bg-blue-600 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-          }`}
-        >
-          ⚙️ Quản lý Mẫu
-        </button>
-        <button
-          onClick={() => setActiveTab('draft')}
-          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-            activeTab === 'draft'
-              ? 'bg-blue-600 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-          }`}
-        >
-          📝 Soạn thảo
-        </button>
+        {/* Tab switcher */}
+        <div className="flex gap-1 bg-[#0b1222] p-1 rounded-lg border border-[#232f4e] shrink-0">
+          <button
+            onClick={() => setActiveTab('templates')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+              activeTab === 'templates'
+                ? 'bg-blue-600 text-white shadow'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            ⚙️ Quản lý Mẫu
+          </button>
+          <button
+            onClick={() => setActiveTab('draft')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+              activeTab === 'draft'
+                ? 'bg-blue-600 text-white shadow'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            📝 Soạn thảo
+          </button>
+        </div>
       </div>
 
       {/* ==================== TAB: QUẢN LÝ MẪU ==================== */}
@@ -1160,160 +1194,159 @@ export const DraftingView: React.FC = () => {
 
       {/* ==================== TAB: SOẠN THẢO ==================== */}
       {activeTab === 'draft' && (
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          {/* Step 1: Project selector */}
-          <div className="shrink-0 mb-3 p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="flex-1">
-                <label className="block text-xs text-slate-400 uppercase font-bold mb-1">
-                  Bước 1: Chọn dự án để trích xuất dữ liệu
-                </label>
-                <select
-                  value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-medium"
-                >
-                  <option value="" disabled hidden>
-                    Click để chọn dự án
+        <div className="flex-1 min-h-0 flex gap-3 overflow-hidden h-full">
+          {/* Cột trái: Bước 1 (Dự án) + Bước 2 (Mẫu văn bản) + Bước 3 (Điền biến) + Xuất file */}
+          <div className="w-80 lg:w-96 shrink-0 flex flex-col gap-2.5 overflow-y-auto pr-1 h-full">
+            {/* Bước 1: Chọn dự án */}
+            <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl shrink-0">
+              <label className="block text-xs text-slate-400 uppercase font-bold mb-1">
+                Bước 1: Chọn dự án trích xuất
+              </label>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-medium"
+              >
+                <option value="" disabled hidden>
+                  Click để chọn dự án
+                </option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} - {p.name}
                   </option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.code} - {p.name}
-                    </option>
-                  ))}
-                </select>
+                ))}
+              </select>
+            </div>
+
+            {/* Bước 2: Chọn mẫu văn bản */}
+            <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl shrink-0">
+              <label className="block text-xs text-slate-400 uppercase font-bold mb-1.5">
+                Bước 2: Chọn mẫu văn bản
+              </label>
+              <div className="relative mb-2">
+                <Search size={14} className="absolute left-2.5 top-2.5 text-slate-500" />
+                <input
+                  value={searchTemplateQuery}
+                  onChange={(e) => setSearchTemplateQuery(e.target.value)}
+                  placeholder="Tìm kiếm mẫu..."
+                  className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg pl-8 pr-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {selectedTemplateId && (
+                <div className="mb-2 text-xs p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-lg font-semibold flex items-center gap-1.5">
+                  <FileText size={14} /> Đang soạn: {currentTemplateName}
+                </div>
+              )}
+
+              <div className="space-y-1 max-h-36 overflow-y-auto">
+                {draftFilteredTemplates.length === 0 ? (
+                  <p className="text-center text-slate-600 text-xs py-4 italic">
+                    Chưa có mẫu nào. Hãy tạo mẫu ở tab "Quản lý Mẫu".
+                  </p>
+                ) : (
+                  draftFilteredTemplates.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => handleSelectTemplate(t.id)}
+                      className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 ${
+                        selectedTemplateId === t.id
+                          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'
+                      }`}
+                    >
+                      <FileText size={14} className={selectedTemplateId === t.id ? 'text-blue-400' : 'text-slate-600'} />
+                      <span className="truncate">{t.name}</span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
+
+            {/* Bước 3: Điền thông tin văn bản */}
+            {selectedTemplateId && draftVariables.length > 0 && (
+              <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl space-y-3">
+                <p className="text-xs text-slate-400 uppercase font-bold">Bước 3: Điền thông tin văn bản</p>
+
+                <VariableForm
+                  draftVariables={draftVariables}
+                  projects={projects}
+                  companies={companies}
+                  costPackages={costPackages[selectedProjectId] || []}
+                  legalDocs={legalDocs[selectedProjectId] || []}
+                  onVariableChange={handleDraftVariableChange}
+                  onNumberInput={handleDraftNumberInput}
+                />
+
+                {/* Action buttons */}
+                <div className="flex gap-2 pt-2 border-t border-[#232f4e]">
+                  <button
+                    onClick={handleExport}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors shadow-lg shadow-blue-600/20"
+                  >
+                    <Download size={14} /> Xuất File Word (.docx)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Joint Venture Picker */}
+            {selectedTemplateId && hasJvVariables && (
+              <JointVenturePicker
+                jvMembers={jvMembers}
+                companies={companies}
+                onMembersChange={setJvMembers}
+              />
+            )}
+
+            {/* Draft Save/Load Panel */}
+            {selectedTemplateId && (
+              <DraftSaveLoadPanel
+                draftDocuments={draftDocuments}
+                selectedTemplateId={selectedTemplateId}
+                selectedProjectId={selectedProjectId}
+                draftVariables={draftVariables}
+                jvMembers={jvMembers}
+                templateName={currentTemplateName}
+                projectName={currentProjectName}
+                onSaveDraft={handleSaveDraftDocument}
+                onDeleteDraft={deleteDraft}
+                onLoadDraft={handleLoadDraft}
+              />
+            )}
           </div>
 
-          {/* Main 2-pane layout */}
-          <div className="flex-1 min-h-0 flex gap-3 overflow-hidden">
-            {/* Left Panel: Template selector + Variable form + Draft save/load + JV */}
-            <div className="w-80 lg:w-96 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
-              {/* Template selector */}
-              <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl shrink-0">
-                <label className="block text-xs text-slate-400 uppercase font-bold mb-1.5">
-                  Bước 2: Chọn mẫu văn bản
-                </label>
-                <div className="relative mb-2">
-                  <Search size={14} className="absolute left-2.5 top-2.5 text-slate-500" />
-                  <input
-                    value={searchTemplateQuery}
-                    onChange={(e) => setSearchTemplateQuery(e.target.value)}
-                    placeholder="Tìm kiếm mẫu..."
-                    className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg pl-8 pr-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                {selectedTemplateId && (
-                  <div className="mb-2 text-xs p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-lg font-semibold flex items-center gap-1.5">
-                    <FileText size={14} /> Đang soạn: {currentTemplateName}
-                  </div>
-                )}
-
-                <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {draftFilteredTemplates.length === 0 ? (
-                    <p className="text-center text-slate-600 text-xs py-4 italic">
-                      Chưa có mẫu nào. Hãy tạo mẫu ở tab "Quản lý Mẫu".
-                    </p>
-                  ) : (
-                    draftFilteredTemplates.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => handleSelectTemplate(t.id)}
-                        className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 ${
-                          selectedTemplateId === t.id
-                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold'
-                            : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'
-                        }`}
-                      >
-                        <FileText size={14} className={selectedTemplateId === t.id ? 'text-blue-400' : 'text-slate-600'} />
-                        <span className="truncate">{t.name}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Variable form */}
-              {selectedTemplateId && draftVariables.length > 0 && (
-                <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl space-y-3">
-                  <p className="text-xs text-slate-400 uppercase font-bold">Bước 3: Điền thông tin văn bản</p>
-
-                  <VariableForm
-                    draftVariables={draftVariables}
-                    projects={projects}
-                    companies={companies}
-                    costPackages={costPackages[selectedProjectId] || []}
-                    legalDocs={legalDocs[selectedProjectId] || []}
-                    onVariableChange={handleDraftVariableChange}
-                    onNumberInput={handleDraftNumberInput}
-                  />
-
-                  {/* Action buttons */}
-                  <div className="flex gap-2 pt-2 border-t border-[#232f4e]">
-                    <button
-                      onClick={handleExport}
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors shadow-lg shadow-blue-600/20"
-                    >
-                      <Download size={14} /> Xuất File Word (.docx)
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Joint Venture Picker */}
-              {selectedTemplateId && hasJvVariables && (
-                <JointVenturePicker
-                  jvMembers={jvMembers}
-                  companies={companies}
-                  onMembersChange={setJvMembers}
-                />
-              )}
-
-              {/* Draft Save/Load Panel */}
-              {selectedTemplateId && (
-                <DraftSaveLoadPanel
-                  draftDocuments={draftDocuments}
-                  selectedTemplateId={selectedTemplateId}
-                  selectedProjectId={selectedProjectId}
-                  draftVariables={draftVariables}
-                  jvMembers={jvMembers}
-                  templateName={currentTemplateName}
-                  projectName={currentProjectName}
-                  onSaveDraft={handleSaveDraftDocument}
-                  onDeleteDraft={deleteDraft}
-                  onLoadDraft={handleLoadDraft}
-                />
-              )}
+          {/* Cột phải: Bản xem trước tài liệu Word - Kéo dài toàn bộ chiều cao màn hình */}
+          <div className="flex-1 min-h-0 h-full border border-[#232f4e] rounded-xl bg-[#1a1f2e] flex flex-col overflow-hidden">
+            <div className="bg-[#0c1424] px-4 py-2 border-b border-[#232f4e] shrink-0 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Bản xem trước trực tiếp {currentTemplateName ? `— ${currentTemplateName}` : ''}
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Hiển thị chuẩn định dạng Word .docx
+              </span>
             </div>
-
-            {/* Right Panel: Document Preview */}
-            <div className="flex-1 min-h-0 border border-[#232f4e] rounded-xl bg-[#1a1f2e] flex flex-col overflow-hidden">
-              <div className="bg-[#0c1424] px-4 py-2 border-b border-[#232f4e] shrink-0">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center block">
-                  Bản xem trước trực tiếp
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto bg-[#8c92a4] flex justify-center py-6 px-4">
-                {!selectedTemplateId ? (
-                  <div className="flex items-center justify-center h-full text-slate-400 text-xs font-medium">
-                    Chọn mẫu văn bản bên trái để xem trước
+            <div className="flex-1 min-h-0 overflow-y-auto bg-[#7c8394] flex justify-center py-4 px-2 md:px-4 relative">
+              {!selectedTemplateId && (
+                <div className="flex flex-col items-center justify-center h-full text-slate-300 text-sm font-medium py-12">
+                  <FileText size={36} className="text-slate-400/60 mb-2" />
+                  <span>Vui lòng chọn một mẫu văn bản ở cột bên trái để bắt đầu soạn thảo</span>
+                </div>
+              )}
+              {isRendering && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 backdrop-blur-xs">
+                  <div className="flex items-center gap-2 bg-[#0c1424] px-4 py-2.5 rounded-lg border border-[#232f4e] text-slate-200 text-sm shadow-xl">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+                    <span>Đang nạp văn bản Word...</span>
                   </div>
-                ) : (
-                  <>
-                    {isRendering && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
-                        <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
-                      </div>
-                    )}
-                    <div
-                      ref={draftPreviewContainerRef}
-                      className="w-full max-w-4xl mx-auto docx-preview-container select-text relative"
-                    />
-                  </>
-                )}
-              </div>
+                </div>
+              )}
+              <div
+                ref={draftPreviewContainerRef}
+                className={`w-full max-w-4xl mx-auto docx-preview-container select-text relative shadow-2xl ${
+                  !selectedTemplateId ? 'hidden' : ''
+                }`}
+              />
             </div>
           </div>
         </div>

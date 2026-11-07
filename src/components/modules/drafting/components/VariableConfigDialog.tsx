@@ -71,6 +71,14 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
     }
   }, [isOpen, selectedText, existingVariables]);
 
+  const handleSelectExistingVar = (targetVar: TemplateVariable) => {
+    setSelectedExistingVarId(targetVar.id);
+    setName(targetVar.name);
+    setLabel(targetVar.label);
+    setType(targetVar.type);
+    setMode('existing');
+  };
+
   const handleTypeChange = (newType: TemplateVariable['type']) => {
     setType(newType);
     setDependentConfig('');
@@ -212,6 +220,17 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
   const { highCompat, others, highLabel } = getCompatibleSources();
   const selectedExistingVar = existingVariables.find((v) => v.id === selectedExistingVarId);
 
+  // Tìm các biến đã có khớp với từ khóa đang gõ (theo name hoặc label)
+  const query = name.trim().toLowerCase();
+  const matchingSuggestions =
+    query.length > 0 && mode === 'new'
+      ? existingVariables.filter(
+          (v) =>
+            v.name.toLowerCase().includes(query) ||
+            v.label.toLowerCase().includes(query)
+        )
+      : [];
+
   return (
     <AppModal
       isOpen={isOpen}
@@ -324,11 +343,14 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
           <div className="space-y-4">
             {/* Form fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="relative">
                 <label className={labelClass}>Tên biến (viết liền không dấu) *</label>
                 <input
                   value={name}
-                  onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z0-9_]/g, '_'))}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z0-9_]/g, '_');
+                    setName(val);
+                  }}
                   placeholder="vd: ten_du_an, dia_chi_nha_thau"
                   className={inputClass}
                   autoFocus
@@ -336,6 +358,41 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
                 <p className="text-xs text-slate-500 mt-1">
                   Mã tag trên biểu mẫu: {`{{${name || 'ten_bien'}}}`}
                 </p>
+
+                {/* Gợi ý biến đã có khớp từ khóa đang nhập */}
+                {matchingSuggestions.length > 0 && (
+                  <div className="mt-2 p-2.5 bg-[#0b1329] border border-blue-500/40 rounded-xl shadow-2xl animate-fadeIn">
+                    <p className="text-xs text-blue-400 font-bold mb-1.5 flex items-center gap-1.5">
+                      <Link2 size={14} className="text-blue-400 shrink-0" />
+                      <span>Biến đã có khớp từ đang nhập (bấm để gán nhanh):</span>
+                    </p>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {matchingSuggestions.map((v) => (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => handleSelectExistingVar(v)}
+                          className="w-full text-left p-2 rounded-lg bg-[#131d36] hover:bg-blue-600/30 border border-blue-500/20 hover:border-blue-400 transition-all flex items-center justify-between group"
+                        >
+                          <div className="min-w-0 flex items-center gap-2">
+                            <span className="font-mono font-bold text-xs text-blue-300 group-hover:text-blue-100">
+                              {`{{${v.name}}}`}
+                            </span>
+                            <span className="text-xs text-slate-300 group-hover:text-white truncate">
+                              {v.label}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 font-mono border border-blue-800/40 shrink-0">
+                              {v.type}
+                            </span>
+                          </div>
+                          <span className="text-xs text-blue-400 group-hover:text-blue-300 font-semibold shrink-0">
+                            Gán biến này ↵
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
