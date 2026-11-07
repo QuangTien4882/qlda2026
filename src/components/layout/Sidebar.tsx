@@ -77,28 +77,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* Sidebar container - Điều chỉnh còn 80% chiều ngang (w-56 lg:w-64) để tiết kiệm không gian */}
+      {/* Sidebar container - Thu hẹp còn 90% chiều ngang (w-52 lg:w-[230px]) để tăng diện tích làm việc */}
       <aside
-        className={`fixed lg:relative top-0 bottom-0 left-0 z-40 w-56 lg:w-64 h-full bg-[#0a0f1d] border-r border-[#232f4e] flex flex-col justify-between shrink-0 overflow-y-auto transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed lg:relative top-0 bottom-0 left-0 z-40 w-52 lg:w-[230px] h-full bg-[#0a0f1d] border-r border-[#232f4e] flex flex-col justify-between shrink-0 overflow-y-auto transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Top: Menu List */}
-        <div className="p-3 space-y-4">
+        <div className="p-2 space-y-3">
           {/* Section Label */}
           <div>
             <div className="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
               <span>HỆ THỐNG QUẢN LÝ</span>
             </div>
 
-            <nav className="space-y-1.5">
+            <nav className="space-y-1">
               {menuItems.map((item) => {
                 const isActive = currentMenu === item.id;
                 return (
                   <button
                     key={item.id}
                     onClick={() => handleMenuClick(item.id)}
-                    className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl text-left transition-all duration-150 group ${
+                    className={`w-full flex items-start gap-2 p-2 rounded-xl text-left transition-all duration-150 group ${
                       isActive
                         ? 'bg-blue-600/15 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-950/40'
                         : 'text-slate-300 hover:text-white hover:bg-[#121c32] border border-transparent'
@@ -115,12 +115,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between">
-                        <span className={`text-xs md:text-sm font-semibold tracking-wide ${isActive ? 'text-white' : ''}`}>
+                        <span className={`text-xs md:text-[13px] font-semibold tracking-wide ${isActive ? 'text-white' : ''}`}>
                           {item.label}
                         </span>
                         {isActive && <ChevronRight size={13} className="text-blue-400 shrink-0" />}
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5 leading-snug break-words">
+                      <p className="text-[10.5px] text-slate-400 mt-0.5 leading-snug break-words">
                         {item.desc}
                       </p>
                     </div>

@@ -4,6 +4,7 @@ import { AdvancedTable, AdvancedColumn } from '../../common/AdvancedTable';
 import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
+import { renderAsync } from 'docx-preview';
 import { 
   FileText, 
   Paperclip, 
@@ -17,6 +18,39 @@ import {
   Info,
   Maximize2
 } from 'lucide-react';
+
+/** Chuyển Data URL (Base64) sang Blob URL để Chrome có thể hiển thị PDF trong iframe mà không bị chặn */
+function dataUrlToBlobUrl(dataUrl: string): string {
+  try {
+    const parts = dataUrl.split(',');
+    if (parts.length < 2) return dataUrl;
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+    const bstr = atob(parts[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    const blob = new Blob([u8arr], { type: mime });
+    return URL.createObjectURL(blob);
+  } catch (err) {
+    console.error('Lỗi chuyển data URL sang blob URL:', err);
+    return dataUrl;
+  }
+}
+
+/** Chuyển Data URL base64 sang ArrayBuffer để docx-preview render */
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const pureBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+  const binaryString = atob(pureBase64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
 
 interface TabLegalProps {
   legalDocs: LegalDocItem[];
@@ -50,7 +84,85 @@ export const TabLegal: React.FC<TabLegalProps> = ({
   const [fileType, setFileType] = useState('');
   const [fileUrl, setFileUrl] = useState('');
 
+  // Blob URLs & docx preview refs
+  const [modalBlobUrl, setModalBlobUrl] = useState<string>('');
+  const [fullscreenBlobUrl, setFullscreenBlobUrl] = useState<string>('');
+  const docxModalContainerRef = useRef<HTMLDivElement>(null);
+  const docxFullscreenContainerRef = useRef<HTMLDivElement>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Tạo và quản lý Blob URL cho khung xem trước trong Modal
+  useEffect(() => {
+    if (!fileUrl) {
+      setModalBlobUrl('');
+      return;
+    }
+    if (fileUrl.startsWith('data:')) {
+      const blobUrl = dataUrlToBlobUrl(fileUrl);
+      setModalBlobUrl(blobUrl);
+      return () => {
+        URL.revokeObjectURL(blobUrl);
+      };
+    } else {
+      setModalBlobUrl(fileUrl);
+    }
+  }, [fileUrl]);
+
+  // Tạo và quản lý Blob URL cho khung xem trước Toàn màn hình
+  useEffect(() => {
+    if (!previewDoc?.fileUrl) {
+      setFullscreenBlobUrl('');
+      return;
+    }
+    if (previewDoc.fileUrl.startsWith('data:')) {
+      const blobUrl = dataUrlToBlobUrl(previewDoc.fileUrl);
+      setFullscreenBlobUrl(blobUrl);
+      return () => {
+        URL.revokeObjectURL(blobUrl);
+      };
+    } else {
+      setFullscreenBlobUrl(previewDoc.fileUrl);
+    }
+  }, [previewDoc]);
+
+  // Render Word .docx trong Modal Thêm/Sửa
+  useEffect(() => {
+    if (modalOpen && fileUrl && (fileType === 'docx' || fileName.toLowerCase().endsWith('.docx'))) {
+      if (docxModalContainerRef.current) {
+        docxModalContainerRef.current.innerHTML = '';
+        try {
+          const buf = base64ToArrayBuffer(fileUrl);
+          renderAsync(buf, docxModalContainerRef.current, undefined, {
+            inWrapper: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+          });
+        } catch (err) {
+          console.warn('Lỗi render docx trong modal:', err);
+        }
+      }
+    }
+  }, [modalOpen, fileUrl, fileType, fileName]);
+
+  // Render Word .docx trong Fullscreen Preview
+  useEffect(() => {
+    if (previewDoc?.fileUrl && (previewDoc.fileType === 'docx' || previewDoc.fileName?.toLowerCase().endsWith('.docx'))) {
+      if (docxFullscreenContainerRef.current) {
+        docxFullscreenContainerRef.current.innerHTML = '';
+        try {
+          const buf = base64ToArrayBuffer(previewDoc.fileUrl);
+          renderAsync(buf, docxFullscreenContainerRef.current, undefined, {
+            inWrapper: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+          });
+        } catch (err) {
+          console.warn('Lỗi render docx fullscreen:', err);
+        }
+      }
+    }
+  }, [previewDoc]);
 
   // Lắng nghe phím ESC để đóng xem toàn màn hình
   useEffect(() => {
@@ -298,112 +410,201 @@ export const TabLegal: React.FC<TabLegalProps> = ({
           </div>
         }
       >
-        <form onSubmit={handleSave} className="space-y-4 text-xs md:text-sm">
-          <div>
-            <label className="block text-slate-300 mb-1">STT</label>
-            <input
-              type="number"
-              value={stt}
-              onChange={(e) => setStt(parseInt(e.target.value, 10) || 1)}
-              className="w-24 bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
-            />
-          </div>
+        <div className="flex flex-col lg:flex-row gap-4 h-full min-h-[520px]">
+          {/* Cột trái: Form nhập liệu */}
+          <form onSubmit={handleSave} className="w-full lg:w-[380px] shrink-0 space-y-4 text-xs md:text-sm flex flex-col justify-between">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-slate-300 mb-1">STT</label>
+                <input
+                  type="number"
+                  value={stt}
+                  onChange={(e) => setStt(parseInt(e.target.value, 10) || 1)}
+                  className="w-24 bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
+                />
+              </div>
 
-          <div>
-            <label className="block text-slate-300 mb-1">
-              Nội dung hồ sơ pháp lý <span className="text-rose-400">*</span>
-            </label>
-            <textarea
-              rows={3}
-              required
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Nhập số hiệu văn bản, ngày ban hành, cơ quan ban hành và trích yếu nội dung..."
-              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 resize-none leading-relaxed placeholder:italic placeholder:text-slate-500"
-            />
-          </div>
+              <div>
+                <label className="block text-slate-300 mb-1">
+                  Nội dung hồ sơ pháp lý <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Nhập số hiệu văn bản, ngày ban hành, cơ quan ban hành và trích yếu nội dung..."
+                  className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 resize-none leading-relaxed placeholder:italic placeholder:text-slate-500"
+                />
+              </div>
 
-          {/* Khu vực Chọn & Đính kèm File thực tế */}
-          <div>
-            <label className="block text-slate-300 mb-1.5 font-medium">
-              Tệp văn bản đính kèm (PDF, Word, Excel, Bản scan...)
-            </label>
+              {/* Khu vực Chọn & Đính kèm File thực tế */}
+              <div>
+                <label className="block text-slate-300 mb-1.5 font-medium">
+                  Tệp văn bản đính kèm (PDF, Word, Excel, Bản scan...)
+                </label>
 
-            {/* Input ẩn phục vụ click chọn file */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={handleFileChange}
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.zip,.rar"
-              className="hidden"
-            />
+                {/* Input ẩn phục vụ click chọn file */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileChange}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.zip,.rar"
+                  className="hidden"
+                />
 
-            {fileName ? (
-              <div className="flex items-center justify-between p-3 rounded-lg bg-[#0e172a] border border-blue-500/40">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="p-2 rounded bg-blue-950 text-blue-400 shrink-0">
-                    {renderFileIcon(fileName, fileType)}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-100 truncate font-mono">
-                      {fileName}
+                {fileName ? (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-[#0e172a] border border-blue-500/40">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="p-2 rounded bg-blue-950 text-blue-400 shrink-0">
+                        {renderFileIcon(fileName, fileType)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-100 truncate font-mono">
+                          {fileName}
+                        </div>
+                        <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                          <span>Kích thước: {fileSize || 'Không rõ'}</span>
+                          <span>•</span>
+                          <span className="uppercase text-blue-300 font-mono">{fileType || 'FILE'}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-[11px] text-slate-400 flex items-center gap-2">
-                      <span>Kích thước: {fileSize || 'Không rõ'}</span>
-                      <span>•</span>
-                      <span className="uppercase text-blue-300 font-mono">{fileType || 'FILE'}</span>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-2.5 py-1 rounded bg-[#17243e] hover:bg-[#1e3054] text-blue-300 text-xs border border-blue-600/30 transition-colors"
+                      >
+                        Đổi file khác
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveAttachedFile}
+                        className="p-1 rounded bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/40 transition-colors"
+                        title="Gỡ file đính kèm"
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
+                ) : (
+                  <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-2.5 py-1 rounded bg-[#17243e] hover:bg-[#1e3054] text-blue-300 text-xs border border-blue-600/30 transition-colors"
+                    className="border-2 border-dashed border-[#263554] hover:border-blue-500/60 rounded-xl p-4 text-center cursor-pointer transition-colors bg-[#080d1a]/60 hover:bg-[#0c1426]"
                   >
-                    Đổi file khác
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleRemoveAttachedFile}
-                    className="p-1 rounded bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/40 transition-colors"
-                    title="Gỡ file đính kèm"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-[#263554] hover:border-blue-500/60 rounded-xl p-4 text-center cursor-pointer transition-colors bg-[#080d1a]/60 hover:bg-[#0c1426]"
-              >
-                <div className="w-10 h-10 rounded-full bg-blue-950/80 border border-blue-700/40 text-blue-400 mx-auto flex items-center justify-center mb-2">
-                  <Upload size={18} />
-                </div>
-                <div className="text-xs font-medium text-slate-200">
-                  Bấm vào đây để chọn tệp tin từ máy tính của bạn
-                </div>
-                <div className="text-[11px] text-slate-400 mt-1">
-                  Hỗ trợ định dạng PDF, Word (.docx), Excel (.xlsx), hình ảnh quyết định (.jpg, .png)
-                </div>
-              </div>
-            )}
+                    <div className="w-10 h-10 rounded-full bg-blue-950/80 border border-blue-700/40 text-blue-400 mx-auto flex items-center justify-center mb-2">
+                      <Upload size={18} />
+                    </div>
+                    <div className="text-xs font-medium text-slate-200">
+                      Bấm vào đây để chọn tệp tin từ máy tính của bạn
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-1">
+                      Hỗ trợ định dạng PDF, Word (.docx), Excel (.xlsx), hình ảnh quyết định (.jpg, .png)
+                    </div>
+                  </div>
+                )}
 
-            {/* Cho phép gõ hoặc chỉnh sửa thủ công tên file nếu muốn */}
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-[11px] text-slate-400 shrink-0">Hoặc sửa tên file:</span>
-              <input
-                type="text"
-                value={fileName}
-                onChange={(e) => setFileName(e.target.value)}
-                placeholder="Ví dụ: QD-456-QDPD-UBND.pdf"
-                className="flex-1 bg-[#080d1a] border border-[#232f4e] rounded px-2.5 py-1 text-slate-200 font-mono text-xs placeholder:italic placeholder:text-slate-500"
-              />
+                {/* Cho phép gõ hoặc chỉnh sửa thủ công tên file nếu muốn */}
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 shrink-0">Hoặc sửa tên file:</span>
+                  <input
+                    type="text"
+                    value={fileName}
+                    onChange={(e) => setFileName(e.target.value)}
+                    placeholder="Ví dụ: QD-456-QDPD-UBND.pdf"
+                    className="flex-1 bg-[#080d1a] border border-[#232f4e] rounded px-2.5 py-1 text-slate-200 font-mono text-xs placeholder:italic placeholder:text-slate-500"
+                  />
+                </div>
+              </div>
+            </div>
+          </form>
+
+          {/* Cột phải: Khung xem trước văn bản đính kèm */}
+          <div className="flex-1 min-h-[440px] border border-[#232f4e] rounded-xl bg-[#080d1a] flex flex-col overflow-hidden">
+            <div className="bg-[#0c1424] px-4 py-2.5 border-b border-[#232f4e] flex items-center justify-between shrink-0">
+              <span className="text-xs font-semibold text-slate-200 flex items-center gap-2">
+                <Eye size={15} className="text-blue-400" />
+                <span>Xem trước văn bản đính kèm</span>
+                {fileName && <span className="text-blue-300 font-mono text-xs font-normal truncate max-w-sm">({fileName})</span>}
+              </span>
+              {fileName && fileUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewDoc({
+                      id: editingItem ? editingItem.id : 'temp',
+                      projectId,
+                      stt,
+                      content: content || 'Xem trước văn bản',
+                      fileName,
+                      fileSize,
+                      fileType,
+                      fileUrl,
+                    });
+                  }}
+                  className="px-2.5 py-1 rounded bg-[#17243e] hover:bg-[#1e3054] text-blue-300 text-xs border border-blue-600/30 transition-colors flex items-center gap-1.5 font-medium"
+                >
+                  <Maximize2 size={13} /> Xem toàn màn hình
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col bg-[#070b16]">
+              {fileUrl ? (
+                fileType === 'pdf' || fileName?.toLowerCase().endsWith('.pdf') ? (
+                  modalBlobUrl ? (
+                    <iframe
+                      src={modalBlobUrl}
+                      className="w-full h-full border-0 bg-slate-900"
+                      title="Xem trước PDF"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 text-xs">
+                      Đang chuẩn bị tệp PDF...
+                    </div>
+                  )
+                ) : ['png', 'jpg', 'jpeg', 'webp'].includes(fileType || '') ||
+                  /\.(png|jpe?g|webp)$/i.test(fileName || '') ? (
+                  <div className="w-full h-full flex items-center justify-center p-4 bg-black/40 overflow-auto">
+                    <img
+                      src={fileUrl}
+                      alt={fileName}
+                      className="max-h-full max-w-full object-contain rounded shadow-lg"
+                    />
+                  </div>
+                ) : fileType === 'docx' || fileName?.toLowerCase().endsWith('.docx') ? (
+                  <div className="w-full h-full overflow-auto bg-[#7c8394] p-4 flex justify-center">
+                    <div ref={docxModalContainerRef} className="w-full max-w-3xl bg-white shadow-xl rounded" />
+                  </div>
+                ) : (
+                  <div className="m-auto text-center space-y-3 p-6 max-w-sm">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-950/80 border border-blue-600/50 text-blue-400 mx-auto flex items-center justify-center shadow-lg">
+                      {renderFileIcon(fileName, fileType)}
+                    </div>
+                    <p className="text-sm font-bold text-slate-200 font-mono">{fileName}</p>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Định dạng ({fileType?.toUpperCase()}) được hỗ trợ tải về máy để mở trực tiếp bằng Microsoft Office.
+                    </p>
+                  </div>
+                )
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500 space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-950/40 border border-blue-800/30 text-blue-400 flex items-center justify-center">
+                    <FileText size={28} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-300">Chưa có văn bản đính kèm để xem trước</p>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm leading-relaxed">
+                      Bấm vào khung chọn file ở bên trái để tải lên tệp PDF, Word hoặc ảnh scan quyết định. Toàn bộ nội dung sẽ hiển thị tại đây để bạn tiện theo dõi và trích yếu.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </form>
+        </div>
       </AppModal>
 
       {/* ========================================================================= */}
@@ -468,12 +669,18 @@ export const TabLegal: React.FC<TabLegalProps> = ({
           <div className="flex-1 w-full h-[calc(100vh-56px)] min-h-0 bg-[#070b16] relative overflow-hidden flex flex-col">
             {previewDoc.fileUrl ? (
               previewDoc.fileType === 'pdf' || previewDoc.fileName?.toLowerCase().endsWith('.pdf') ? (
-                // PDF Viewer toàn màn hình 100%
-                <iframe
-                  src={previewDoc.fileUrl}
-                  className="w-full h-full border-0 bg-slate-900"
-                  title={previewDoc.fileName}
-                />
+                // PDF Viewer toàn màn hình 100% bằng Blob URL
+                fullscreenBlobUrl ? (
+                  <iframe
+                    src={fullscreenBlobUrl}
+                    className="w-full h-full border-0 bg-slate-900"
+                    title={previewDoc.fileName}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-slate-400 text-xs">
+                    Đang nạp tệp PDF...
+                  </div>
+                )
               ) : ['png', 'jpg', 'jpeg', 'webp'].includes(previewDoc.fileType || '') ||
                 /\.(png|jpe?g|webp)$/i.test(previewDoc.fileName || '') ? (
                 // Image Viewer toàn màn hình
@@ -482,6 +689,14 @@ export const TabLegal: React.FC<TabLegalProps> = ({
                     src={previewDoc.fileUrl}
                     alt={previewDoc.fileName}
                     className="max-h-full max-w-full object-contain rounded shadow-2xl"
+                  />
+                </div>
+              ) : previewDoc.fileType === 'docx' || previewDoc.fileName?.toLowerCase().endsWith('.docx') ? (
+                // Docx viewer bằng docx-preview
+                <div className="w-full h-full overflow-auto bg-[#7c8394] p-6 flex justify-center">
+                  <div
+                    ref={docxFullscreenContainerRef}
+                    className="w-full max-w-4xl bg-white shadow-2xl rounded"
                   />
                 </div>
               ) : (

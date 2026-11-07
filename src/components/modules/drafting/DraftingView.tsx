@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileEdit, Upload, Trash2, FileText, Search, Save, Download, Plus, Loader2 } from 'lucide-react';
+import { FileEdit, Upload, Trash2, FileText, Search, Save, Download, Plus, Loader2, Edit3 } from 'lucide-react';
 import { useSettings } from '../../../context/SettingsContext';
 import { useData } from '../../../context/DataContext';
 import { useDrafting } from '../../../context/DraftingContext';
@@ -309,6 +309,7 @@ export const DraftingView: React.FC = () => {
   // Variable Config Dialog state
   const [isVarDialogOpen, setIsVarDialogOpen] = useState(false);
   const [selectedTextForVar, setSelectedTextForVar] = useState('');
+  const [editingVariable, setEditingVariable] = useState<TemplateVariable | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
 
   // Draft mode state
@@ -329,6 +330,13 @@ export const DraftingView: React.FC = () => {
   useEffect(() => {
     setHeaderTitle('SOẠN THẢO VĂN BẢN THEO BIỂU MẪU');
   }, [setHeaderTitle]);
+
+  // Luôn đảm bảo có ID dự án ngầm định cho việc trích xuất dữ liệu tự động
+  useEffect(() => {
+    if (!selectedProjectId && projects.length > 0) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
 
   // ==================== TEMPLATE MANAGER FUNCTIONS ====================
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -365,13 +373,54 @@ export const DraftingView: React.FC = () => {
     // Lưu lại Range selection trước khi mở modal để không bị mất selection
     savedRangeRef.current = selection.getRangeAt(0).cloneRange();
     setSelectedTextForVar(text);
+    setEditingVariable(null);
     setIsVarDialogOpen(true);
   };
 
   const handleSaveVariable = (varConfig: Partial<TemplateVariable>) => {
-    const range = savedRangeRef.current;
     const targetName = (varConfig.name || '').trim();
     if (!targetName) return;
+
+    // 1. Trường hợp CHỈNH SỬA BIẾN ĐÃ CÓ
+    if (editingVariable) {
+      setCurrentVariables((prev) =>
+        prev.map((v) =>
+          v.id === editingVariable.id
+            ? {
+                ...v,
+                name: targetName,
+                label: varConfig.label || targetName,
+                type: varConfig.type || 'text',
+                optionsStr: varConfig.optionsStr,
+                sourceVariableId: varConfig.sourceVariableId,
+                dependentConfig: varConfig.dependentConfig,
+                formulaExpression: varConfig.formulaExpression,
+                jvField: varConfig.jvField,
+                paragraphIndent: varConfig.paragraphIndent,
+              }
+            : v
+        )
+      );
+
+      // Cập nhật thẻ span trên bản xem trước mẫu
+      if (previewContainerRef.current) {
+        const spans = previewContainerRef.current.querySelectorAll(
+          `span[data-var-id="${editingVariable.id}"]`
+        );
+        spans.forEach((span) => {
+          span.setAttribute('data-var-name', targetName);
+          span.setAttribute('title', `{{${targetName}}} - ${varConfig.label || targetName}`);
+        });
+      }
+
+      setEditingVariable(null);
+      setIsVarDialogOpen(false);
+      savedRangeRef.current = null;
+      return;
+    }
+
+    // 2. Trường hợp TẠO BIẾN MỚI TỪ TEXT BÔI ĐEN
+    const range = savedRangeRef.current;
 
     // Kiểm tra xem biến này đã tồn tại trong currentVariables hay chưa (theo id hoặc theo name)
     const existingVarIndex = currentVariables.findIndex(
@@ -436,6 +485,7 @@ export const DraftingView: React.FC = () => {
     }
 
     setIsVarDialogOpen(false);
+    setEditingVariable(null);
     savedRangeRef.current = null;
     window.getSelection()?.removeAllRanges();
   };
@@ -1308,8 +1358,8 @@ export const DraftingView: React.FC = () => {
         }
       >
         <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-130px)] min-h-0 flex-1">
-          {/* Cột trái: Cấu hình biểu mẫu & Danh sách biến */}
-          <div className="w-full lg:w-96 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
+          {/* Cột trái: Cấu hình biểu mẫu & Danh sách biến (thu hẹp còn 320px để mở rộng bản xem trước) */}
+          <div className="w-full lg:w-[320px] shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs text-slate-400 uppercase font-bold">
@@ -1399,13 +1449,28 @@ export const DraftingView: React.FC = () => {
                           {v.label} · <span className="text-slate-500 font-mono">[{v.type}]</span>
                         </p>
                       </div>
-                      <button
-                        onClick={() => handleDeleteVariable(v.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-red-500/60 hover:text-red-400 transition-opacity"
-                        title="Xóa biến"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingVariable(v);
+                            setSelectedTextForVar(v.originalText || '');
+                            setIsVarDialogOpen(true);
+                          }}
+                          className="p-1 text-blue-400 hover:text-blue-300 transition-colors"
+                          title="Chỉnh sửa cấu hình biến"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteVariable(v.id)}
+                          className="p-1 text-red-500/70 hover:text-red-400 transition-colors"
+                          title="Xóa biến"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1446,33 +1511,12 @@ export const DraftingView: React.FC = () => {
       {/* ==================== TAB: SOẠN THẢO ==================== */}
       {activeTab === 'draft' && (
         <div className="flex-1 min-h-0 flex gap-3 overflow-hidden h-full">
-          {/* Cột trái: Bước 1 (Dự án) + Bước 2 (Mẫu văn bản) + Bước 3 (Điền biến) + Xuất file */}
-          <div className="w-80 lg:w-96 shrink-0 flex flex-col gap-2.5 overflow-y-auto pr-1 h-full">
-            {/* Bước 1: Chọn dự án */}
-            <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl shrink-0">
-              <label className="block text-xs text-slate-400 uppercase font-bold mb-1">
-                Bước 1: Chọn dự án trích xuất
-              </label>
-              <select
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 font-medium"
-              >
-                <option value="" disabled hidden>
-                  Click để chọn dự án
-                </option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code} - {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Bước 2: Chọn mẫu văn bản */}
+          {/* Cột trái: Bước 1 (Mẫu văn bản) + Bước 2 (Điền biến) + Xuất file (thu hẹp còn 320px để mở rộng bản xem trước) */}
+          <div className="w-72 lg:w-[320px] shrink-0 flex flex-col gap-2.5 overflow-y-auto pr-1 h-full">
+            {/* Bước 1: Chọn mẫu văn bản */}
             <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl shrink-0">
               <label className="block text-xs text-slate-400 uppercase font-bold mb-1.5">
-                Bước 2: Chọn mẫu văn bản
+                Bước 1: Chọn mẫu văn bản
               </label>
               <div className="relative mb-2">
                 <Search size={14} className="absolute left-2.5 top-2.5 text-slate-500" />
@@ -1490,7 +1534,7 @@ export const DraftingView: React.FC = () => {
                 </div>
               )}
 
-              <div className="space-y-1 max-h-36 overflow-y-auto">
+              <div className="space-y-1 max-h-40 overflow-y-auto">
                 {draftFilteredTemplates.length === 0 ? (
                   <p className="text-center text-slate-600 text-xs py-4 italic">
                     Chưa có mẫu nào. Hãy tạo mẫu ở tab "Quản lý Mẫu".
@@ -1514,10 +1558,10 @@ export const DraftingView: React.FC = () => {
               </div>
             </div>
 
-            {/* Bước 3: Điền thông tin văn bản */}
+            {/* Bước 2: Điền thông tin văn bản */}
             {selectedTemplateId && draftVariables.length > 0 && (
               <div className="p-3 bg-[#0b1222] border border-[#232f4e] rounded-xl space-y-3">
-                <p className="text-xs text-slate-400 uppercase font-bold">Bước 3: Điền thông tin văn bản</p>
+                <p className="text-xs text-slate-400 uppercase font-bold">Bước 2: Điền thông tin văn bản</p>
 
                 <VariableForm
                   draftVariables={draftVariables}
@@ -1609,10 +1653,12 @@ export const DraftingView: React.FC = () => {
       <VariableConfigDialog
         isOpen={isVarDialogOpen}
         selectedText={selectedTextForVar}
+        editingVariable={editingVariable}
         existingVariables={currentVariables}
         onSave={handleSaveVariable}
         onClose={() => {
           setIsVarDialogOpen(false);
+          setEditingVariable(null);
           savedRangeRef.current = null;
         }}
       />
