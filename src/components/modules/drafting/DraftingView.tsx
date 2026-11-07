@@ -21,6 +21,14 @@ import { VariableForm } from './components/VariableForm';
 import { DraftSaveLoadPanel } from './components/DraftSaveLoadPanel';
 import { JointVenturePicker, JV_STT_WORDS } from './components/JointVenturePicker';
 
+/** Helper chuyển đổi tên trường */
+function toSnakeCase(str: string): string {
+  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+function toCamelCase(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
 /** Options chung cho docx-preview renderAsync */
 const DOCX_PREVIEW_OPTIONS = {
   className: 'docx-preview-content',
@@ -152,30 +160,57 @@ export const DraftingView: React.FC = () => {
 
   const handleSaveVariable = (varConfig: Partial<TemplateVariable>) => {
     const range = savedRangeRef.current;
+    const targetName = (varConfig.name || '').trim();
+    if (!targetName) return;
 
-    const newVar: TemplateVariable = {
-      id: generateId('var'),
-      name: varConfig.name || '',
-      label: varConfig.label || '',
-      type: varConfig.type || 'text',
-      value: '',
-      originalText: selectedTextForVar,
-      optionsStr: varConfig.optionsStr,
-      sourceVariableId: varConfig.sourceVariableId,
-      dependentConfig: varConfig.dependentConfig,
-      formulaExpression: varConfig.formulaExpression,
-      jvField: varConfig.jvField,
-      paragraphIndent: varConfig.paragraphIndent,
-    };
+    // Kiểm tra xem biến này đã tồn tại trong currentVariables hay chưa (theo id hoặc theo name)
+    const existingVarIndex = currentVariables.findIndex(
+      (v) => v.id === varConfig.id || v.name.toLowerCase() === targetName.toLowerCase()
+    );
 
-    // Bọc đoạn text đã chọn trên DOM bằng thẻ span highlight biến
+    let activeVarId = varConfig.id || generateId('var');
+
+    if (existingVarIndex !== -1) {
+      // Biến ĐÃ TỒN TẠI: gán thêm vị trí text mới vào danh sách originalTexts của biến đó
+      const existingVar = currentVariables[existingVarIndex];
+      activeVarId = existingVar.id;
+      const combinedTexts = Array.from(
+        new Set([...(existingVar.originalTexts || [existingVar.originalText]), selectedTextForVar])
+      );
+      const updatedVar: TemplateVariable = {
+        ...existingVar,
+        originalTexts: combinedTexts,
+      };
+      setCurrentVariables((prev) => prev.map((v, i) => (i === existingVarIndex ? updatedVar : v)));
+    } else {
+      // Biến MỚI: tạo và thêm vào currentVariables
+      const newVar: TemplateVariable = {
+        id: activeVarId,
+        name: targetName,
+        label: varConfig.label || targetName,
+        type: varConfig.type || 'text',
+        value: '',
+        originalText: selectedTextForVar,
+        originalTexts: [selectedTextForVar],
+        optionsStr: varConfig.optionsStr,
+        sourceVariableId: varConfig.sourceVariableId,
+        dependentConfig: varConfig.dependentConfig,
+        formulaExpression: varConfig.formulaExpression,
+        jvField: varConfig.jvField,
+        paragraphIndent: varConfig.paragraphIndent,
+      };
+      setCurrentVariables((prev) => [...prev, newVar]);
+    }
+
+    // Bọc đoạn text đã chọn trên DOM preview bằng thẻ span highlight biến
     if (range) {
       try {
         const span = document.createElement('span');
-        span.setAttribute('data-var-id', newVar.id);
+        span.setAttribute('data-var-id', activeVarId);
+        span.setAttribute('data-var-name', targetName);
         span.className =
           'bg-yellow-200 px-1 py-0.5 rounded text-blue-900 border border-yellow-400 font-semibold cursor-pointer';
-        span.title = `{{${newVar.name}}} - ${newVar.label}`;
+        span.title = `{{${targetName}}} - ${varConfig.label || targetName}`;
         try {
           range.surroundContents(span);
         } catch {
@@ -190,7 +225,6 @@ export const DraftingView: React.FC = () => {
       }
     }
 
-    setCurrentVariables((prev) => [...prev, newVar]);
     setIsVarDialogOpen(false);
     savedRangeRef.current = null;
     window.getSelection()?.removeAllRanges();
@@ -198,13 +232,15 @@ export const DraftingView: React.FC = () => {
 
   const handleDeleteVariable = (varId: string) => {
     setCurrentVariables((prev) => prev.filter((x) => x.id !== varId));
-    // Mở bọc thẻ span trên preview nếu có
+    // Mở bọc tất cả thẻ span trên preview tương ứng với biến bị xóa
     if (previewContainerRef.current) {
-      const span = previewContainerRef.current.querySelector(`span[data-var-id="${varId}"]`);
-      if (span && span.parentNode) {
-        const textNode = document.createTextNode(span.textContent || '');
-        span.parentNode.replaceChild(textNode, span);
-      }
+      const spans = previewContainerRef.current.querySelectorAll(`span[data-var-id="${varId}"]`);
+      spans.forEach((span) => {
+        if (span.parentNode) {
+          const textNode = document.createTextNode(span.textContent || '');
+          span.parentNode.replaceChild(textNode, span);
+        }
+      });
     }
   };
 
@@ -212,9 +248,14 @@ export const DraftingView: React.FC = () => {
     if (!newTemplateName.trim()) return;
 
     let fileBase64: string | undefined;
+    let fileName: string | undefined = currentFile?.name;
     if (currentFile) {
       const buf = await currentFile.arrayBuffer();
       fileBase64 = arrayBufferToBase64(buf);
+    } else if (editingTemplateId) {
+      const prevTpl = docTemplates.find((t) => t.id === editingTemplateId);
+      fileBase64 = prevTpl?.fileBase64;
+      fileName = prevTpl?.fileName;
     }
 
     const template: DocTemplate = {
@@ -224,7 +265,7 @@ export const DraftingView: React.FC = () => {
       variables: currentVariables,
       previewHtml: previewContainerRef.current?.innerHTML || undefined,
       fileBase64,
-      fileName: currentFile?.name,
+      fileName,
       createdAt: editingTemplateId
         ? docTemplates.find((t) => t.id === editingTemplateId)?.createdAt || new Date().toISOString()
         : new Date().toISOString(),
@@ -325,161 +366,210 @@ export const DraftingView: React.FC = () => {
 
   // ==================== AUTO-COMPUTE DERIVED VARIABLES ====================
   useEffect(() => {
-    let updated = false;
+    let anyUpdated = false;
     const newDraft = [...draftVariables];
     const currentProject = projects.find((p) => p.id === selectedProjectId);
     const currentDetail = currentProject ? projectDetails[currentProject.id] : undefined;
     const currentCostPackages = costPackages[selectedProjectId] || [];
     const currentLegalDocs = legalDocs[selectedProjectId] || [];
 
-    newDraft.forEach((v) => {
-      // 1. number_to_words
-      if (v.type === 'number_to_words' && v.sourceVariableId) {
-        const parent = newDraft.find((p) => p.id === v.sourceVariableId);
-        if (parent?.value) {
-          const words = numberToWordsVN(parseVnNumber(parent.value));
-          if (v.value !== words) {
-            v.value = words;
-            updated = true;
-          }
-        }
-      }
+    // Chạy vòng lặp giải quyết chuỗi phụ thuộc nhiều tầng (tối đa 5 lượt lặp)
+    // Ví dụ: cost_package → cost_package_dependent (contractor) → contractor_dependent (address)
+    for (let pass = 0; pass < 5; pass++) {
+      let passUpdated = false;
 
-      // 2. formula
-      if (v.type === 'formula' && v.formulaExpression) {
-        let expr = v.formulaExpression;
-        let allValid = true;
-        const rx = /{{(.*?)}}/g;
-        let m;
-        while ((m = rx.exec(v.formulaExpression)) !== null) {
-          const target = newDraft.find((t) => t.name === m![1].trim());
-          if (target?.value) {
-            expr = expr.replace(m[0], (parseVnNumber(target.value) || 0).toString());
-          } else {
-            allValid = false;
-          }
-        }
-        if (allValid) {
-          try {
-            const res = new Function('return ' + expr)();
-            const resultStr = Number.isInteger(res) ? res.toString() : parseFloat(res).toFixed(2).toString();
-            if (!isNaN(res) && isFinite(res) && v.value !== resultStr) {
-              v.value = resultStr;
-              updated = true;
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-
-      // 3. project_dependent
-      if (v.type === 'project_dependent' && v.dependentConfig && currentProject) {
-        const fieldMap: Record<string, string> = {
-          name: currentProject.name,
-          code: currentProject.code,
-          location: currentProject.location,
-          totalInvestment: formatVnNumber(currentProject.totalInvestment),
-          status: currentProject.status,
-          scale: currentDetail?.scale || '',
-          approvalDecision: currentDetail?.approvalDecision || '',
-          group: currentDetail?.group || '',
-          type: currentDetail?.type || '',
-          level: currentDetail?.level || '',
-        };
-        const mappedVal = fieldMap[v.dependentConfig] || '';
-        if (v.value !== mappedVal) {
-          v.value = mappedVal;
-          updated = true;
-        }
-      }
-
-      // 4. contractor_dependent
-      if (v.type === 'contractor_dependent' && v.sourceVariableId && v.dependentConfig) {
-        const sourceVar = newDraft.find((s) => s.id === v.sourceVariableId);
-        if (sourceVar?.value) {
-          const matchedCont = companies.find((c) => c.name === sourceVar.value);
-          if (matchedCont) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const contAny = matchedCont as any;
-            const mappedVal =
-              contAny[v.dependentConfig] != null ? String(contAny[v.dependentConfig]) : '';
-            if (v.value !== mappedVal) {
-              v.value = mappedVal;
-              updated = true;
-            }
-          }
-        }
-      }
-
-      // 5. cost_package_dependent (Trích xuất từ Gói thầu / Nội dung chi phí)
-      if (v.type === 'cost_package_dependent' && v.dependentConfig) {
-        let targetPkg: CostPackageItem | undefined;
-        if (v.sourceVariableId) {
-          const sourceVar = newDraft.find((s) => s.id === v.sourceVariableId);
+      newDraft.forEach((v) => {
+        // 1. cost_package_dependent (Trích xuất từ Gói thầu / Nội dung chi phí)
+        if (v.type === 'cost_package_dependent' && v.dependentConfig) {
+          let targetPkg: CostPackageItem | undefined;
+          const sourceVar = v.sourceVariableId
+            ? newDraft.find((s) => s.id === v.sourceVariableId || s.name === v.sourceVariableId)
+            : newDraft.find((s) => s.type === 'cost_package');
           if (sourceVar?.value) {
             targetPkg = currentCostPackages.find((cp) => cp.content === sourceVar.value);
           }
-        }
-        if (!targetPkg && currentCostPackages.length > 0) {
-          targetPkg = currentCostPackages[0];
-        }
+          if (!targetPkg && currentCostPackages.length > 0) {
+            targetPkg = currentCostPackages[0];
+          }
 
-        if (targetPkg) {
-          let mappedVal = '';
-          const cfg = v.dependentConfig;
-          if (cfg === 'content') mappedVal = targetPkg.content;
-          else if (cfg === 'contractor') mappedVal = targetPkg.contractor || '';
-          else if (cfg === 'estimateValue') mappedVal = targetPkg.estimateValue ? formatVnNumber(targetPkg.estimateValue) : '';
-          else if (cfg === 'contractValue') mappedVal = targetPkg.contractValue ? formatVnNumber(targetPkg.contractValue) : '';
-          else if (cfg === 'discountRate') mappedVal = targetPkg.discountRate != null ? String(targetPkg.discountRate) : '';
-          else if (cfg === 'biddingTime') mappedVal = targetPkg.biddingTime || '';
-          else if (cfg === 'biddingForm') mappedVal = targetPkg.biddingForm || '';
-          else if (cfg === 'biddingMethod') mappedVal = targetPkg.biddingMethod || '';
-          else if (cfg === 'contractNumber') mappedVal = targetPkg.contractNumber || '';
-          else if (cfg === 'contractDate') mappedVal = targetPkg.contractDate ? formatVNDateString(targetPkg.contractDate) : '';
-          else if (cfg === 'contractType') mappedVal = targetPkg.contractType || '';
-          else if (cfg === 'executionTime') mappedVal = targetPkg.executionTime || '';
-          else if (cfg === 'status') mappedVal = targetPkg.status || '';
-          else if (cfg === 'category') mappedVal = targetPkg.category || '';
-          else if (cfg === 'costType') mappedVal = targetPkg.costType || '';
+          if (targetPkg) {
+            let mappedVal = '';
+            const cfg = v.dependentConfig;
+            if (cfg === 'content') mappedVal = targetPkg.content;
+            else if (cfg === 'contractor') mappedVal = targetPkg.contractor || '';
+            else if (cfg === 'estimateValue') mappedVal = targetPkg.estimateValue ? formatVnNumber(targetPkg.estimateValue) : '';
+            else if (cfg === 'contractValue') mappedVal = targetPkg.contractValue ? formatVnNumber(targetPkg.contractValue) : '';
+            else if (cfg === 'discountRate') mappedVal = targetPkg.discountRate != null ? String(targetPkg.discountRate) : '';
+            else if (cfg === 'biddingTime') mappedVal = targetPkg.biddingTime || '';
+            else if (cfg === 'biddingForm') mappedVal = targetPkg.biddingForm || '';
+            else if (cfg === 'biddingMethod') mappedVal = targetPkg.biddingMethod || '';
+            else if (cfg === 'contractNumber') mappedVal = targetPkg.contractNumber || '';
+            else if (cfg === 'contractDate') mappedVal = targetPkg.contractDate ? formatVNDateString(targetPkg.contractDate) : '';
+            else if (cfg === 'contractType') mappedVal = targetPkg.contractType || '';
+            else if (cfg === 'executionTime') mappedVal = targetPkg.executionTime || '';
+            else if (cfg === 'status') mappedVal = targetPkg.status || '';
+            else if (cfg === 'category') mappedVal = targetPkg.category || '';
+            else if (cfg === 'costType') mappedVal = targetPkg.costType || '';
 
-          if (v.value !== mappedVal) {
-            v.value = mappedVal;
-            updated = true;
+            if (v.value !== mappedVal) {
+              v.value = mappedVal;
+              passUpdated = true;
+              anyUpdated = true;
+            }
           }
         }
-      }
 
-      // 6. legal_doc_dependent (Trích xuất từ Hồ sơ pháp lý)
-      if (v.type === 'legal_doc_dependent' && v.dependentConfig) {
-        let targetDoc: LegalDocItem | undefined;
-        if (v.sourceVariableId) {
-          const sourceVar = newDraft.find((s) => s.id === v.sourceVariableId);
+        // 2. contractor_dependent (Trích xuất thông tin từ Nhà thầu)
+        if (v.type === 'contractor_dependent' && v.dependentConfig) {
+          const sourceVar = v.sourceVariableId
+            ? newDraft.find((s) => s.id === v.sourceVariableId || s.name === v.sourceVariableId)
+            : newDraft.find(
+                (s) =>
+                  s.type === 'contractor' ||
+                  (s.type === 'cost_package_dependent' && s.dependentConfig === 'contractor') ||
+                  s.name.includes('nha_thau') ||
+                  s.label.includes('nhà thầu')
+              );
+          if (sourceVar?.value) {
+            const searchName = sourceVar.value.trim().toLowerCase();
+            const matchedCont = companies.find((c) => {
+              const cName = c.name?.trim().toLowerCase() || '';
+              const cShort = c.shortName?.trim().toLowerCase() || '';
+              return (
+                cName === searchName ||
+                (cShort && cShort === searchName) ||
+                (searchName && cName.includes(searchName)) ||
+                (cName && searchName.includes(cName))
+              );
+            });
+
+            if (matchedCont) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const contAny = matchedCont as any;
+              const cfg = v.dependentConfig;
+              const mappedVal =
+                contAny[cfg] != null
+                  ? String(contAny[cfg])
+                  : contAny[toSnakeCase(cfg)] != null
+                  ? String(contAny[toSnakeCase(cfg)])
+                  : contAny[toCamelCase(cfg)] != null
+                  ? String(contAny[toCamelCase(cfg)])
+                  : '';
+              if (v.value !== mappedVal) {
+                v.value = mappedVal;
+                passUpdated = true;
+                anyUpdated = true;
+              }
+            }
+          }
+        }
+
+        // 3. legal_doc_dependent (Trích xuất từ Hồ sơ pháp lý)
+        if (v.type === 'legal_doc_dependent' && v.dependentConfig) {
+          let targetDoc: LegalDocItem | undefined;
+          const sourceVar = v.sourceVariableId
+            ? newDraft.find((s) => s.id === v.sourceVariableId || s.name === v.sourceVariableId)
+            : newDraft.find((s) => s.type === 'legal_doc');
           if (sourceVar?.value) {
             targetDoc = currentLegalDocs.find((ld) => ld.content === sourceVar.value);
           }
-        }
-        if (!targetDoc && currentLegalDocs.length > 0) {
-          targetDoc = currentLegalDocs[0];
-        }
+          if (!targetDoc && currentLegalDocs.length > 0) {
+            targetDoc = currentLegalDocs[0];
+          }
 
-        if (targetDoc) {
-          let mappedVal = '';
-          const cfg = v.dependentConfig;
-          if (cfg === 'content') mappedVal = targetDoc.content;
-          else if (cfg === 'fileName') mappedVal = targetDoc.fileName || '';
-          else if (cfg === 'note') mappedVal = targetDoc.note || '';
+          if (targetDoc) {
+            let mappedVal = '';
+            const cfg = v.dependentConfig;
+            if (cfg === 'content') mappedVal = targetDoc.content;
+            else if (cfg === 'fileName') mappedVal = targetDoc.fileName || '';
+            else if (cfg === 'note') mappedVal = targetDoc.note || '';
 
-          if (v.value !== mappedVal) {
-            v.value = mappedVal;
-            updated = true;
+            if (v.value !== mappedVal) {
+              v.value = mappedVal;
+              passUpdated = true;
+              anyUpdated = true;
+            }
           }
         }
-      }
-    });
 
-    if (updated) setDraftVariables(newDraft);
+        // 4. project_dependent (Thông tin dự án)
+        if (v.type === 'project_dependent' && v.dependentConfig && currentProject) {
+          const fieldMap: Record<string, string> = {
+            name: currentProject.name,
+            code: currentProject.code,
+            location: currentProject.location,
+            totalInvestment: formatVnNumber(currentProject.totalInvestment),
+            status: currentProject.status,
+            scale: currentDetail?.scale || '',
+            approvalDecision: currentDetail?.approvalDecision || '',
+            group: currentDetail?.group || '',
+            type: currentDetail?.type || '',
+            level: currentDetail?.level || '',
+          };
+          const mappedVal = fieldMap[v.dependentConfig] || '';
+          if (v.value !== mappedVal) {
+            v.value = mappedVal;
+            passUpdated = true;
+            anyUpdated = true;
+          }
+        }
+
+        // 5. number_to_words (Đọc số thành chữ)
+        if (v.type === 'number_to_words') {
+          const parent = v.sourceVariableId
+            ? newDraft.find((p) => p.id === v.sourceVariableId || p.name === v.sourceVariableId)
+            : newDraft.find(
+                (p) =>
+                  p.type === 'number' ||
+                  p.type === 'formula' ||
+                  (p.type === 'project_dependent' && p.dependentConfig === 'totalInvestment') ||
+                  (p.type === 'cost_package_dependent' &&
+                    (p.dependentConfig === 'estimateValue' || p.dependentConfig === 'contractValue'))
+              );
+          if (parent?.value) {
+            const words = numberToWordsVN(parseVnNumber(parent.value));
+            if (v.value !== words) {
+              v.value = words;
+              passUpdated = true;
+              anyUpdated = true;
+            }
+          }
+        }
+
+        // 6. formula (Công thức tính toán)
+        if (v.type === 'formula' && v.formulaExpression) {
+          let expr = v.formulaExpression;
+          let allValid = true;
+          const rx = /{{(.*?)}}/g;
+          let m;
+          while ((m = rx.exec(v.formulaExpression)) !== null) {
+            const target = newDraft.find((t) => t.name === m![1].trim() || t.id === m![1].trim());
+            if (target?.value) {
+              expr = expr.replace(m[0], (parseVnNumber(target.value) || 0).toString());
+            } else {
+              allValid = false;
+            }
+          }
+          if (allValid) {
+            try {
+              const res = new Function('return ' + expr)();
+              const resultStr = Number.isInteger(res) ? res.toString() : parseFloat(res).toFixed(2).toString();
+              if (!isNaN(res) && isFinite(res) && v.value !== resultStr) {
+                v.value = resultStr;
+                passUpdated = true;
+                anyUpdated = true;
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      });
+
+      if (!passUpdated) break;
+    }
+
+    if (anyUpdated) setDraftVariables(newDraft);
   }, [draftVariables, selectedProjectId, projects, projectDetails, companies, costPackages, legalDocs]);
 
   // ==================== UPDATE LIVE PREVIEW ====================
@@ -491,11 +581,13 @@ export const DraftingView: React.FC = () => {
       draftPreviewContainerRef.current.innerHTML = draftPristineHtmlRef.current;
     }
 
-    // Update each variable span
+    // Update each variable span (tìm tất cả span cùng data-var-id hoặc data-var-name)
     draftVariables.forEach((v) => {
       if (v.type === 'joint_venture') return;
 
-      const elements = draftPreviewContainerRef.current?.querySelectorAll(`span[data-var-id="${v.id}"]`);
+      const elements = draftPreviewContainerRef.current?.querySelectorAll(
+        `span[data-var-id="${v.id}"], span[data-var-name="${v.name}"]`
+      );
       elements?.forEach((el) => {
         let displayValue = v.value;
         if (v.type === 'number' && v.value) displayValue = formatVnNumber(v.value);
@@ -519,7 +611,8 @@ export const DraftingView: React.FC = () => {
           (el as HTMLElement).className = 'bg-green-100 px-1 rounded text-green-900 border-b border-green-300';
         } else {
           el.textContent = `{{${v.name}}}`;
-          (el as HTMLElement).className = 'bg-yellow-200 px-1 rounded text-blue-900 border-b border-yellow-400 font-semibold';
+          (el as HTMLElement).className =
+            'bg-yellow-200 px-1 rounded text-blue-900 border-b border-yellow-400 font-semibold';
         }
       });
     });
@@ -653,6 +746,7 @@ export const DraftingView: React.FC = () => {
         (a, b) => (b.originalText || '').length - (a.originalText || '').length
       );
 
+      // Thay thế tất cả các biến vào Word XML
       sortedVars.forEach((v) => {
         if (v.type === 'joint_venture' || v.type === 'table') return;
 
@@ -660,92 +754,20 @@ export const DraftingView: React.FC = () => {
         if (v.type === 'number') displayValueRaw = formatVnNumber(v.value || '');
         else if (v.type === 'date') displayValueRaw = formatVNDateString(v.value || '');
 
-        const targetStr = encodeXML(v.originalText).replace(/[\s\u00A0\n]+/g, ' ').trim();
-        if (!targetStr) return;
+        // Tập hợp tất cả các chuỗi text gốc cần thay thế cho biến này (gồm originalText và các vị trí đã gán thêm)
+        const textsToReplace = Array.from(
+          new Set([v.originalText, ...(v.originalTexts || [])].filter(Boolean))
+        );
 
-        let plainText = '';
-        const plainToXml: number[] = [];
-        let inTag = false;
-
-        for (let i = 0; i < xmlContent.length; i++) {
-          if (xmlContent[i] === '<') {
-            inTag = true;
-            continue;
-          }
-          if (xmlContent[i] === '>') {
-            inTag = false;
-            continue;
-          }
-          if (!inTag) {
-            plainToXml.push(i);
-            plainText += xmlContent[i];
-          }
-        }
-
-        const matchIdx = plainText.indexOf(targetStr);
-        if (matchIdx < 0) return;
-
-        const matchedIndices: number[] = [];
-        for (let k = 0; k < targetStr.length; k++) {
-          matchedIndices.push(plainToXml[matchIdx + k]);
-        }
-
-        const indicesToDelete = new Set<number>();
-        matchedIndices.forEach((idx) => {
-          if (xmlContent[idx] !== '<') indicesToDelete.add(idx);
+        textsToReplace.forEach((origText) => {
+          xmlContent = replaceAllInXml(
+            xmlContent,
+            origText,
+            displayValueRaw,
+            v.type === 'long_text',
+            v.paragraphIndent
+          );
         });
-
-        const startXmlIdx = matchedIndices[0];
-        const actualEnd = matchedIndices[matchedIndices.length - 1] + 1;
-
-        let newXml = xmlContent.substring(0, startXmlIdx);
-
-        // Long text paragraph splitting
-        if (v.type === 'long_text' && displayValueRaw.includes('\n')) {
-          const displayValue = encodeXML(displayValueRaw);
-          const textBefore = xmlContent.substring(0, startXmlIdx);
-          const lastPStart = Math.max(textBefore.lastIndexOf('<w:p '), textBefore.lastIndexOf('<w:p>'));
-          let pPrMatch = '';
-          let rPrMatch = '';
-          if (lastPStart !== -1) {
-            const pContent = textBefore.substring(lastPStart);
-            const pPrRes = pContent.match(/<w:pPr>.*?<\/w:pPr>/);
-            if (pPrRes) pPrMatch = pPrRes[0];
-            const lastRStart = Math.max(textBefore.lastIndexOf('<w:r '), textBefore.lastIndexOf('<w:r>'));
-            if (lastRStart !== -1 && lastRStart > lastPStart) {
-              const rContent = textBefore.substring(lastRStart);
-              const rPrRes = rContent.match(/<w:rPr>.*?<\/w:rPr>/);
-              if (rPrRes) rPrMatch = rPrRes[0];
-            }
-          }
-
-          let customPPr = pPrMatch;
-          if (v.paragraphIndent && Number(v.paragraphIndent) > 0) {
-            const twips = Math.round(Number(v.paragraphIndent) * 567);
-            if (customPPr) {
-              if (customPPr.includes('<w:ind ')) {
-                customPPr = customPPr.replace(/<w:ind [^>]*\/>/, `<w:ind w:firstLine="${twips}"/>`);
-              } else {
-                customPPr = customPPr.replace('</w:pPr>', `<w:ind w:firstLine="${twips}"/></w:pPr>`);
-              }
-            } else {
-              customPPr = `<w:pPr><w:ind w:firstLine="${twips}"/></w:pPr>`;
-            }
-          }
-
-          newXml += displayValue
-            .split('\n')
-            .join(`</w:t></w:r></w:p><w:p>${customPPr}<w:r>${rPrMatch}<w:t xml:space="preserve">`);
-        } else {
-          const displayValue = encodeXML(displayValueRaw.replace(/[\n\r]+/g, ' '));
-          newXml += displayValue;
-        }
-
-        for (let i = startXmlIdx; i < actualEnd; i++) {
-          if (!indicesToDelete.has(i)) newXml += xmlContent[i];
-        }
-        newXml += xmlContent.substring(actualEnd);
-        xmlContent = newXml;
       });
 
       // JV block cloning
@@ -1017,7 +1039,10 @@ export const DraftingView: React.FC = () => {
               <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-blue-500/40 bg-blue-500/5 cursor-pointer hover:bg-blue-500/10 transition-colors">
                 <Upload size={16} className="text-blue-400 shrink-0" />
                 <span className="text-xs text-blue-300 truncate">
-                  {currentFile ? currentFile.name : 'Chọn file Word (.docx) từ máy...'}
+                  {currentFile
+                    ? currentFile.name
+                    : (editingTemplateId && docTemplates.find((t) => t.id === editingTemplateId)?.fileName) ||
+                      'Chọn file Word (.docx) từ máy...'}
                 </span>
                 <input type="file" accept=".docx" onChange={handleFileUpload} className="hidden" />
               </label>
@@ -1046,7 +1071,14 @@ export const DraftingView: React.FC = () => {
                       className="flex items-center gap-2 p-2 bg-[#080d1a] border border-[#232f4e] rounded-lg group hover:border-blue-500/40 transition-colors"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-mono font-bold text-blue-400 truncate">{`{{${v.name}}}`}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-mono font-bold text-blue-400 truncate">{`{{${v.name}}}`}</p>
+                          {v.originalTexts && v.originalTexts.length > 1 && (
+                            <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-semibold shrink-0">
+                              {v.originalTexts.length} vị trí
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-400 truncate">
                           {v.label} · <span className="text-slate-500 font-mono">[{v.type}]</span>
                         </p>
@@ -1270,6 +1302,121 @@ export const DraftingView: React.FC = () => {
     </div>
   );
 };
+
+// ==================== WORD XML MULTI-OCCURRENCE REPLACEMENT ====================
+/**
+ * Thay thế TẤT CẢ các vị trí xuất hiện của chuỗi text gốc trong file Word XML.
+ * Thay thế từ phải sang trái (vị trí lớn xuống nhỏ) để không làm lệch chỉ số ký tự.
+ */
+function replaceAllInXml(
+  xmlContent: string,
+  targetText: string,
+  displayValueRaw: string,
+  isLongText: boolean,
+  paragraphIndent?: string
+): string {
+  const targetStr = encodeXML(targetText).replace(/[\s\u00A0\n]+/g, ' ').trim();
+  if (!targetStr) return xmlContent;
+
+  // Xây dựng ánh xạ plain text -> XML index
+  let plainText = '';
+  const plainToXml: number[] = [];
+  let inTag = false;
+
+  for (let i = 0; i < xmlContent.length; i++) {
+    if (xmlContent[i] === '<') {
+      inTag = true;
+      continue;
+    }
+    if (xmlContent[i] === '>') {
+      inTag = false;
+      continue;
+    }
+    if (!inTag) {
+      plainToXml.push(i);
+      plainText += xmlContent[i];
+    }
+  }
+
+  // Tìm TẤT CẢ các vị trí xuất hiện của targetStr trong plainText
+  const matchPositions: number[] = [];
+  let pos = 0;
+  while ((pos = plainText.indexOf(targetStr, pos)) !== -1) {
+    matchPositions.push(pos);
+    pos += targetStr.length;
+  }
+
+  if (matchPositions.length === 0) return xmlContent;
+
+  let currentXml = xmlContent;
+
+  // Thay thế từ PHẢI SANG TRÁI (vị trí lớn xuống nhỏ) để không làm lệch chỉ số XML
+  for (let m = matchPositions.length - 1; m >= 0; m--) {
+    const matchIdx = matchPositions[m];
+    const matchedIndices: number[] = [];
+    for (let k = 0; k < targetStr.length; k++) {
+      matchedIndices.push(plainToXml[matchIdx + k]);
+    }
+
+    const indicesToDelete = new Set<number>();
+    matchedIndices.forEach((idx) => {
+      if (currentXml[idx] !== '<') indicesToDelete.add(idx);
+    });
+
+    const startXmlIdx = matchedIndices[0];
+    const actualEnd = matchedIndices[matchedIndices.length - 1] + 1;
+
+    let newXml = currentXml.substring(0, startXmlIdx);
+
+    if (isLongText && displayValueRaw.includes('\n')) {
+      const displayValue = encodeXML(displayValueRaw);
+      const textBefore = currentXml.substring(0, startXmlIdx);
+      const lastPStart = Math.max(textBefore.lastIndexOf('<w:p '), textBefore.lastIndexOf('<w:p>'));
+      let pPrMatch = '';
+      let rPrMatch = '';
+      if (lastPStart !== -1) {
+        const pContent = textBefore.substring(lastPStart);
+        const pPrRes = pContent.match(/<w:pPr>.*?<\/w:pPr>/);
+        if (pPrRes) pPrMatch = pPrRes[0];
+        const lastRStart = Math.max(textBefore.lastIndexOf('<w:r '), textBefore.lastIndexOf('<w:r>'));
+        if (lastRStart !== -1 && lastRStart > lastPStart) {
+          const rContent = textBefore.substring(lastRStart);
+          const rPrRes = rContent.match(/<w:rPr>.*?<\/w:rPr>/);
+          if (rPrRes) rPrMatch = rPrRes[0];
+        }
+      }
+
+      let customPPr = pPrMatch;
+      if (paragraphIndent && Number(paragraphIndent) > 0) {
+        const twips = Math.round(Number(paragraphIndent) * 567);
+        if (customPPr) {
+          if (customPPr.includes('<w:ind ')) {
+            customPPr = customPPr.replace(/<w:ind [^>]*\/>/, `<w:ind w:firstLine="${twips}"/>`);
+          } else {
+            customPPr = customPPr.replace('</w:pPr>', `<w:ind w:firstLine="${twips}"/></w:pPr>`);
+          }
+        } else {
+          customPPr = `<w:pPr><w:ind w:firstLine="${twips}"/></w:pPr>`;
+        }
+      }
+
+      newXml += displayValue
+        .split('\n')
+        .join(`</w:t></w:r></w:p><w:p>${customPPr}<w:r>${rPrMatch}<w:t xml:space="preserve">`);
+    } else {
+      const displayValue = encodeXML(displayValueRaw.replace(/[\n\r]+/g, ' '));
+      newXml += displayValue;
+    }
+
+    for (let i = startXmlIdx; i < actualEnd; i++) {
+      if (!indicesToDelete.has(i)) newXml += currentXml[i];
+    }
+    newXml += currentXml.substring(actualEnd);
+    currentXml = newXml;
+  }
+
+  return currentXml;
+}
 
 // ==================== JV BLOCK CLONING IN WORD XML ====================
 function cloneJvBlockInXml(

@@ -175,14 +175,24 @@ export const VariableForm: React.FC<VariableFormProps> = ({
             v.type === 'contractor_dependent' ||
             v.type === 'cost_package_dependent' ||
             v.type === 'legal_doc_dependent') && (
-            <div className="px-3 py-2 bg-[#080d1a] border border-[#232f4e] rounded-lg text-slate-300 italic min-h-[38px] flex items-center text-sm">
-              {v.type === 'number_to_words' && <span className="text-slate-500 mr-2">🤖</span>}
-              {v.type === 'formula' && <span className="text-slate-500 mr-2">∑</span>}
-              {v.type === 'project_dependent' && <span className="text-blue-400 mr-2">🏛️</span>}
-              {v.type === 'contractor_dependent' && <span className="text-emerald-400 mr-2">🏢</span>}
-              {v.type === 'cost_package_dependent' && <span className="text-amber-400 mr-2">💰</span>}
-              {v.type === 'legal_doc_dependent' && <span className="text-purple-400 mr-2">📜</span>}
-              <span className="truncate">{v.value || 'Tự động tính / trích xuất...'}</span>
+            <div className="relative">
+              <input
+                value={v.value || ''}
+                onChange={(e) => onVariableChange(v.name, e.target.value)}
+                placeholder="Tự động trích xuất hoặc nhập tay..."
+                className={`${inputClass} pr-8 ${v.value ? 'text-slate-100 font-medium' : 'text-slate-500 italic'}`}
+              />
+              <span
+                className="absolute right-2.5 top-2.5 text-xs select-none pointer-events-none opacity-80"
+                title={`Biến tự động: ${v.type}`}
+              >
+                {v.type === 'number_to_words' && '🤖'}
+                {v.type === 'formula' && '∑'}
+                {v.type === 'project_dependent' && '🏛️'}
+                {v.type === 'contractor_dependent' && '🏢'}
+                {v.type === 'cost_package_dependent' && '💰'}
+                {v.type === 'legal_doc_dependent' && '📜'}
+              </span>
             </div>
           )}
 

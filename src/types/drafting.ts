@@ -32,6 +32,7 @@ export interface TemplateVariable {
   type: VariableType;
   value: string;              // Giá trị hiện tại
   originalText: string;       // Text gốc trong .docx đã bôi đen
+  originalTexts?: string[];   // Danh sách các text gốc tại nhiều vị trí khác nhau (khi gắn vào nhiều nơi)
   occurrenceIndex?: number;   // Vị trí xuất hiện (nếu text trùng)
 
   // Cho dropdown
