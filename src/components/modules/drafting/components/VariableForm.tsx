@@ -10,9 +10,12 @@ interface VariableFormProps {
   projects: ProjectListItem[];
   companies: ContractorItem[];
   costPackages?: CostPackageItem[];
+  allCostPackages?: Record<string, CostPackageItem[]>;
   legalDocs?: LegalDocItem[];
   activeVarName?: string | null;
   onFocusVar?: (varName: string) => void;
+  onProjectChange?: (projectId: string) => void;
+  onCostPackageSelect?: (costPackage: CostPackageItem) => void;
   onVariableChange: (varName: string, value: string) => void;
   onNumberInput: (varName: string, value: string) => void;
 }
@@ -252,9 +255,12 @@ export const VariableForm: React.FC<VariableFormProps> = ({
   projects,
   companies,
   costPackages = [],
+  allCostPackages,
   legalDocs = [],
   activeVarName,
   onFocusVar,
+  onProjectChange,
+  onCostPackageSelect,
   onVariableChange,
   onNumberInput,
 }) => {
@@ -371,7 +377,19 @@ export const VariableForm: React.FC<VariableFormProps> = ({
             {v.type === 'project' && (
               <select
                 value={v.value}
-                onChange={(e) => onVariableChange(v.name, e.target.value)}
+                onChange={(e) => {
+                  const selectedVal = e.target.value;
+                  onVariableChange(v.name, selectedVal);
+                  const matched = projects.find(
+                    (p) =>
+                      p.name === selectedVal ||
+                      p.id === selectedVal ||
+                      (p.code && selectedVal.includes(p.code))
+                  );
+                  if (matched) {
+                    onProjectChange?.(matched.id);
+                  }
+                }}
                 onFocus={() => onFocusVar?.(v.name)}
                 className={`${inputClass} ${isFocused ? 'border-amber-400 ring-1 ring-amber-400' : ''}`}
               >
@@ -400,21 +418,77 @@ export const VariableForm: React.FC<VariableFormProps> = ({
               </select>
             )}
 
-            {v.type === 'cost_package' && (
-              <select
-                value={v.value}
-                onChange={(e) => onVariableChange(v.name, e.target.value)}
-                onFocus={() => onFocusVar?.(v.name)}
-                className={`${inputClass} ${isFocused ? 'border-amber-400 ring-1 ring-amber-400' : ''}`}
-              >
-                <option value="">-- Chọn gói thầu / nội dung chi phí --</option>
-                {costPackages.map((cp) => (
-                  <option key={cp.id} value={cp.content}>
-                    {cp.content} ({cp.category}) - {formatVnNumber(cp.contractValue || cp.estimateValue)} đ
+            {v.type === 'cost_package' && (() => {
+              const currentPkgs = costPackages || [];
+              const otherProjectsMap: { project: ProjectListItem; packages: CostPackageItem[] }[] = [];
+              if (allCostPackages && projects) {
+                projects.forEach((proj) => {
+                  const pkgs = allCostPackages[proj.id] || [];
+                  if (pkgs.length > 0) {
+                    const isCurrent = currentPkgs.some((cp) => pkgs.some((p) => p.id === cp.id));
+                    if (!isCurrent) {
+                      otherProjectsMap.push({ project: proj, packages: pkgs });
+                    }
+                  }
+                });
+              }
+
+              const totalCount = currentPkgs.length + otherProjectsMap.reduce((acc, cur) => acc + cur.packages.length, 0);
+
+              return (
+                <select
+                  value={v.value}
+                  onChange={(e) => {
+                    const selectedVal = e.target.value;
+                    onVariableChange(v.name, selectedVal);
+                    let foundPkg: CostPackageItem | undefined = currentPkgs.find((cp) => cp.content === selectedVal);
+                    if (!foundPkg && allCostPackages) {
+                      for (const pkgs of Object.values(allCostPackages)) {
+                        const p = pkgs.find((cp) => cp.content === selectedVal);
+                        if (p) {
+                          foundPkg = p;
+                          break;
+                        }
+                      }
+                    }
+                    if (foundPkg) {
+                      onCostPackageSelect?.(foundPkg);
+                      if (foundPkg.projectId) {
+                        onProjectChange?.(foundPkg.projectId);
+                      }
+                    }
+                  }}
+                  onFocus={() => onFocusVar?.(v.name)}
+                  className={`${inputClass} ${isFocused ? 'border-amber-400 ring-1 ring-amber-400' : ''}`}
+                >
+                  <option value="">
+                    {totalCount > 0
+                      ? `-- Chọn gói thầu / nội dung chi phí (${totalCount}) --`
+                      : '-- Chưa có gói thầu nào trong hệ thống --'}
                   </option>
-                ))}
-              </select>
-            )}
+
+                  {currentPkgs.length > 0 && (
+                    <optgroup label="Gói thầu của dự án đang chọn">
+                      {currentPkgs.map((cp) => (
+                        <option key={cp.id} value={cp.content}>
+                          {cp.content} ({cp.category}) - {formatVnNumber(cp.contractValue || cp.estimateValue)} đ
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  {otherProjectsMap.map(({ project, packages }) => (
+                    <optgroup key={project.id} label={`Dự án: ${project.name}`}>
+                      {packages.map((cp) => (
+                        <option key={cp.id} value={cp.content}>
+                          {cp.content} ({cp.category}) - {formatVnNumber(cp.contractValue || cp.estimateValue)} đ
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              );
+            })()}
 
             {/* Hồ sơ pháp lý: Tích chọn nhiều nội dung có tìm kiếm */}
             {v.type === 'legal_doc' && (

@@ -331,12 +331,13 @@ export const DraftingView: React.FC = () => {
     setHeaderTitle('SOẠN THẢO VĂN BẢN THEO BIỂU MẪU');
   }, [setHeaderTitle]);
 
-  // Luôn đảm bảo có ID dự án ngầm định cho việc trích xuất dữ liệu tự động
+  // Luôn đảm bảo có ID dự án ngầm định cho việc trích xuất dữ liệu tự động (ưu tiên dự án có dữ liệu gói thầu)
   useEffect(() => {
     if (!selectedProjectId && projects.length > 0) {
-      setSelectedProjectId(projects[0].id);
+      const pWithData = projects.find((p) => (costPackages[p.id]?.length || 0) > 0) || projects[0];
+      setSelectedProjectId(pWithData.id);
     }
-  }, [projects, selectedProjectId]);
+  }, [projects, selectedProjectId, costPackages]);
 
   // ==================== TEMPLATE MANAGER FUNCTIONS ====================
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -590,7 +591,31 @@ export const DraftingView: React.FC = () => {
     if (!template) return;
 
     setSelectedTemplateId(templateId);
-    setDraftVariables(template.variables.map((v) => ({ ...v, value: '' })));
+
+    // Xác định dự án kích hoạt: ưu tiên dự án đã có dữ liệu gói thầu
+    let activePid = selectedProjectId;
+    if (!activePid || !(costPackages[activePid]?.length > 0)) {
+      const pWithData = projects.find((p) => (costPackages[p.id]?.length || 0) > 0);
+      if (pWithData) {
+        activePid = pWithData.id;
+        setSelectedProjectId(pWithData.id);
+      } else if (projects.length > 0) {
+        activePid = projects[0].id;
+        setSelectedProjectId(projects[0].id);
+      }
+    }
+
+    const curProj = projects.find((p) => p.id === activePid);
+
+    // Khởi tạo danh sách biến cho biểu mẫu (tự điền tên dự án nếu biểu mẫu có biến project)
+    const initialVars = template.variables.map((v) => {
+      if (v.type === 'project' && curProj) {
+        return { ...v, value: curProj.name };
+      }
+      return { ...v, value: '' };
+    });
+
+    setDraftVariables(initialVars);
     setJvMembers([]);
     setActiveVarName(null);
   };
@@ -647,7 +672,42 @@ export const DraftingView: React.FC = () => {
   }, [selectedTemplateId, docTemplates]);
 
   const handleDraftVariableChange = (varName: string, value: string) => {
-    setDraftVariables((prev) => prev.map((v) => (v.name === varName ? { ...v, value } : v)));
+    setDraftVariables((prev) => {
+      let updated = prev.map((v) => (v.name === varName ? { ...v, value } : v));
+
+      const targetVar = prev.find((v) => v.name === varName);
+      // Khi chọn dự án, cập nhật selectedProjectId
+      if (targetVar?.type === 'project') {
+        const matched = projects.find(
+          (p) =>
+            p.name === value ||
+            p.id === value ||
+            (p.code && value.includes(p.code))
+        );
+        if (matched) {
+          setSelectedProjectId(matched.id);
+        }
+      }
+
+      // Khi chọn gói thầu, tìm dự án của gói thầu đó và cập nhật selectedProjectId & tên dự án
+      if (targetVar?.type === 'cost_package') {
+        for (const [pid, pkgs] of Object.entries(costPackages)) {
+          const found = pkgs.find((cp) => cp.content === value);
+          if (found) {
+            setSelectedProjectId(pid);
+            const proj = projects.find((p) => p.id === pid);
+            if (proj) {
+              updated = updated.map((v) =>
+                v.type === 'project' ? { ...v, value: proj.name } : v
+              );
+            }
+            break;
+          }
+        }
+      }
+
+      return updated;
+    });
   };
 
   const handleDraftNumberInput = (varName: string, value: string) => {
@@ -676,10 +736,51 @@ export const DraftingView: React.FC = () => {
   useEffect(() => {
     let anyUpdated = false;
     const newDraft = [...draftVariables];
-    const currentProject = projects.find((p) => p.id === selectedProjectId);
+
+    // Xác định ID dự án hiệu lực dựa trên biến 'project' hoặc 'cost_package'
+    let effectiveProjectId = selectedProjectId;
+
+    const projVar = newDraft.find((s) => s.type === 'project' && s.value);
+    if (projVar) {
+      const matched = projects.find(
+        (p) =>
+          p.name.trim().toLowerCase() === projVar.value.trim().toLowerCase() ||
+          p.id === projVar.value ||
+          (p.code && projVar.value.includes(p.code)) ||
+          (p.name && (projVar.value.includes(p.name) || p.name.includes(projVar.value)))
+      );
+      if (matched && matched.id !== selectedProjectId) {
+        effectiveProjectId = matched.id;
+        setSelectedProjectId(matched.id);
+      }
+    }
+
+    const pkgVar = newDraft.find((s) => s.type === 'cost_package' && s.value);
+    if (pkgVar?.value) {
+      for (const [pid, pkgs] of Object.entries(costPackages)) {
+        const found = pkgs.find((cp) => cp.content === pkgVar.value);
+        if (found) {
+          if (effectiveProjectId !== pid) {
+            effectiveProjectId = pid;
+            setSelectedProjectId(pid);
+          }
+          const matchedProj = projects.find((p) => p.id === pid);
+          if (matchedProj) {
+            const pVar = newDraft.find((s) => s.type === 'project');
+            if (pVar && pVar.value !== matchedProj.name) {
+              pVar.value = matchedProj.name;
+              anyUpdated = true;
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    const currentProject = projects.find((p) => p.id === effectiveProjectId);
     const currentDetail = currentProject ? projectDetails[currentProject.id] : undefined;
-    const currentCostPackages = costPackages[selectedProjectId] || [];
-    const currentLegalDocs = legalDocs[selectedProjectId] || [];
+    const currentCostPackages = costPackages[effectiveProjectId] || [];
+    const currentLegalDocs = legalDocs[effectiveProjectId] || [];
 
     // Chạy vòng lặp giải quyết chuỗi phụ thuộc nhiều tầng (tối đa 5 lượt lặp)
     // Ví dụ: cost_package → cost_package_dependent (contractor) → contractor_dependent (address)
@@ -695,6 +796,15 @@ export const DraftingView: React.FC = () => {
             : newDraft.find((s) => s.type === 'cost_package');
           if (sourceVar?.value) {
             targetPkg = currentCostPackages.find((cp) => cp.content === sourceVar.value);
+            if (!targetPkg) {
+              for (const pkgs of Object.values(costPackages)) {
+                const found = pkgs.find((cp) => cp.content === sourceVar.value);
+                if (found) {
+                  targetPkg = found;
+                  break;
+                }
+              }
+            }
           }
           if (!targetPkg && currentCostPackages.length > 0) {
             targetPkg = currentCostPackages[0];
@@ -801,7 +911,7 @@ export const DraftingView: React.FC = () => {
         }
 
         // 4. project_dependent (Thông tin dự án)
-        if (v.type === 'project_dependent' && v.dependentConfig && currentProject) {
+        if (v.type === 'project_dependent' && currentProject) {
           const fieldMap: Record<string, string> = {
             name: currentProject.name,
             code: currentProject.code,
@@ -814,8 +924,22 @@ export const DraftingView: React.FC = () => {
             type: currentDetail?.type || '',
             level: currentDetail?.level || '',
           };
-          const mappedVal = fieldMap[v.dependentConfig] || '';
-          if (v.value !== mappedVal) {
+
+          let cfg = v.dependentConfig || '';
+          if (!cfg) {
+            const key = (v.name + ' ' + (v.label || '')).toLowerCase();
+            if (key.includes('địa điểm') || key.includes('dia_diem') || key.includes('location')) cfg = 'location';
+            else if (key.includes('mã dự án') || key.includes('ma_du_an') || key.includes('code')) cfg = 'code';
+            else if (key.includes('tổng mức') || key.includes('tong_muc')) cfg = 'totalInvestment';
+            else if (key.includes('quy mô') || key.includes('scale')) cfg = 'scale';
+            else if (key.includes('phê duyệt') || key.includes('quyet_dinh')) cfg = 'approvalDecision';
+            else if (key.includes('tên dự án') || key.includes('ten_du_an')) cfg = 'name';
+            else if (key.includes('loại công trình')) cfg = 'type';
+            else if (key.includes('cấp công trình')) cfg = 'level';
+          }
+
+          const mappedVal = fieldMap[cfg] || '';
+          if (mappedVal && v.value !== mappedVal) {
             v.value = mappedVal;
             passUpdated = true;
             anyUpdated = true;
@@ -1568,9 +1692,30 @@ export const DraftingView: React.FC = () => {
                   projects={projects}
                   companies={companies}
                   costPackages={costPackages[selectedProjectId] || []}
+                  allCostPackages={costPackages}
                   legalDocs={legalDocs[selectedProjectId] || []}
                   activeVarName={activeVarName}
                   onFocusVar={setActiveVarName}
+                  onProjectChange={(pid) => {
+                    setSelectedProjectId(pid);
+                    const p = projects.find((x) => x.id === pid);
+                    if (p) {
+                      setDraftVariables((prev) =>
+                        prev.map((v) => (v.type === 'project' ? { ...v, value: p.name } : v))
+                      );
+                    }
+                  }}
+                  onCostPackageSelect={(cp) => {
+                    if (cp.projectId) {
+                      setSelectedProjectId(cp.projectId);
+                      const p = projects.find((x) => x.id === cp.projectId);
+                      if (p) {
+                        setDraftVariables((prev) =>
+                          prev.map((v) => (v.type === 'project' ? { ...v, value: p.name } : v))
+                        );
+                      }
+                    }
+                  }}
                   onVariableChange={handleDraftVariableChange}
                   onNumberInput={handleDraftNumberInput}
                 />
