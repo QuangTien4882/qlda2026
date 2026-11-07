@@ -366,6 +366,7 @@ export const DraftingView: React.FC = () => {
   // Template Manager inline content edit states
   const [isEditingTemplateInModal, setIsEditingTemplateInModal] = useState(false);
   const modalOriginalParagraphsRef = useRef<{ id: string; originalText: string }[]>([]);
+  const isJustSavedTemplateRef = useRef(false);
 
   // Loading states
   const [isRendering, setIsRendering] = useState(false);
@@ -613,7 +614,7 @@ export const DraftingView: React.FC = () => {
           const zip = new PizZip(buf);
           let xmlContent = zip.file('word/document.xml')?.asText() || '';
           changes.forEach((c) => {
-            xmlContent = replaceAllInXml(xmlContent, c.orig, c.edited, c.edited.includes('\n'));
+            xmlContent = applyContentChange(xmlContent, c.orig, c.edited);
           });
           zip.file('word/document.xml', xmlContent);
           fileBase64 = zip.generate({ type: 'base64' });
@@ -718,6 +719,12 @@ export const DraftingView: React.FC = () => {
 
     let isMounted = true;
     const renderPreview = async () => {
+      // Nếu vừa mới lưu nội dung template thì giữ nguyên DOM preview hiện tại, không parse đè lại từ đầu
+      if (isJustSavedTemplateRef.current) {
+        isJustSavedTemplateRef.current = false;
+        return;
+      }
+
       // Đợi ngắn 60ms để DOM ref chắc chắn đã sẵn sàng
       await new Promise((r) => setTimeout(r, 60));
       if (!draftPreviewContainerRef.current || !isMounted) return;
@@ -909,7 +916,7 @@ export const DraftingView: React.FC = () => {
         let xmlContent = zip.file('word/document.xml')?.asText() || '';
 
         changes.forEach((c) => {
-          xmlContent = replaceAllInXml(xmlContent, c.orig, c.edited, c.edited.includes('\n'));
+          xmlContent = applyContentChange(xmlContent, c.orig, c.edited);
         });
 
         zip.file('word/document.xml', xmlContent);
@@ -956,6 +963,12 @@ export const DraftingView: React.FC = () => {
 
       const finalPreviewHtml = container.innerHTML;
 
+      // Đánh dấu vừa mới lưu để renderPreview không ghi đè lại DOM preview hiện tại
+      isJustSavedTemplateRef.current = true;
+      draftPristineHtmlRef.current = finalPreviewHtml;
+      setIsEditingTemplateContent(false);
+      setPreviewRenderVersion((v) => v + 1);
+
       if (isNewCopy) {
         const finalName = (newName || '').trim() || `${template.name} (Bản sửa đổi)`;
         const newTplId = generateId('tpl');
@@ -988,10 +1001,6 @@ export const DraftingView: React.FC = () => {
         updateTemplate(updatedTemplate);
         alert(`Đã lưu cập nhật nội dung vào biểu mẫu "${template.name}" thành công!`);
       }
-
-      draftPristineHtmlRef.current = finalPreviewHtml;
-      setIsEditingTemplateContent(false);
-      setPreviewRenderVersion((v) => v + 1);
     } catch (error) {
       console.error('Lỗi lưu nội dung biểu mẫu:', error);
       alert(`Lỗi khi lưu biểu mẫu: ${error instanceof Error ? error.message : 'Không xác định'}`);
@@ -2312,8 +2321,73 @@ export const DraftingView: React.FC = () => {
 
 // ==================== WORD XML MULTI-OCCURRENCE REPLACEMENT ====================
 /**
- * Thay thế TẤT CẢ các vị trí xuất hiện của chuỗi text gốc trong file Word XML.
- * Thay thế từ phải sang trái (vị trí lớn xuống nhỏ) để không làm lệch chỉ số ký tự.
+ * So sánh tìm phân đoạn vi sai (diff) tối thiểu giữa chuỗi gốc và chuỗi đã sửa (theo ranh giới từ).
+ */
+function computeStringDiff(orig: string, edited: string): { origSnippet: string; editedSnippet: string } {
+  const origTrim = orig.trim();
+  const editedTrim = edited.trim();
+  if (origTrim === editedTrim) return { origSnippet: '', editedSnippet: '' };
+
+  let start = 0;
+  while (start < origTrim.length && start < editedTrim.length && origTrim[start] === editedTrim[start]) {
+    start++;
+  }
+
+  while (start > 0 && !/\s/.test(origTrim[start - 1])) {
+    start--;
+  }
+
+  let origEnd = origTrim.length - 1;
+  let editedEnd = editedTrim.length - 1;
+  while (origEnd >= start && editedEnd >= start && origTrim[origEnd] === editedTrim[editedEnd]) {
+    origEnd--;
+    editedEnd--;
+  }
+
+  while (origEnd < origTrim.length - 1 && !/\s/.test(origTrim[origEnd + 1])) {
+    origEnd++;
+  }
+  while (editedEnd < editedTrim.length - 1 && !/\s/.test(editedTrim[editedEnd + 1])) {
+    editedEnd++;
+  }
+
+  const origSnippet = origTrim.substring(start, origEnd + 1).trim();
+  const editedSnippet = editedTrim.substring(start, editedEnd + 1).trim();
+
+  return { origSnippet, editedSnippet };
+}
+
+/**
+ * Áp dụng thay đổi nội dung vào Word XML:
+ * 1. Thử thay thế toàn bộ chuỗi ban đầu.
+ * 2. Nếu không khớp do XML chứa biến khác hoặc ngắt tab, tự động tính diff ranh giới từ để thay thế phân đoạn chính xác.
+ */
+function applyContentChange(xml: string, origText: string, editedText: string): string {
+  if (!origText || !origText.trim() || origText === editedText) return xml;
+
+  // 1. Thử thay thế toàn bộ chuỗi
+  let updated = replaceAllInXml(xml, origText, editedText, editedText.includes('\n'));
+  if (updated !== xml) {
+    return updated;
+  }
+
+  // 2. Thử thay thế phần vi sai (diff) giữa chuỗi gốc và chuỗi sửa
+  const { origSnippet, editedSnippet } = computeStringDiff(origText, editedText);
+  if (origSnippet && origSnippet !== origText) {
+    updated = replaceAllInXml(xml, origSnippet, editedSnippet, editedSnippet.includes('\n'));
+    if (updated !== xml) {
+      return updated;
+    }
+  }
+
+  return xml;
+}
+
+/**
+ * Thay thế TẤT CẢ các vị trí xuất hiện của chuỗi text trong file Word XML.
+ * - Nhận diện cả <w:tab/> và <w:br/> thành ký tự khoảng trắng/xuống dòng để khớp chính xác.
+ * - Cho phép khớp linh hoạt với bất kỳ chuỗi khoảng trắng nào (\s+).
+ * - Thay thế từ phải sang trái (vị trí lớn xuống nhỏ) để không làm lệch chỉ số ký tự.
  */
 function replaceAllInXml(
   xmlContent: string,
@@ -2322,16 +2396,23 @@ function replaceAllInXml(
   isLongText?: boolean,
   paragraphIndent?: string
 ): string {
-  const targetStr = encodeXML(targetText).replace(/[\s\u00A0\n]+/g, ' ').trim();
-  if (!targetStr) return xmlContent;
+  if (!targetText || !targetText.trim()) return xmlContent;
 
-  // Xây dựng ánh xạ plain text -> XML index
+  // Xây dựng ánh xạ plain text -> XML index (hỗ trợ nhận diện <w:tab/> và <w:br/>)
   let plainText = '';
   const plainToXml: number[] = [];
   let inTag = false;
 
   for (let i = 0; i < xmlContent.length; i++) {
     if (xmlContent[i] === '<') {
+      const tagSlice = xmlContent.substring(i, i + 15);
+      if (tagSlice.startsWith('<w:tab/>') || tagSlice.startsWith('<w:tab />') || tagSlice.startsWith('<w:tab>')) {
+        plainToXml.push(i);
+        plainText += ' ';
+      } else if (tagSlice.startsWith('<w:br/>') || tagSlice.startsWith('<w:br />') || tagSlice.startsWith('<w:br>')) {
+        plainToXml.push(i);
+        plainText += '\n';
+      }
       inTag = true;
       continue;
     }
@@ -2345,29 +2426,41 @@ function replaceAllInXml(
     }
   }
 
-  // Tìm TẤT CẢ các vị trí xuất hiện của targetStr trong plainText
-  const matchPositions: number[] = [];
-  let pos = 0;
-  while ((pos = plainText.indexOf(targetStr, pos)) !== -1) {
-    matchPositions.push(pos);
-    pos += targetStr.length;
+  // Tách targetText thành các từ và tạo regex linh hoạt với khoảng trắng
+  const targetWords = targetText.trim().split(/\s+/).filter(Boolean);
+  if (targetWords.length === 0) return xmlContent;
+
+  const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = targetWords.map(escapeRegex).join('\\s+');
+  const rx = new RegExp(pattern, 'g');
+
+  const matches: { start: number; length: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = rx.exec(plainText)) !== null) {
+    matches.push({
+      start: m.index,
+      length: m[0].length,
+    });
   }
 
-  if (matchPositions.length === 0) return xmlContent;
+  if (matches.length === 0) return xmlContent;
 
   let currentXml = xmlContent;
 
   // Thay thế từ PHẢI SANG TRÁI (vị trí lớn xuống nhỏ) để không làm lệch chỉ số XML
-  for (let m = matchPositions.length - 1; m >= 0; m--) {
-    const matchIdx = matchPositions[m];
+  for (let idx = matches.length - 1; idx >= 0; idx--) {
+    const match = matches[idx];
     const matchedIndices: number[] = [];
-    for (let k = 0; k < targetStr.length; k++) {
-      matchedIndices.push(plainToXml[matchIdx + k]);
+    for (let k = 0; k < match.length; k++) {
+      if (plainToXml[match.start + k] !== undefined) {
+        matchedIndices.push(plainToXml[match.start + k]);
+      }
     }
+    if (matchedIndices.length === 0) continue;
 
     const indicesToDelete = new Set<number>();
-    matchedIndices.forEach((idx) => {
-      if (currentXml[idx] !== '<') indicesToDelete.add(idx);
+    matchedIndices.forEach((xmlIdx) => {
+      if (currentXml[xmlIdx] !== '<') indicesToDelete.add(xmlIdx);
     });
 
     const startXmlIdx = matchedIndices[0];
