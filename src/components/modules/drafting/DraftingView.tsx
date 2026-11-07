@@ -313,7 +313,7 @@ export const DraftingView: React.FC = () => {
   const savedRangeRef = useRef<Range | null>(null);
 
   // Draft mode state
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(projects.length > 0 ? projects[0].id : '');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [draftVariables, setDraftVariables] = useState<TemplateVariable[]>([]);
   const [searchTemplateQuery, setSearchTemplateQuery] = useState('');
@@ -330,14 +330,6 @@ export const DraftingView: React.FC = () => {
   useEffect(() => {
     setHeaderTitle('SOẠN THẢO VĂN BẢN THEO BIỂU MẪU');
   }, [setHeaderTitle]);
-
-  // Luôn đảm bảo có ID dự án ngầm định cho việc trích xuất dữ liệu tự động (ưu tiên dự án có dữ liệu gói thầu)
-  useEffect(() => {
-    if (!selectedProjectId && projects.length > 0) {
-      const pWithData = projects.find((p) => (costPackages[p.id]?.length || 0) > 0) || projects[0];
-      setSelectedProjectId(pWithData.id);
-    }
-  }, [projects, selectedProjectId, costPackages]);
 
   // ==================== TEMPLATE MANAGER FUNCTIONS ====================
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -591,31 +583,10 @@ export const DraftingView: React.FC = () => {
     if (!template) return;
 
     setSelectedTemplateId(templateId);
+    setSelectedProjectId(''); // Yêu cầu: Không tự động chọn dự án nào
 
-    // Xác định dự án kích hoạt: ưu tiên dự án đã có dữ liệu gói thầu
-    let activePid = selectedProjectId;
-    if (!activePid || !(costPackages[activePid]?.length > 0)) {
-      const pWithData = projects.find((p) => (costPackages[p.id]?.length || 0) > 0);
-      if (pWithData) {
-        activePid = pWithData.id;
-        setSelectedProjectId(pWithData.id);
-      } else if (projects.length > 0) {
-        activePid = projects[0].id;
-        setSelectedProjectId(projects[0].id);
-      }
-    }
-
-    const curProj = projects.find((p) => p.id === activePid);
-
-    // Khởi tạo danh sách biến cho biểu mẫu (tự điền tên dự án nếu biểu mẫu có biến project)
-    const initialVars = template.variables.map((v) => {
-      if (v.type === 'project' && curProj) {
-        return { ...v, value: curProj.name };
-      }
-      return { ...v, value: '' };
-    });
-
-    setDraftVariables(initialVars);
+    // Yêu cầu: Toàn bộ biến đều không tự động chọn gì cả, khởi tạo rỗng hoàn toàn
+    setDraftVariables(template.variables.map((v) => ({ ...v, value: '' })));
     setJvMembers([]);
     setActiveVarName(null);
   };
@@ -676,33 +647,52 @@ export const DraftingView: React.FC = () => {
       let updated = prev.map((v) => (v.name === varName ? { ...v, value } : v));
 
       const targetVar = prev.find((v) => v.name === varName);
-      // Khi chọn dự án, cập nhật selectedProjectId
+      // Khi chọn hoặc hủy chọn dự án
       if (targetVar?.type === 'project') {
-        const matched = projects.find(
-          (p) =>
-            p.name === value ||
-            p.id === value ||
-            (p.code && value.includes(p.code))
-        );
-        if (matched) {
-          setSelectedProjectId(matched.id);
+        if (!value) {
+          setSelectedProjectId('');
+          // Khi hủy chọn dự án: reset toàn bộ biến phụ thuộc dự án & gói thầu về rỗng
+          updated = updated.map((v) => {
+            if (
+              v.type === 'project_dependent' ||
+              v.type === 'cost_package' ||
+              v.type === 'cost_package_dependent' ||
+              v.type === 'contractor_dependent' ||
+              v.type === 'legal_doc' ||
+              v.type === 'legal_doc_dependent' ||
+              v.type === 'number_to_words'
+            ) {
+              return { ...v, value: '' };
+            }
+            return v;
+          });
+        } else {
+          const matched = projects.find(
+            (p) =>
+              p.name === value ||
+              p.id === value ||
+              (p.code && value.includes(p.code))
+          );
+          if (matched) {
+            setSelectedProjectId(matched.id);
+          }
         }
       }
 
-      // Khi chọn gói thầu, tìm dự án của gói thầu đó và cập nhật selectedProjectId & tên dự án
+      // Khi chọn hoặc hủy chọn gói thầu
       if (targetVar?.type === 'cost_package') {
-        for (const [pid, pkgs] of Object.entries(costPackages)) {
-          const found = pkgs.find((cp) => cp.content === value);
-          if (found) {
-            setSelectedProjectId(pid);
-            const proj = projects.find((p) => p.id === pid);
-            if (proj) {
-              updated = updated.map((v) =>
-                v.type === 'project' ? { ...v, value: proj.name } : v
-              );
+        if (!value) {
+          // Khi hủy chọn gói thầu: reset các biến trích xuất từ gói thầu & nhà thầu & đọc số
+          updated = updated.map((v) => {
+            if (
+              v.type === 'cost_package_dependent' ||
+              v.type === 'contractor_dependent' ||
+              v.type === 'number_to_words'
+            ) {
+              return { ...v, value: '' };
             }
-            break;
-          }
+            return v;
+          });
         }
       }
 
@@ -806,9 +796,6 @@ export const DraftingView: React.FC = () => {
               }
             }
           }
-          if (!targetPkg && currentCostPackages.length > 0) {
-            targetPkg = currentCostPackages[0];
-          }
 
           if (targetPkg) {
             let mappedVal = '';
@@ -834,6 +821,10 @@ export const DraftingView: React.FC = () => {
               passUpdated = true;
               anyUpdated = true;
             }
+          } else if (!sourceVar?.value && v.value) {
+            v.value = '';
+            passUpdated = true;
+            anyUpdated = true;
           }
         }
 
@@ -879,6 +870,10 @@ export const DraftingView: React.FC = () => {
                 anyUpdated = true;
               }
             }
+          } else if (!sourceVar?.value && v.value) {
+            v.value = '';
+            passUpdated = true;
+            anyUpdated = true;
           }
         }
 
@@ -890,9 +885,6 @@ export const DraftingView: React.FC = () => {
             : newDraft.find((s) => s.type === 'legal_doc');
           if (sourceVar?.value) {
             targetDoc = currentLegalDocs.find((ld) => ld.content === sourceVar.value);
-          }
-          if (!targetDoc && currentLegalDocs.length > 0) {
-            targetDoc = currentLegalDocs[0];
           }
 
           if (targetDoc) {
@@ -907,40 +899,50 @@ export const DraftingView: React.FC = () => {
               passUpdated = true;
               anyUpdated = true;
             }
+          } else if (!sourceVar?.value && v.value) {
+            v.value = '';
+            passUpdated = true;
+            anyUpdated = true;
           }
         }
 
         // 4. project_dependent (Thông tin dự án)
-        if (v.type === 'project_dependent' && currentProject) {
-          const fieldMap: Record<string, string> = {
-            name: currentProject.name,
-            code: currentProject.code,
-            location: currentProject.location,
-            totalInvestment: formatVnNumber(currentProject.totalInvestment),
-            status: currentProject.status,
-            scale: currentDetail?.scale || '',
-            approvalDecision: currentDetail?.approvalDecision || '',
-            group: currentDetail?.group || '',
-            type: currentDetail?.type || '',
-            level: currentDetail?.level || '',
-          };
+        if (v.type === 'project_dependent') {
+          if (currentProject) {
+            const fieldMap: Record<string, string> = {
+              name: currentProject.name,
+              code: currentProject.code,
+              location: currentProject.location,
+              totalInvestment: formatVnNumber(currentProject.totalInvestment),
+              status: currentProject.status,
+              scale: currentDetail?.scale || '',
+              approvalDecision: currentDetail?.approvalDecision || '',
+              group: currentDetail?.group || '',
+              type: currentDetail?.type || '',
+              level: currentDetail?.level || '',
+            };
 
-          let cfg = v.dependentConfig || '';
-          if (!cfg) {
-            const key = (v.name + ' ' + (v.label || '')).toLowerCase();
-            if (key.includes('địa điểm') || key.includes('dia_diem') || key.includes('location')) cfg = 'location';
-            else if (key.includes('mã dự án') || key.includes('ma_du_an') || key.includes('code')) cfg = 'code';
-            else if (key.includes('tổng mức') || key.includes('tong_muc')) cfg = 'totalInvestment';
-            else if (key.includes('quy mô') || key.includes('scale')) cfg = 'scale';
-            else if (key.includes('phê duyệt') || key.includes('quyet_dinh')) cfg = 'approvalDecision';
-            else if (key.includes('tên dự án') || key.includes('ten_du_an')) cfg = 'name';
-            else if (key.includes('loại công trình')) cfg = 'type';
-            else if (key.includes('cấp công trình')) cfg = 'level';
-          }
+            let cfg = v.dependentConfig || '';
+            if (!cfg) {
+              const key = (v.name + ' ' + (v.label || '')).toLowerCase();
+              if (key.includes('địa điểm') || key.includes('dia_diem') || key.includes('location')) cfg = 'location';
+              else if (key.includes('mã dự án') || key.includes('ma_du_an') || key.includes('code')) cfg = 'code';
+              else if (key.includes('tổng mức') || key.includes('tong_muc')) cfg = 'totalInvestment';
+              else if (key.includes('quy mô') || key.includes('scale')) cfg = 'scale';
+              else if (key.includes('phê duyệt') || key.includes('quyet_dinh')) cfg = 'approvalDecision';
+              else if (key.includes('tên dự án') || key.includes('ten_du_an')) cfg = 'name';
+              else if (key.includes('loại công trình')) cfg = 'type';
+              else if (key.includes('cấp công trình')) cfg = 'level';
+            }
 
-          const mappedVal = fieldMap[cfg] || '';
-          if (mappedVal && v.value !== mappedVal) {
-            v.value = mappedVal;
+            const mappedVal = fieldMap[cfg] || '';
+            if (mappedVal && v.value !== mappedVal) {
+              v.value = mappedVal;
+              passUpdated = true;
+              anyUpdated = true;
+            }
+          } else if (v.value) {
+            v.value = '';
             passUpdated = true;
             anyUpdated = true;
           }
@@ -965,6 +967,10 @@ export const DraftingView: React.FC = () => {
               passUpdated = true;
               anyUpdated = true;
             }
+          } else if (v.value) {
+            v.value = '';
+            passUpdated = true;
+            anyUpdated = true;
           }
         }
 
@@ -1691,9 +1697,9 @@ export const DraftingView: React.FC = () => {
                   draftVariables={draftVariables}
                   projects={projects}
                   companies={companies}
-                  costPackages={costPackages[selectedProjectId] || []}
+                  costPackages={selectedProjectId ? (costPackages[selectedProjectId] || []) : []}
                   allCostPackages={costPackages}
-                  legalDocs={legalDocs[selectedProjectId] || []}
+                  legalDocs={selectedProjectId ? (legalDocs[selectedProjectId] || []) : []}
                   activeVarName={activeVarName}
                   onFocusVar={setActiveVarName}
                   onProjectChange={(pid) => {
@@ -1702,6 +1708,23 @@ export const DraftingView: React.FC = () => {
                     if (p) {
                       setDraftVariables((prev) =>
                         prev.map((v) => (v.type === 'project' ? { ...v, value: p.name } : v))
+                      );
+                    } else {
+                      setDraftVariables((prev) =>
+                        prev.map((v) => {
+                          if (
+                            v.type === 'project_dependent' ||
+                            v.type === 'cost_package' ||
+                            v.type === 'cost_package_dependent' ||
+                            v.type === 'contractor_dependent' ||
+                            v.type === 'legal_doc' ||
+                            v.type === 'legal_doc_dependent' ||
+                            v.type === 'number_to_words'
+                          ) {
+                            return { ...v, value: '' };
+                          }
+                          return v;
+                        })
                       );
                     }
                   }}

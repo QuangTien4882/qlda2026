@@ -64,45 +64,45 @@ export const AppModal: React.FC<AppModalProps> = ({
   if (!isOpen) return null;
 
   // Cấu hình quy chuẩn kích thước theo yêu cầu:
-  // - Chiều cao: Giữ bằng chiều cao màn hình làm việc (92vh) cho các cấp
-  // - Chiều ngang: Cấp sau bằng 90% chiều ngang cấp trước (Cấp 1: 95vw -> Cấp 2: 85.5vw -> Cấp 3: 77vw -> Cấp 4: 69vw)
+  // - Chiều cao: Giữ bằng chiều cao màn hình làm việc (94vh) cho các cấp
+  // - Chiều ngang: Tận dụng tối đa không gian màn hình làm việc cho split-view và bản xem trước tài liệu
   const levelConfig: Record<number, { wrapperClass: string; zContainer: string; badgeLabel: string }> = {
     1: {
-      wrapperClass: 'w-[95vw] max-w-7xl h-[92vh]',
+      wrapperClass: 'w-[96vw] max-w-[1850px] h-[94vh]',
       zContainer: 'z-50',
       badgeLabel: 'Cấp 1',
     },
     2: {
-      wrapperClass: 'w-[85.5vw] max-w-6xl h-[92vh]',
+      wrapperClass: 'w-[94vw] max-w-[1750px] h-[94vh]',
       zContainer: 'z-[60]',
       badgeLabel: 'Cấp 2',
     },
     3: {
-      wrapperClass: 'w-[77vw] max-w-4xl h-[92vh]',
+      wrapperClass: 'w-[86vw] max-w-5xl h-[92vh]',
       zContainer: 'z-[70]',
       badgeLabel: 'Cấp 3',
     },
     4: {
-      wrapperClass: 'w-[69vw] max-w-2xl max-h-[92vh]',
+      wrapperClass: 'w-[72vw] max-w-2xl max-h-[92vh]',
       zContainer: 'z-[80]',
       badgeLabel: 'Cấp 4',
     },
   };
 
   const maxWidthFallback: Record<string, string> = {
-    sm: 'max-w-sm',
-    md: 'max-w-md',
-    lg: 'max-w-lg',
-    xl: 'max-w-xl',
-    '2xl': 'max-w-2xl',
-    '4xl': 'max-w-4xl',
-    full: 'max-w-[95vw]',
+    sm: 'w-[95vw] max-w-sm max-h-[90vh]',
+    md: 'w-[95vw] max-w-md max-h-[90vh]',
+    lg: 'w-[95vw] max-w-lg max-h-[90vh]',
+    xl: 'w-[95vw] max-w-xl max-h-[90vh]',
+    '2xl': 'w-[95vw] max-w-2xl max-h-[92vh]',
+    '4xl': 'w-[95vw] max-w-4xl max-h-[92vh]',
+    full: 'w-[98vw] max-w-[1920px] h-[95vh]',
   };
 
   const currentLevelConfig = levelConfig[level] || levelConfig[1];
   
   // Xác định class kích thước
-  let sizeClass = maxWidth ? `${maxWidthFallback[maxWidth]} max-h-[90vh]` : currentLevelConfig.wrapperClass;
+  let sizeClass = maxWidth ? (maxWidthFallback[maxWidth] || maxWidth) : currentLevelConfig.wrapperClass;
   if (isFull) {
     sizeClass = 'w-full h-full max-w-none max-h-none rounded-none border-none';
   }
@@ -158,7 +158,7 @@ export const AppModal: React.FC<AppModalProps> = ({
         </div>
 
         {/* Body Modal */}
-        <div className={`p-4 sm:p-5 overflow-y-auto flex-1 text-slate-200 min-h-0 ${isFull ? 'flex flex-col' : ''}`}>
+        <div className="p-3 sm:p-4 overflow-hidden flex-1 text-slate-200 min-h-0 flex flex-col">
           {children}
         </div>
 

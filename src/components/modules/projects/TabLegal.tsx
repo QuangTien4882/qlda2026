@@ -399,6 +399,7 @@ export const TabLegal: React.FC<TabLegalProps> = ({
         onClose={() => setModalOpen(false)}
         title={editingItem ? 'Sửa Hồ Sơ Pháp Lý' : 'Thêm Mới Hồ Sơ Pháp Lý'}
         level={2}
+        maxWidth="full"
         footer={
           <div className="flex items-center justify-end gap-2.5">
             <AppButton variant="secondary" size="sm" onClick={() => setModalOpen(false)}>
@@ -410,9 +411,9 @@ export const TabLegal: React.FC<TabLegalProps> = ({
           </div>
         }
       >
-        <div className="flex flex-col lg:flex-row gap-4 h-full min-h-[520px]">
+        <div className="flex flex-col lg:flex-row gap-4 h-full min-h-[580px] flex-1">
           {/* Cột trái: Form nhập liệu */}
-          <form onSubmit={handleSave} className="w-full lg:w-[380px] shrink-0 space-y-4 text-xs md:text-sm flex flex-col justify-between">
+          <form onSubmit={handleSave} className="w-full lg:w-[350px] shrink-0 space-y-4 text-xs md:text-sm flex flex-col justify-between overflow-y-auto pr-1">
             <div className="space-y-4">
               <div>
                 <label className="block text-slate-300 mb-1">STT</label>
@@ -521,11 +522,11 @@ export const TabLegal: React.FC<TabLegalProps> = ({
             </div>
           </form>
 
-          {/* Cột phải: Khung xem trước văn bản đính kèm */}
-          <div className="flex-1 min-h-[440px] border border-[#232f4e] rounded-xl bg-[#080d1a] flex flex-col overflow-hidden">
+          {/* Cột phải: Khung xem trước văn bản đính kèm - Kéo dài tối đa diện tích */}
+          <div className="flex-1 min-h-[500px] border border-[#232f4e] rounded-xl bg-[#080d1a] flex flex-col overflow-hidden h-full">
             <div className="bg-[#0c1424] px-4 py-2.5 border-b border-[#232f4e] flex items-center justify-between shrink-0">
-              <span className="text-xs font-semibold text-slate-200 flex items-center gap-2">
-                <Eye size={15} className="text-blue-400" />
+              <span className="text-xs font-semibold text-slate-200 flex items-center gap-2 truncate">
+                <Eye size={15} className="text-blue-400 shrink-0" />
                 <span>Xem trước văn bản đính kèm</span>
                 {fileName && <span className="text-blue-300 font-mono text-xs font-normal truncate max-w-sm">({fileName})</span>}
               </span>
@@ -544,7 +545,7 @@ export const TabLegal: React.FC<TabLegalProps> = ({
                       fileUrl,
                     });
                   }}
-                  className="px-2.5 py-1 rounded bg-[#17243e] hover:bg-[#1e3054] text-blue-300 text-xs border border-blue-600/30 transition-colors flex items-center gap-1.5 font-medium"
+                  className="px-2.5 py-1 rounded bg-[#17243e] hover:bg-[#1e3054] text-blue-300 text-xs border border-blue-600/30 transition-colors flex items-center gap-1.5 font-medium shrink-0"
                 >
                   <Maximize2 size={13} /> Xem toàn màn hình
                 </button>
@@ -556,7 +557,7 @@ export const TabLegal: React.FC<TabLegalProps> = ({
                 fileType === 'pdf' || fileName?.toLowerCase().endsWith('.pdf') ? (
                   modalBlobUrl ? (
                     <iframe
-                      src={modalBlobUrl}
+                      src={`${modalBlobUrl}#toolbar=1&navpanes=0&view=FitH`}
                       className="w-full h-full border-0 bg-slate-900"
                       title="Xem trước PDF"
                     />

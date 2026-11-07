@@ -24,6 +24,7 @@ interface VariableFormProps {
 interface LegalDocMultiPickerProps {
   variable: TemplateVariable;
   legalDocs: LegalDocItem[];
+  hasProjectSelected?: boolean;
   onChange: (value: string) => void;
   onFocus?: () => void;
 }
@@ -31,12 +32,30 @@ interface LegalDocMultiPickerProps {
 const LegalDocMultiPicker: React.FC<LegalDocMultiPickerProps> = ({
   variable,
   legalDocs,
+  hasProjectSelected = true,
   onChange,
   onFocus,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [formatMode, setFormatMode] = useState<'cancu' | 'dash' | 'semicolon'>('cancu');
+
+  if (!hasProjectSelected) {
+    return (
+      <div className="space-y-1.5" onFocus={onFocus}>
+        <div className="w-full text-left px-3 py-2 rounded-lg border border-dashed border-amber-500/40 bg-[#070b16] text-amber-300/80 text-xs font-medium flex items-center justify-between cursor-not-allowed">
+          <span className="flex items-center gap-1.5 truncate">
+            <span className="text-amber-400">⚠️</span>
+            <span className="truncate">Cần chọn Tên dự án trước để tải danh sách hồ sơ pháp lý</span>
+          </span>
+        </div>
+        <p className="text-[11px] text-amber-400/90 flex items-center gap-1.5">
+          <span className="shrink-0 text-xs">⚠️</span>
+          <span>Vui lòng chọn <strong>Tên dự án</strong> để tải danh mục hồ sơ pháp lý.</span>
+        </p>
+      </div>
+    );
+  }
 
   // Lọc hồ sơ theo từ khóa
   const filteredDocs = legalDocs.filter((ld) => {
@@ -274,6 +293,22 @@ export const VariableForm: React.FC<VariableFormProps> = ({
     if (!uniqueVars.find((u) => u.name === v.name)) uniqueVars.push(v);
   });
 
+  // Xác định trạng thái chọn của các biến cha trong toàn bộ biểu mẫu
+  const projectVar = draftVariables.find((u) => u.type === 'project');
+  const hasProjectSelected = projectVar ? Boolean(projectVar.value?.trim()) : false;
+
+  const packageVar = draftVariables.find((u) => u.type === 'cost_package');
+  const hasPackageSelected = packageVar ? Boolean(packageVar.value?.trim()) : false;
+
+  const contractorVar = draftVariables.find(
+    (u) =>
+      u.type === 'contractor' ||
+      (u.type === 'cost_package_dependent' && u.dependentConfig === 'contractor') ||
+      u.name.includes('nha_thau') ||
+      (u.label && u.label.toLowerCase().includes('nhà thầu'))
+  );
+  const hasContractorSelected = contractorVar ? Boolean(contractorVar.value?.trim()) : false;
+
   return (
     <>
       {uniqueVars.map((v) => {
@@ -388,6 +423,8 @@ export const VariableForm: React.FC<VariableFormProps> = ({
                   );
                   if (matched) {
                     onProjectChange?.(matched.id);
+                  } else {
+                    onProjectChange?.('');
                   }
                 }}
                 onFocus={() => onFocusVar?.(v.name)}
@@ -418,113 +455,289 @@ export const VariableForm: React.FC<VariableFormProps> = ({
               </select>
             )}
 
-            {v.type === 'cost_package' && (() => {
-              const currentPkgs = costPackages || [];
-              const otherProjectsMap: { project: ProjectListItem; packages: CostPackageItem[] }[] = [];
-              if (allCostPackages && projects) {
-                projects.forEach((proj) => {
-                  const pkgs = allCostPackages[proj.id] || [];
-                  if (pkgs.length > 0) {
-                    const isCurrent = currentPkgs.some((cp) => pkgs.some((p) => p.id === cp.id));
-                    if (!isCurrent) {
-                      otherProjectsMap.push({ project: proj, packages: pkgs });
-                    }
-                  }
-                });
-              }
-
-              const totalCount = currentPkgs.length + otherProjectsMap.reduce((acc, cur) => acc + cur.packages.length, 0);
-
-              return (
+            {v.type === 'cost_package' && (
+              <div className="space-y-1">
                 <select
                   value={v.value}
+                  disabled={!hasProjectSelected}
                   onChange={(e) => {
                     const selectedVal = e.target.value;
                     onVariableChange(v.name, selectedVal);
-                    let foundPkg: CostPackageItem | undefined = currentPkgs.find((cp) => cp.content === selectedVal);
-                    if (!foundPkg && allCostPackages) {
-                      for (const pkgs of Object.values(allCostPackages)) {
-                        const p = pkgs.find((cp) => cp.content === selectedVal);
-                        if (p) {
-                          foundPkg = p;
-                          break;
-                        }
-                      }
-                    }
+                    const foundPkg = costPackages.find((cp) => cp.content === selectedVal);
                     if (foundPkg) {
                       onCostPackageSelect?.(foundPkg);
-                      if (foundPkg.projectId) {
-                        onProjectChange?.(foundPkg.projectId);
-                      }
                     }
                   }}
                   onFocus={() => onFocusVar?.(v.name)}
-                  className={`${inputClass} ${isFocused ? 'border-amber-400 ring-1 ring-amber-400' : ''}`}
+                  className={`${inputClass} ${
+                    !hasProjectSelected
+                      ? 'opacity-60 cursor-not-allowed border-dashed border-amber-500/40 bg-[#070b16]'
+                      : isFocused
+                      ? 'border-amber-400 ring-1 ring-amber-400'
+                      : ''
+                  }`}
                 >
                   <option value="">
-                    {totalCount > 0
-                      ? `-- Chọn gói thầu / nội dung chi phí (${totalCount}) --`
-                      : '-- Chưa có gói thầu nào trong hệ thống --'}
+                    {!hasProjectSelected
+                      ? '-- Vui lòng chọn Tên dự án trước --'
+                      : costPackages.length > 0
+                      ? `-- Chọn gói thầu / nội dung chi phí (${costPackages.length}) --`
+                      : '-- Dự án chưa có gói thầu nào trong Danh mục chi phí --'}
                   </option>
-
-                  {currentPkgs.length > 0 && (
-                    <optgroup label="Gói thầu của dự án đang chọn">
-                      {currentPkgs.map((cp) => (
-                        <option key={cp.id} value={cp.content}>
-                          {cp.content} ({cp.category}) - {formatVnNumber(cp.contractValue || cp.estimateValue)} đ
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-
-                  {otherProjectsMap.map(({ project, packages }) => (
-                    <optgroup key={project.id} label={`Dự án: ${project.name}`}>
-                      {packages.map((cp) => (
-                        <option key={cp.id} value={cp.content}>
-                          {cp.content} ({cp.category}) - {formatVnNumber(cp.contractValue || cp.estimateValue)} đ
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
+                  {hasProjectSelected &&
+                    costPackages.map((cp) => (
+                      <option key={cp.id} value={cp.content}>
+                        {cp.content} ({cp.category}) - {formatVnNumber(cp.contractValue || cp.estimateValue)} đ
+                      </option>
+                    ))}
                 </select>
-              );
-            })()}
+                {!hasProjectSelected && (
+                  <p className="text-[11px] text-amber-400/90 flex items-center gap-1.5 pt-0.5">
+                    <span className="shrink-0 text-xs">⚠️</span>
+                    <span>Cần chọn <strong>Tên dự án</strong> trước để hiển thị danh sách gói thầu.</span>
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Hồ sơ pháp lý: Tích chọn nhiều nội dung có tìm kiếm */}
             {v.type === 'legal_doc' && (
               <LegalDocMultiPicker
                 variable={v}
                 legalDocs={legalDocs}
+                hasProjectSelected={hasProjectSelected}
                 onChange={(val) => onVariableChange(v.name, val)}
                 onFocus={() => onFocusVar?.(v.name)}
               />
             )}
 
-            {(v.type === 'number_to_words' ||
-              v.type === 'formula' ||
-              v.type === 'project_dependent' ||
-              v.type === 'contractor_dependent' ||
-              v.type === 'cost_package_dependent' ||
-              v.type === 'legal_doc_dependent') && (
+            {/* Biến phụ thuộc vào Dự án */}
+            {v.type === 'project_dependent' && (
+              <div className="space-y-1">
+                <div className="relative" onFocus={() => onFocusVar?.(v.name)}>
+                  <input
+                    value={v.value || ''}
+                    onChange={(e) => onVariableChange(v.name, e.target.value)}
+                    placeholder={
+                      !hasProjectSelected
+                        ? '⚠️ Chờ chọn Tên dự án để trích xuất tự động...'
+                        : 'Tự động trích xuất hoặc nhập tay...'
+                    }
+                    className={`${inputClass} pr-8 ${
+                      v.value ? 'text-slate-100 font-medium' : 'text-slate-500 italic'
+                    } ${
+                      !hasProjectSelected
+                        ? 'border-dashed border-amber-500/40 bg-[#070b16]'
+                        : isFocused
+                        ? 'border-amber-400 ring-1 ring-amber-400'
+                        : ''
+                    }`}
+                  />
+                  <span
+                    className="absolute right-2.5 top-2.5 text-xs select-none pointer-events-none opacity-80"
+                    title="Biến trích xuất từ Dự án"
+                  >
+                    🏛️
+                  </span>
+                </div>
+                {!hasProjectSelected && (
+                  <p className="text-[11px] text-amber-400/80 flex items-center gap-1.5">
+                    <span className="shrink-0 text-xs">⚠️</span>
+                    <span>Chưa chọn <strong>Tên dự án</strong> (biến phụ thuộc sẽ tự trích xuất khi chọn dự án).</span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Biến phụ thuộc vào Gói thầu */}
+            {v.type === 'cost_package_dependent' && (
+              <div className="space-y-1">
+                <div className="relative" onFocus={() => onFocusVar?.(v.name)}>
+                  <input
+                    value={v.value || ''}
+                    onChange={(e) => onVariableChange(v.name, e.target.value)}
+                    placeholder={
+                      !hasPackageSelected
+                        ? '⚠️ Chờ chọn Gói thầu để trích xuất tự động...'
+                        : 'Tự động trích xuất hoặc nhập tay...'
+                    }
+                    className={`${inputClass} pr-8 ${
+                      v.value ? 'text-slate-100 font-medium' : 'text-slate-500 italic'
+                    } ${
+                      !hasPackageSelected
+                        ? 'border-dashed border-amber-500/30 bg-[#070b16]'
+                        : isFocused
+                        ? 'border-amber-400 ring-1 ring-amber-400'
+                        : ''
+                    }`}
+                  />
+                  <span
+                    className="absolute right-2.5 top-2.5 text-xs select-none pointer-events-none opacity-80"
+                    title="Biến trích xuất từ Gói thầu"
+                  >
+                    💰
+                  </span>
+                </div>
+                {!hasPackageSelected && (
+                  <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                    <span className="shrink-0 text-xs">ℹ️</span>
+                    <span>Chờ chọn <strong>Gói thầu</strong> để trích xuất {v.label || v.name}.</span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Biến phụ thuộc vào Nhà thầu */}
+            {v.type === 'contractor_dependent' && (
+              <div className="space-y-1">
+                <div className="relative" onFocus={() => onFocusVar?.(v.name)}>
+                  <input
+                    value={v.value || ''}
+                    onChange={(e) => onVariableChange(v.name, e.target.value)}
+                    placeholder={
+                      !hasContractorSelected
+                        ? '⚠️ Chờ thông tin Nhà thầu để trích xuất...'
+                        : 'Tự động trích xuất hoặc nhập tay...'
+                    }
+                    className={`${inputClass} pr-8 ${
+                      v.value ? 'text-slate-100 font-medium' : 'text-slate-500 italic'
+                    } ${
+                      !hasContractorSelected
+                        ? 'border-dashed border-amber-500/30 bg-[#070b16]'
+                        : isFocused
+                        ? 'border-amber-400 ring-1 ring-amber-400'
+                        : ''
+                    }`}
+                  />
+                  <span
+                    className="absolute right-2.5 top-2.5 text-xs select-none pointer-events-none opacity-80"
+                    title="Biến trích xuất từ Nhà thầu"
+                  >
+                    🏢
+                  </span>
+                </div>
+                {!hasContractorSelected && (
+                  <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                    <span className="shrink-0 text-xs">ℹ️</span>
+                    <span>Chờ thông tin <strong>Nhà thầu</strong> để trích xuất {v.label || v.name}.</span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Biến phụ thuộc vào Hồ sơ pháp lý */}
+            {v.type === 'legal_doc_dependent' && (() => {
+              const docVar = v.sourceVariableId
+                ? draftVariables.find((s) => s.id === v.sourceVariableId || s.name === v.sourceVariableId)
+                : draftVariables.find((s) => s.type === 'legal_doc');
+              const hasDoc = Boolean(docVar?.value?.trim());
+
+              return (
+                <div className="space-y-1">
+                  <div className="relative" onFocus={() => onFocusVar?.(v.name)}>
+                    <input
+                      value={v.value || ''}
+                      onChange={(e) => onVariableChange(v.name, e.target.value)}
+                      placeholder={
+                        !hasDoc
+                          ? '⚠️ Chờ chọn Hồ sơ pháp lý để trích xuất...'
+                          : 'Tự động trích xuất hoặc nhập tay...'
+                      }
+                      className={`${inputClass} pr-8 ${
+                        v.value ? 'text-slate-100 font-medium' : 'text-slate-500 italic'
+                      } ${
+                        !hasDoc
+                          ? 'border-dashed border-amber-500/30 bg-[#070b16]'
+                          : isFocused
+                          ? 'border-amber-400 ring-1 ring-amber-400'
+                          : ''
+                      }`}
+                    />
+                    <span
+                      className="absolute right-2.5 top-2.5 text-xs select-none pointer-events-none opacity-80"
+                      title="Trích xuất từ Hồ sơ pháp lý"
+                    >
+                      📜
+                    </span>
+                  </div>
+                  {!hasDoc && (
+                    <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                      <span className="shrink-0 text-xs">ℹ️</span>
+                      <span>Chờ chọn <strong>Hồ sơ pháp lý</strong> để trích xuất {v.label || v.name}.</span>
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Đọc số thành chữ */}
+            {v.type === 'number_to_words' && (() => {
+              const parentVar = v.sourceVariableId
+                ? draftVariables.find((p) => p.id === v.sourceVariableId || p.name === v.sourceVariableId)
+                : draftVariables.find(
+                    (p) =>
+                      p.type === 'number' ||
+                      p.type === 'formula' ||
+                      (p.type === 'project_dependent' && p.dependentConfig === 'totalInvestment') ||
+                      (p.type === 'cost_package_dependent' &&
+                        (p.dependentConfig === 'estimateValue' || p.dependentConfig === 'contractValue'))
+                  );
+              const hasParentValue = Boolean(parentVar?.value?.trim());
+
+              return (
+                <div className="space-y-1">
+                  <div className="relative" onFocus={() => onFocusVar?.(v.name)}>
+                    <input
+                      value={v.value || ''}
+                      onChange={(e) => onVariableChange(v.name, e.target.value)}
+                      placeholder={
+                        !hasParentValue
+                          ? '⚠️ Chờ giá trị số tiền để đọc thành chữ...'
+                          : 'Tự động đọc số thành chữ hoặc nhập tay...'
+                      }
+                      className={`${inputClass} pr-8 ${
+                        v.value ? 'text-slate-100 font-medium' : 'text-slate-500 italic'
+                      } ${
+                        !hasParentValue
+                          ? 'border-dashed border-amber-500/30 bg-[#070b16]'
+                          : isFocused
+                          ? 'border-amber-400 ring-1 ring-amber-400'
+                          : ''
+                      }`}
+                    />
+                    <span
+                      className="absolute right-2.5 top-2.5 text-xs select-none pointer-events-none opacity-80"
+                      title="Đọc số thành chữ"
+                    >
+                      🤖
+                    </span>
+                  </div>
+                  {!hasParentValue && (
+                    <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                      <span className="shrink-0 text-xs">ℹ️</span>
+                      <span>Tự động chuyển đổi số tiền thành chữ tiếng Việt ({parentVar?.label || parentVar?.name || 'chưa có số'}).</span>
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Biến công thức */}
+            {v.type === 'formula' && (
               <div className="relative" onFocus={() => onFocusVar?.(v.name)}>
                 <input
                   value={v.value || ''}
                   onChange={(e) => onVariableChange(v.name, e.target.value)}
-                  placeholder="Tự động trích xuất hoặc nhập tay..."
+                  placeholder="Tự động tính theo công thức hoặc nhập tay..."
                   className={`${inputClass} pr-8 ${
                     v.value ? 'text-slate-100 font-medium' : 'text-slate-500 italic'
                   } ${isFocused ? 'border-amber-400 ring-1 ring-amber-400' : ''}`}
                 />
                 <span
                   className="absolute right-2.5 top-2.5 text-xs select-none pointer-events-none opacity-80"
-                  title={`Biến tự động: ${v.type}`}
+                  title="Công thức tính toán"
                 >
-                  {v.type === 'number_to_words' && '🤖'}
-                  {v.type === 'formula' && '∑'}
-                  {v.type === 'project_dependent' && '🏛️'}
-                  {v.type === 'contractor_dependent' && '🏢'}
-                  {v.type === 'cost_package_dependent' && '💰'}
-                  {v.type === 'legal_doc_dependent' && '📜'}
+                  ∑
                 </span>
               </div>
             )}
