@@ -132,6 +132,12 @@ export const DraftingView: React.FC = () => {
     if (!file) return;
     setCurrentFile(file);
 
+    // Tự động điền tên mẫu từ tên file nếu người dùng chưa nhập tên
+    const autoName = file.name.replace(/\.[^/.]+$/, '').trim();
+    if (!newTemplateName.trim()) {
+      setNewTemplateName(autoName);
+    }
+
     if (previewContainerRef.current) {
       setIsRendering(true);
       try {
@@ -245,7 +251,13 @@ export const DraftingView: React.FC = () => {
   };
 
   const handleSaveTemplate = async () => {
-    if (!newTemplateName.trim()) return;
+    // Tự động lấy tên file hoặc tên mẫu cũ nếu ô tên đang để trống
+    const fallbackName =
+      currentFile?.name.replace(/\.[^/.]+$/, '').trim() ||
+      (editingTemplateId && docTemplates.find((t) => t.id === editingTemplateId)?.name) ||
+      'Biểu mẫu mới';
+    const finalTemplateName = newTemplateName.trim() || fallbackName;
+    if (!finalTemplateName) return;
 
     let fileBase64: string | undefined;
     let fileName: string | undefined = currentFile?.name;
@@ -260,7 +272,7 @@ export const DraftingView: React.FC = () => {
 
     const template: DocTemplate = {
       id: editingTemplateId || generateId('tpl'),
-      name: newTemplateName.trim(),
+      name: finalTemplateName,
       folderId: templateFolderId || '',
       variables: currentVariables,
       previewHtml: previewContainerRef.current?.innerHTML || undefined,
@@ -277,6 +289,12 @@ export const DraftingView: React.FC = () => {
     } else {
       addTemplate(template);
     }
+
+    alert(
+      editingTemplateId
+        ? `Đã cập nhật mẫu "${finalTemplateName}" thành công!`
+        : `Đã lưu mẫu "${finalTemplateName}" thành công với ${currentVariables.length} biến!`
+    );
 
     // Reset & đóng modal
     setIsCreatingTemplate(false);
@@ -969,6 +987,7 @@ export const DraftingView: React.FC = () => {
           setEditingTemplateId(null);
         }}
         level={1}
+        fullScreen={true}
         title={
           <div className="flex items-center gap-2">
             <FileEdit size={22} className="text-blue-400" />
@@ -994,7 +1013,7 @@ export const DraftingView: React.FC = () => {
               <AppButton
                 variant="primary"
                 onClick={handleSaveTemplate}
-                disabled={!newTemplateName.trim()}
+                disabled={!newTemplateName.trim() && !currentFile && !editingTemplateId}
               >
                 <Save size={16} className="mr-1.5" />
                 {editingTemplateId ? 'Cập nhật mẫu' : 'Lưu biểu mẫu'}
@@ -1003,19 +1022,31 @@ export const DraftingView: React.FC = () => {
           </div>
         }
       >
-        <div className="flex flex-col lg:flex-row gap-4 h-[calc(92vh-170px)] min-h-[480px]">
+        <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-130px)] min-h-0 flex-1">
           {/* Cột trái: Cấu hình biểu mẫu & Danh sách biến */}
-          <div className="w-full lg:w-80 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
+          <div className="w-full lg:w-96 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
             <div>
-              <label className="block text-xs text-slate-400 uppercase font-bold mb-1">
-                Tên mẫu văn bản *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs text-slate-400 uppercase font-bold">
+                  Tên mẫu văn bản *
+                </label>
+                {currentFile && (
+                  <span className="text-[10px] text-emerald-400 font-mono">
+                    (Đã nhận diện file)
+                  </span>
+                )}
+              </div>
               <input
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-                placeholder="VD: Quyết định phê duyệt KQ LCNT"
-                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+                placeholder="Nhập tên mẫu (VD: Quyết định phê duyệt KQ LCNT)..."
+                className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-medium"
               />
+              {!newTemplateName.trim() && currentFile && (
+                <p className="text-[11px] text-emerald-400/90 mt-1 flex items-center gap-1">
+                  ✓ Khi lưu sẽ dùng tên: <span className="font-semibold underline">{currentFile.name.replace(/\.[^/.]+$/, '')}</span>
+                </p>
+              )}
             </div>
 
             <div>
