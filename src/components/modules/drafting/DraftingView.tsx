@@ -1,5 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileEdit, Upload, Trash2, FileText, Search, Save, Download, Plus, Loader2, Edit3 } from 'lucide-react';
+import {
+  FileEdit,
+  Upload,
+  Trash2,
+  FileText,
+  Search,
+  Save,
+  Download,
+  Plus,
+  Loader2,
+  Edit3,
+  Copy,
+  X,
+  Check,
+  AlertCircle,
+} from 'lucide-react';
 import { useSettings } from '../../../context/SettingsContext';
 import { useData } from '../../../context/DataContext';
 import { useDrafting } from '../../../context/DraftingContext';
@@ -275,6 +290,23 @@ function ensurePreviewVariablesWrapped(container: HTMLElement, variables: Templa
   });
 }
 
+/**
+ * Trích xuất danh sách tất cả các paragraph lá (leaf blocks) từ container DOM của docx-preview.
+ * Tránh lấy trùng các thẻ cha bao bọc để so sánh chính xác văn bản khi người dùng chỉnh sửa.
+ */
+function getDocParagraphs(container: HTMLElement): HTMLElement[] {
+  const standardParagraphs = Array.from(
+    container.querySelectorAll('p, .docx_paragraph, h1, h2, h3, h4, h5, h6, li')
+  ) as HTMLElement[];
+
+  const emptyCells = Array.from(container.querySelectorAll('td, th')).filter(
+    (cell) => cell.querySelectorAll('p, .docx_paragraph').length === 0
+  ) as HTMLElement[];
+
+  const all = [...standardParagraphs, ...emptyCells];
+  return all.filter((el) => !all.some((other) => other !== el && el.contains(other)));
+}
+
 // ==================== MAIN COMPONENT ====================
 
 export const DraftingView: React.FC = () => {
@@ -323,6 +355,17 @@ export const DraftingView: React.FC = () => {
   const [jvMembers, setJvMembers] = useState<JVMember[]>([]);
   const [activeVarName, setActiveVarName] = useState<string | null>(null);
   const [previewRenderVersion, setPreviewRenderVersion] = useState(0);
+
+  // Content Editing states (Cho phép chỉnh sửa trực tiếp nội dung biểu mẫu và lưu lại)
+  const [isEditingTemplateContent, setIsEditingTemplateContent] = useState(false);
+  const [isSavingEditedTemplate, setIsSavingEditedTemplate] = useState(false);
+  const [isSaveAsModalOpen, setIsSaveAsModalOpen] = useState(false);
+  const [saveAsTemplateName, setSaveAsTemplateName] = useState('');
+  const originalParagraphsRef = useRef<{ id: string; originalText: string }[]>([]);
+
+  // Template Manager inline content edit states
+  const [isEditingTemplateInModal, setIsEditingTemplateInModal] = useState(false);
+  const modalOriginalParagraphsRef = useRef<{ id: string; originalText: string }[]>([]);
 
   // Loading states
   const [isRendering, setIsRendering] = useState(false);
@@ -497,6 +540,25 @@ export const DraftingView: React.FC = () => {
     }
   };
 
+  const handleStartModalContentEdit = () => {
+    const container = previewContainerRef.current;
+    if (!container) return;
+
+    const leafBlocks = getDocParagraphs(container);
+    const snapshot: { id: string; originalText: string }[] = [];
+    leafBlocks.forEach((el, index) => {
+      const pid = `modal-p-${index}`;
+      el.setAttribute('data-tpl-pid', pid);
+      snapshot.push({
+        id: pid,
+        originalText: (el.innerText || el.textContent || '').trim(),
+      });
+    });
+
+    modalOriginalParagraphsRef.current = snapshot;
+    setIsEditingTemplateInModal(true);
+  };
+
   const handleSaveTemplate = async () => {
     // Tự động lấy tên file hoặc tên mẫu cũ nếu ô tên đang để trống
     const fallbackName =
@@ -515,6 +577,56 @@ export const DraftingView: React.FC = () => {
       const prevTpl = docTemplates.find((t) => t.id === editingTemplateId);
       fileBase64 = prevTpl?.fileBase64;
       fileName = prevTpl?.fileName;
+    }
+
+    // Đồng bộ nội dung nếu người dùng có sửa trực tiếp trên bản xem trước
+    if (fileBase64 && modalOriginalParagraphsRef.current.length > 0 && previewContainerRef.current) {
+      try {
+        const container = previewContainerRef.current;
+        const snapshot = modalOriginalParagraphsRef.current;
+        const changes: { orig: string; edited: string }[] = [];
+
+        snapshot.forEach((item) => {
+          const el = container.querySelector(`[data-tpl-pid="${item.id}"]`) as HTMLElement | null;
+          if (!el) {
+            if (item.originalText) changes.push({ orig: item.originalText, edited: '' });
+          } else {
+            let currentCombinedText = (el.innerText || el.textContent || '').trim();
+            let nextSibling = el.nextElementSibling as HTMLElement | null;
+            while (
+              nextSibling &&
+              !nextSibling.hasAttribute('data-tpl-pid') &&
+              ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(nextSibling.tagName)
+            ) {
+              const sibText = (nextSibling.innerText || nextSibling.textContent || '').trim();
+              if (sibText) currentCombinedText += '\n' + sibText;
+              nextSibling = nextSibling.nextElementSibling as HTMLElement | null;
+            }
+            if (currentCombinedText !== item.originalText && item.originalText) {
+              changes.push({ orig: item.originalText, edited: currentCombinedText });
+            }
+          }
+        });
+
+        if (changes.length > 0) {
+          const buf = base64ToArrayBuffer(fileBase64);
+          const zip = new PizZip(buf);
+          let xmlContent = zip.file('word/document.xml')?.asText() || '';
+          changes.forEach((c) => {
+            xmlContent = replaceAllInXml(xmlContent, c.orig, c.edited, c.edited.includes('\n'));
+          });
+          zip.file('word/document.xml', xmlContent);
+          fileBase64 = zip.generate({ type: 'base64' });
+        }
+      } catch (err) {
+        console.warn('Lỗi đồng bộ XML trong modal tạo mẫu:', err);
+      }
+
+      previewContainerRef.current.querySelectorAll('[data-tpl-pid]').forEach((el) => {
+        el.removeAttribute('data-tpl-pid');
+      });
+      setIsEditingTemplateInModal(false);
+      modalOriginalParagraphsRef.current = [];
     }
 
     const template: DocTemplate = {
@@ -545,6 +657,8 @@ export const DraftingView: React.FC = () => {
 
     // Reset & đóng modal
     setIsCreatingTemplate(false);
+    setIsEditingTemplateInModal(false);
+    modalOriginalParagraphsRef.current = [];
     setNewTemplateName('');
     setCurrentFile(null);
     setCurrentVariables([]);
@@ -703,6 +817,187 @@ export const DraftingView: React.FC = () => {
   const handleDraftNumberInput = (varName: string, value: string) => {
     const numStr = value.replace(/\./g, '').replace(',', '.');
     handleDraftVariableChange(varName, numStr);
+  };
+
+  // ==================== TEMPLATE CONTENT EDITING (DIRECT IN-APP EDIT) ====================
+  const handleStartEditTemplateContent = () => {
+    const container = draftPreviewContainerRef.current;
+    const template = docTemplates.find((t) => t.id === selectedTemplateId);
+    if (!container || !template) return;
+
+    // 1. Phục hồi về HTML nguyên bản của template để hiển thị các biến [var_name] thay vì giá trị tạm của draft
+    if (draftPristineHtmlRef.current) {
+      container.innerHTML = draftPristineHtmlRef.current;
+      fixDocxPreviewStyles(container);
+      ensurePreviewVariablesWrapped(container, template.variables);
+    }
+
+    // 2. Snapshot leaf paragraphs
+    const leafBlocks = getDocParagraphs(container);
+    const snapshot: { id: string; originalText: string }[] = [];
+    leafBlocks.forEach((el, index) => {
+      const pid = `tpl-p-${index}`;
+      el.setAttribute('data-tpl-pid', pid);
+      snapshot.push({
+        id: pid,
+        originalText: (el.innerText || el.textContent || '').trim(),
+      });
+    });
+
+    originalParagraphsRef.current = snapshot;
+    setIsEditingTemplateContent(true);
+  };
+
+  const handleCancelEditTemplateContent = () => {
+    const container = draftPreviewContainerRef.current;
+    const template = docTemplates.find((t) => t.id === selectedTemplateId);
+    if (container && template && draftPristineHtmlRef.current) {
+      container.innerHTML = draftPristineHtmlRef.current;
+      fixDocxPreviewStyles(container);
+      ensurePreviewVariablesWrapped(container, template.variables);
+    }
+    setIsEditingTemplateContent(false);
+    setPreviewRenderVersion((v) => v + 1);
+  };
+
+  const handleSaveEditedTemplate = async (isNewCopy: boolean, newName?: string) => {
+    const container = draftPreviewContainerRef.current;
+    const template = docTemplates.find((t) => t.id === selectedTemplateId);
+    if (!container || !template) return;
+
+    setIsSavingEditedTemplate(true);
+    try {
+      // 1. So sánh DOM hiện tại với originalParagraphsRef
+      const snapshot = originalParagraphsRef.current;
+      const changes: { orig: string; edited: string }[] = [];
+
+      snapshot.forEach((item) => {
+        const el = container.querySelector(`[data-tpl-pid="${item.id}"]`) as HTMLElement | null;
+        if (!el) {
+          if (item.originalText) {
+            changes.push({ orig: item.originalText, edited: '' });
+          }
+        } else {
+          let currentCombinedText = (el.innerText || el.textContent || '').trim();
+
+          // Kiểm tra và ghép thêm bất kỳ paragraph/div mới nào được chèn phía sau mà không có data-tpl-pid
+          let nextSibling = el.nextElementSibling as HTMLElement | null;
+          while (
+            nextSibling &&
+            !nextSibling.hasAttribute('data-tpl-pid') &&
+            ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(nextSibling.tagName)
+          ) {
+            const sibText = (nextSibling.innerText || nextSibling.textContent || '').trim();
+            if (sibText) {
+              currentCombinedText += '\n' + sibText;
+            }
+            nextSibling = nextSibling.nextElementSibling as HTMLElement | null;
+          }
+
+          if (currentCombinedText !== item.originalText && item.originalText) {
+            changes.push({ orig: item.originalText, edited: currentCombinedText });
+          }
+        }
+      });
+
+      let updatedFileBase64 = template.fileBase64;
+
+      // 2. Cập nhật vào Word XML trong file .docx nếu có thay đổi và có fileBase64
+      if (template.fileBase64 && changes.length > 0) {
+        const buf = base64ToArrayBuffer(template.fileBase64);
+        const zip = new PizZip(buf);
+        let xmlContent = zip.file('word/document.xml')?.asText() || '';
+
+        changes.forEach((c) => {
+          xmlContent = replaceAllInXml(xmlContent, c.orig, c.edited, c.edited.includes('\n'));
+        });
+
+        zip.file('word/document.xml', xmlContent);
+        updatedFileBase64 = zip.generate({ type: 'base64' });
+      }
+
+      // 3. Quét phát hiện bất kỳ biến mới nào được thêm qua cú pháp [ten_bien] hoặc {{ten_bien}}
+      const fullTextNow = container.innerText || container.textContent || '';
+      const varRegex = /\[([a-zA-Z0-9_]+)\]|\{\{([a-zA-Z0-9_]+)\}\}/g;
+      let match;
+      const foundVarNames = new Set<string>();
+      while ((match = varRegex.exec(fullTextNow)) !== null) {
+        const varName = match[1] || match[2];
+        if (
+          varName &&
+          !['BAT_DAU_LIEN_DANH', 'KET_THUC_LIEN_DANH', 'JV_STT', 'JV_TEN_STT'].includes(varName)
+        ) {
+          foundVarNames.add(varName);
+        }
+      }
+
+      const existingVarNames = new Set((template.variables || []).map((v) => v.name));
+      const newVarsToAdd: TemplateVariable[] = [];
+      foundVarNames.forEach((vn) => {
+        if (!existingVarNames.has(vn)) {
+          newVarsToAdd.push({
+            id: generateId('var'),
+            name: vn,
+            label: vn.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+            type: 'text',
+            value: '',
+            originalText: `[${vn}]`,
+            originalTexts: [`[${vn}]`],
+          });
+        }
+      });
+
+      const finalVariables = [...(template.variables || []), ...newVarsToAdd];
+
+      // Dọn dẹp attribute data-tpl-pid trước khi lưu
+      container.querySelectorAll('[data-tpl-pid]').forEach((el) => {
+        el.removeAttribute('data-tpl-pid');
+      });
+
+      const finalPreviewHtml = container.innerHTML;
+
+      if (isNewCopy) {
+        const finalName = (newName || '').trim() || `${template.name} (Bản sửa đổi)`;
+        const newTplId = generateId('tpl');
+        const newTemplate: DocTemplate = {
+          id: newTplId,
+          name: finalName,
+          folderId: template.folderId || '',
+          variables: finalVariables,
+          previewHtml: finalPreviewHtml,
+          fileBase64: updatedFileBase64,
+          fileName: `${finalName}.docx`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        addTemplate(newTemplate);
+        setSelectedTemplateId(newTplId);
+        setIsSaveAsModalOpen(false);
+        setSaveAsTemplateName('');
+        alert(`Đã lưu thành công biểu mẫu mới "${finalName}"!`);
+      } else {
+        const updatedTemplate: DocTemplate = {
+          ...template,
+          variables: finalVariables,
+          previewHtml: finalPreviewHtml,
+          fileBase64: updatedFileBase64,
+          updatedAt: new Date().toISOString(),
+        };
+
+        updateTemplate(updatedTemplate);
+        alert(`Đã lưu cập nhật nội dung vào biểu mẫu "${template.name}" thành công!`);
+      }
+
+      draftPristineHtmlRef.current = finalPreviewHtml;
+      setIsEditingTemplateContent(false);
+      setPreviewRenderVersion((v) => v + 1);
+    } catch (error) {
+      console.error('Lỗi lưu nội dung biểu mẫu:', error);
+      alert(`Lỗi khi lưu biểu mẫu: ${error instanceof Error ? error.message : 'Không xác định'}`);
+    } finally {
+      setIsSavingEditedTemplate(false);
+    }
   };
 
   // ==================== DRAFT SAVE/LOAD ====================
@@ -1012,6 +1307,7 @@ export const DraftingView: React.FC = () => {
 
   // ==================== UPDATE LIVE PREVIEW ====================
   useEffect(() => {
+    if (isEditingTemplateContent) return; // Không can thiệp DOM khi người dùng đang trực tiếp sửa nội dung biểu mẫu
     if (!draftPreviewContainerRef.current || !selectedTemplateId) return;
 
     // Restore pristine HTML first
@@ -1201,7 +1497,7 @@ export const DraftingView: React.FC = () => {
         }
       }
     }
-  }, [draftVariables, selectedTemplateId, jvMembers, activeVarName, previewRenderVersion]);
+  }, [draftVariables, selectedTemplateId, jvMembers, activeVarName, previewRenderVersion, isEditingTemplateContent]);
 
   // ==================== EXPORT WORD ====================
   const handleExport = async () => {
@@ -1610,13 +1906,47 @@ export const DraftingView: React.FC = () => {
 
           {/* Cột phải: Bản xem trước tài liệu Word */}
           <div className="flex-1 min-h-0 border border-[#232f4e] rounded-xl bg-[#1a1f2e] flex flex-col overflow-hidden">
-            <div className="bg-[#0c1424] px-4 py-2.5 border-b border-[#232f4e] flex items-center justify-between shrink-0">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Bản xem trước biểu mẫu
-              </span>
-              <span className="text-xs text-amber-400 font-semibold bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20">
-                👉 Dùng chuột bôi đen chữ trên trang để gán biến
-              </span>
+            <div className="bg-[#0c1424] px-4 py-2.5 border-b border-[#232f4e] flex items-center justify-between shrink-0 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Bản xem trước biểu mẫu
+                </span>
+                {isEditingTemplateInModal && (
+                  <span className="text-[11px] font-semibold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 flex items-center gap-1">
+                    <Edit3 size={11} /> Đang sửa trực tiếp văn bản
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isEditingTemplateInModal) {
+                      handleStartModalContentEdit();
+                    } else {
+                      setIsEditingTemplateInModal(false);
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                    isEditingTemplateInModal
+                      ? 'bg-amber-600 hover:bg-amber-500 text-white shadow'
+                      : 'bg-[#080d1a] hover:bg-slate-800 text-amber-300 border border-amber-500/40'
+                  }`}
+                  title={
+                    isEditingTemplateInModal
+                      ? 'Chuyển lại sang chế độ bôi đen để gán biến'
+                      : 'Cho phép chỉnh sửa câu từ trực tiếp trên trang văn bản'
+                  }
+                >
+                  <Edit3 size={12} />
+                  <span>{isEditingTemplateInModal ? 'Xong sửa văn bản' : 'Sửa trực tiếp văn bản'}</span>
+                </button>
+                <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+                  {isEditingTemplateInModal
+                    ? '✏️ Click vào văn bản để chỉnh sửa câu chữ'
+                    : '👉 Bôi đen chữ để ráp biến'}
+                </span>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto bg-[#8c92a4] flex justify-center py-6 px-4 relative">
@@ -1630,8 +1960,14 @@ export const DraftingView: React.FC = () => {
               )}
               <div
                 ref={previewContainerRef}
-                onMouseUp={handleMouseUpOnPreview}
-                className="w-full max-w-4xl mx-auto docx-preview-container select-text"
+                contentEditable={isEditingTemplateInModal}
+                suppressContentEditableWarning={true}
+                onMouseUp={isEditingTemplateInModal ? undefined : handleMouseUpOnPreview}
+                className={`w-full max-w-4xl mx-auto docx-preview-container select-text ${
+                  isEditingTemplateInModal
+                    ? 'ring-2 ring-amber-500/80 rounded cursor-text'
+                    : ''
+                }`}
               />
             </div>
           </div>
@@ -1783,14 +2119,79 @@ export const DraftingView: React.FC = () => {
 
           {/* Cột phải: Bản xem trước tài liệu Word - Kéo dài toàn bộ chiều cao màn hình */}
           <div className="flex-1 min-h-0 h-full border border-[#232f4e] rounded-xl bg-[#1a1f2e] flex flex-col overflow-hidden">
-            <div className="bg-[#0c1424] px-4 py-2 border-b border-[#232f4e] shrink-0 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Bản xem trước trực tiếp {currentTemplateName ? `— ${currentTemplateName}` : ''}
-              </span>
-              <span className="text-[11px] text-slate-500">
-                Hiển thị chuẩn định dạng Word .docx
-              </span>
-            </div>
+            {/* Header thanh công cụ xem trước / chỉnh sửa nội dung mẫu */}
+            {!isEditingTemplateContent ? (
+              <div className="bg-[#0c1424] px-4 py-2 border-b border-[#232f4e] shrink-0 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider truncate">
+                    Bản xem trước trực tiếp {currentTemplateName ? `— ${currentTemplateName}` : ''}
+                  </span>
+                  <span className="text-[11px] text-slate-500 hidden sm:inline">
+                    (Chuẩn định dạng Word .docx)
+                  </span>
+                </div>
+
+                {selectedTemplateId && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleStartEditTemplateContent}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm hover:scale-[1.02]"
+                      title="Chỉnh sửa trực tiếp nội dung văn bản gốc của biểu mẫu này"
+                    >
+                      <Edit3 size={13} className="text-amber-400" />
+                      <span>Chỉnh sửa nội dung biểu mẫu</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-amber-950/70 px-4 py-2 border-b border-amber-500/40 shrink-0 flex items-center justify-between gap-2 flex-wrap animate-fadeIn">
+                <div className="flex items-center gap-2.5">
+                  <span className="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow">
+                    <Edit3 size={13} /> Chế độ sửa nội dung biểu mẫu
+                  </span>
+                  <span className="text-xs text-amber-200/90 hidden md:inline">
+                    Click chuột vào văn bản bên dưới để sửa câu từ, thêm hoặc xóa nội dung
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelEditTemplateContent}
+                    disabled={isSavingEditedTemplate}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors border border-slate-700"
+                  >
+                    Hủy bỏ
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSaveAsTemplateName(`${currentTemplateName || 'Biểu mẫu'} (Bản sửa đổi)`);
+                      setIsSaveAsModalOpen(true);
+                    }}
+                    disabled={isSavingEditedTemplate}
+                    className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow"
+                  >
+                    <Copy size={13} />
+                    <span>Lưu thành mẫu mới</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEditedTemplate(false)}
+                    disabled={isSavingEditedTemplate}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-lg shadow-emerald-600/20"
+                  >
+                    {isSavingEditedTemplate ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                    <span>Lưu vào mẫu này</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex-1 min-h-0 overflow-y-auto bg-[#7c8394] flex justify-center py-4 px-2 md:px-4 relative">
               {!selectedTemplateId && (
                 <div className="flex flex-col items-center justify-center h-full text-slate-300 text-sm font-medium py-12">
@@ -1808,8 +2209,14 @@ export const DraftingView: React.FC = () => {
               )}
               <div
                 ref={draftPreviewContainerRef}
-                className={`w-full max-w-4xl mx-auto docx-preview-container select-text relative shadow-2xl ${
+                contentEditable={isEditingTemplateContent}
+                suppressContentEditableWarning={true}
+                className={`w-full max-w-4xl mx-auto docx-preview-container select-text relative shadow-2xl transition-all ${
                   !selectedTemplateId ? 'hidden' : ''
+                } ${
+                  isEditingTemplateContent
+                    ? 'ring-2 ring-amber-500/80 rounded-md cursor-text shadow-amber-500/10'
+                    : ''
                 }`}
               />
             </div>
@@ -1830,6 +2237,75 @@ export const DraftingView: React.FC = () => {
           savedRangeRef.current = null;
         }}
       />
+
+      {/* ==================== MODAL LƯU THÀNH MẪU MỚI ==================== */}
+      <AppModal
+        isOpen={isSaveAsModalOpen}
+        onClose={() => setIsSaveAsModalOpen(false)}
+        level={2}
+        title={
+          <div className="flex items-center gap-2">
+            <Copy size={20} className="text-blue-400" />
+            <span>Lưu Thành Biểu Mẫu Mới</span>
+          </div>
+        }
+        subtitle="Lưu toàn bộ nội dung văn bản vừa chỉnh sửa thành một biểu mẫu mới độc lập để sử dụng sau này"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <AppButton
+              variant="secondary"
+              onClick={() => setIsSaveAsModalOpen(false)}
+              disabled={isSavingEditedTemplate}
+            >
+              Hủy bỏ
+            </AppButton>
+            <AppButton
+              variant="primary"
+              onClick={() => handleSaveEditedTemplate(true, saveAsTemplateName)}
+              disabled={!saveAsTemplateName.trim() || isSavingEditedTemplate}
+            >
+              {isSavingEditedTemplate ? (
+                <Loader2 size={16} className="animate-spin mr-1.5" />
+              ) : (
+                <Check size={16} className="mr-1.5" />
+              )}
+              Xác nhận lưu mẫu mới
+            </AppButton>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">
+              Tên biểu mẫu mới *
+            </label>
+            <input
+              type="text"
+              value={saveAsTemplateName}
+              onChange={(e) => setSaveAsTemplateName(e.target.value)}
+              placeholder="Nhập tên biểu mẫu mới..."
+              className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-medium"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && saveAsTemplateName.trim() && !isSavingEditedTemplate) {
+                  handleSaveEditedTemplate(true, saveAsTemplateName);
+                }
+              }}
+            />
+          </div>
+          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-200 space-y-1">
+            <p className="font-semibold flex items-center gap-1.5 text-blue-300">
+              <AlertCircle size={14} /> Lưu ý:
+            </p>
+            <p>
+              • Biểu mẫu mới sẽ kế thừa toàn bộ cấu hình biến và định dạng từ mẫu hiện tại.
+            </p>
+            <p>
+              • Các chỉnh sửa về câu từ, bổ sung đoạn văn vừa thực hiện sẽ được lưu vĩnh viễn vào biểu mẫu mới này.
+            </p>
+          </div>
+        </div>
+      </AppModal>
     </div>
   );
 };
@@ -1843,7 +2319,7 @@ function replaceAllInXml(
   xmlContent: string,
   targetText: string,
   displayValueRaw: string,
-  isLongText: boolean,
+  isLongText?: boolean,
   paragraphIndent?: string
 ): string {
   const targetStr = encodeXML(targetText).replace(/[\s\u00A0\n]+/g, ' ').trim();
