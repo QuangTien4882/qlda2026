@@ -15,8 +15,12 @@ export type VariableType =
   | 'dependent_dropdown'   // Danh sách chọn phụ thuộc
   | 'project'              // Chọn dự án từ DB
   | 'contractor'           // Chọn nhà thầu từ DB
+  | 'cost_package'         // Chọn gói thầu / nội dung chi phí từ dự án
+  | 'legal_doc'            // Chọn hồ sơ pháp lý từ dự án
   | 'project_dependent'    // Tự động lấy field từ dự án đã chọn
   | 'contractor_dependent' // Tự động lấy field từ nhà thầu đã chọn
+  | 'cost_package_dependent' // Tự động lấy field từ Nội dung chi phí
+  | 'legal_doc_dependent'   // Tự động lấy field từ Hồ sơ pháp lý
   | 'joint_venture'        // Biến liên danh (clone block)
   | 'table';               // Bảng động (docxtemplater loop)
 

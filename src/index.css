@@ -16,28 +16,27 @@ body,
 }
 
 /* Ép buộc tất cả các phần tử kế thừa font family được người dùng lựa chọn */
-/* Loại trừ .docx-wrapper để docx-preview giữ font gốc của file Word */
 html,
 body,
 #root,
-table:not(.docx-wrapper table),
-th:not(.docx-wrapper th),
-td:not(.docx-wrapper td),
+table,
+th,
+td,
 input,
 select,
 textarea,
 button,
-span:not(.docx-wrapper span),
-div:not(.docx-wrapper div):not(.docx-wrapper),
-p:not(.docx-wrapper p),
-h1:not(.docx-wrapper h1),
-h2:not(.docx-wrapper h2),
-h3:not(.docx-wrapper h3),
-h4:not(.docx-wrapper h4),
-h5:not(.docx-wrapper h5),
-h6:not(.docx-wrapper h6),
-a:not(.docx-wrapper a),
-label:not(.docx-wrapper label) {
+span,
+div,
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+a,
+label {
   font-family: var(--app-font-family) !important;
 }
 
@@ -127,73 +126,75 @@ select option[value=""] {
 }
 
 /* ========================================================================
-   DOCX-PREVIEW: Khôi phục style gốc của tài liệu Word bên trong vùng preview.
-   Tailwind preflight + font-family !important của app sẽ phá vỡ định dạng docx-preview,
-   nên cần "un-reset" toàn bộ bên trong .docx-wrapper.
+   DOCX-PREVIEW: Giữ nguyên định dạng tài liệu Word (Times New Roman chuẩn)
+   Đặc thù văn bản hành chính Việt Nam (Nghị định 30/2020/NĐ-CP): font Times New Roman,
+   cỡ chữ 13-14pt, giãn dòng bình thường, căn lề văn bản chuẩn Word.
    ======================================================================== */
-
-/* 1. Reset font: cho phép docx-preview sử dụng font gốc của file Word */
-.docx-wrapper,
-.docx-wrapper *,
-.docx-wrapper span,
-.docx-wrapper div,
-.docx-wrapper p,
-.docx-wrapper h1,
-.docx-wrapper h2,
-.docx-wrapper h3,
-.docx-wrapper h4,
-.docx-wrapper h5,
-.docx-wrapper h6,
-.docx-wrapper table,
-.docx-wrapper th,
-.docx-wrapper td,
-.docx-wrapper a,
-.docx-wrapper label {
-  font-family: inherit !important;
-}
-
-/* 2. Reset font-size: docx-preview tự quản lý cỡ chữ qua inline styles */
-.docx-wrapper {
-  font-size: initial !important;
-  line-height: normal !important;
-  color: #000 !important;
-  background: #fff !important;
-}
-
-/* 3. Cho phép bôi đen text để gán biến */
-.docx-wrapper,
-.docx-wrapper * {
+.docx-preview-container,
+.docx-preview-container *,
+.docx-preview-container p,
+.docx-preview-container span,
+.docx-preview-container div,
+.docx-preview-container table,
+.docx-preview-container td,
+.docx-preview-container th,
+.docx-preview-container h1,
+.docx-preview-container h2,
+.docx-preview-container h3,
+.docx-preview-container h4,
+.docx-preview-container h5,
+.docx-preview-container h6,
+.docx-preview-container a,
+.docx-preview-container label {
+  font-family: "Times New Roman", Times, serif !important;
+  color: #000000;
   user-select: text !important;
   -webkit-user-select: text !important;
+}
+
+.docx-preview-container {
+  background: transparent !important;
   cursor: text;
 }
 
-/* 4. Khôi phục default styles cho các element bị Tailwind preflight reset */
-.docx-wrapper p {
-  margin: 0;
+/* Khung bọc docx-wrapper trong suốt để nền xám của app bọc bên ngoài các trang giấy trắng */
+.docx-preview-container .docx-wrapper {
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: initial !important;
+  line-height: normal !important;
+  color: #000000 !important;
 }
 
-.docx-wrapper table {
-  border-collapse: collapse;
+/* Các trang giấy section.docx luôn có nền trắng, đổ bóng đẹp mắt như trang Word thực tế */
+.docx-preview-container .docx-wrapper > section.docx,
+.docx-preview-container section.docx-preview-content,
+.docx-preview-container section {
+  background: #ffffff !important;
+  color: #000000 !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25) !important;
+  margin: 0 auto 20px auto !important;
 }
 
-.docx-wrapper td,
-.docx-wrapper th {
-  padding: 0;
-  border: none;
+/* Bảng trong preview tài liệu: không bị Tailwind phá vỡ */
+.docx-preview-container table {
+  border-collapse: collapse !important;
+  font-family: "Times New Roman", Times, serif !important;
+  margin-top: 8pt;
+  margin-bottom: 8pt;
 }
 
-/* 5. Đảm bảo section pages có nền trắng và hiển thị đúng */
-.docx-wrapper > section.docx {
-  background: #fff !important;
-  color: #000 !important;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
-  margin-bottom: 16px;
+.docx-preview-container td,
+.docx-preview-container th {
+  border: 1px solid #000000 !important;
+  padding: 4px 8px !important;
+  color: #000000 !important;
+  font-family: "Times New Roman", Times, serif !important;
 }
 
-/* 6. Highlight biến đã gán (override lại để nổi bật trên nền trắng) */
-.docx-wrapper span[data-var-id] {
+/* Highlight biến đã gán trong preview */
+.docx-preview-container span[data-var-id] {
   cursor: pointer !important;
   position: relative;
-  z-index: 1;
+  z-index: 10;
 }
