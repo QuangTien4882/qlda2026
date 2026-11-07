@@ -73,6 +73,208 @@ function fixDocxPreviewStyles(container: HTMLElement) {
   });
 }
 
+/**
+ * Tìm kiếm chuỗi text bên trong một node cha (kể cả khi text bị ngắt qua nhiều text nodes)
+ * và trả về một Range DOM chính xác để bọc thẻ span.
+ */
+function findRangeForText(root: Node, text: string): Range | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => {
+      let p = n.parentElement;
+      while (p && p !== root) {
+        if (p.hasAttribute('data-var-name') || p.hasAttribute('data-var-id')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        p = p.parentElement;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  let charCount = 0;
+  const nodes: { node: Text; start: number; end: number }[] = [];
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    const textNode = n as Text;
+    const len = textNode.length;
+    nodes.push({ node: textNode, start: charCount, end: charCount + len });
+    charCount += len;
+  }
+
+  const fullText = nodes.map((item) => item.node.nodeValue).join('');
+  const idx = fullText.indexOf(text);
+  if (idx === -1) return null;
+  const endIdx = idx + text.length;
+
+  let startNode: Text | null = null;
+  let startOffset = 0;
+  let endNode: Text | null = null;
+  let endOffset = 0;
+
+  for (const item of nodes) {
+    if (!startNode && idx >= item.start && idx < item.end) {
+      startNode = item.node;
+      startOffset = idx - item.start;
+    }
+    if (!endNode && endIdx > item.start && endIdx <= item.end) {
+      endNode = item.node;
+      endOffset = endIdx - item.start;
+      break;
+    }
+  }
+
+  if (startNode && endNode) {
+    const range = document.createRange();
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
+    return range;
+  }
+  return null;
+}
+
+/**
+ * Đảm bảo mọi biến trong biểu mẫu đều được bọc bởi thẻ <span data-var-name="..." data-var-id="...">
+ * trên DOM xem trước (kể cả khi docx-preview vừa render từ file .docx nguyên bản chưa có thẻ span).
+ */
+function ensurePreviewVariablesWrapped(container: HTMLElement, variables: TemplateVariable[]) {
+  if (!container || !variables || variables.length === 0) return;
+
+  // 1. Gộp các thẻ span liền kề có cùng định dạng bên trong từng paragraph để tránh việc Word ngắt run text
+  const paragraphs = Array.from(container.querySelectorAll('p, div, td, li')) as HTMLElement[];
+  paragraphs.forEach((p) => {
+    let child = p.firstElementChild;
+    while (child && child.nextElementSibling) {
+      const next = child.nextElementSibling;
+      if (
+        child.tagName === 'SPAN' &&
+        next.tagName === 'SPAN' &&
+        !child.hasAttribute('data-var-name') &&
+        !next.hasAttribute('data-var-name') &&
+        child.className === next.className &&
+        (child as HTMLElement).style.cssText === (next as HTMLElement).style.cssText
+      ) {
+        child.textContent = (child.textContent || '') + (next.textContent || '');
+        p.removeChild(next);
+      } else {
+        child = next;
+      }
+    }
+  });
+
+  // 2. Chuẩn hóa DOM text nodes
+  container.normalize();
+
+  // 3. Thu thập các chuỗi mục tiêu cần khớp cho từng biến
+  interface TargetMatch {
+    target: string;
+    v: TemplateVariable;
+  }
+  const matchTargets: TargetMatch[] = [];
+
+  variables.forEach((v) => {
+    const rawTargets = new Set<string>();
+    rawTargets.add(`[${v.name}]`);
+    rawTargets.add(`{{${v.name}}}`);
+    if (v.originalText && v.originalText.trim().length > 0) {
+      rawTargets.add(v.originalText.trim());
+    }
+    if (v.originalTexts && Array.isArray(v.originalTexts)) {
+      v.originalTexts.forEach((ot) => {
+        if (ot && ot.trim().length > 0) rawTargets.add(ot.trim());
+      });
+    }
+
+    rawTargets.forEach((t) => {
+      if (t.length >= 2) {
+        matchTargets.push({ target: t, v });
+      }
+    });
+  });
+
+  // Sắp xếp theo độ dài target giảm dần
+  matchTargets.sort((a, b) => b.target.length - a.target.length);
+
+  // 4. Quét qua text nodes và bọc bằng thẻ span
+  matchTargets.forEach(({ target, v }) => {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        let parent = node.parentElement;
+        while (parent && parent !== container) {
+          if (parent.hasAttribute('data-var-name') || parent.hasAttribute('data-var-id')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          parent = parent.parentElement;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+
+    const nodesToProcess: Text[] = [];
+    let n: Node | null;
+    while ((n = walker.nextNode())) {
+      if (n.nodeValue && n.nodeValue.includes(target)) {
+        nodesToProcess.push(n as Text);
+      }
+    }
+
+    nodesToProcess.forEach((textNode) => {
+      let current: Text | null = textNode;
+      while (current && current.nodeValue && current.nodeValue.includes(target)) {
+        const idx = current.nodeValue.indexOf(target);
+        if (idx === -1) break;
+
+        const after = current.splitText(idx);
+        after.nodeValue = after.nodeValue!.substring(target.length);
+
+        const span = document.createElement('span');
+        span.setAttribute('data-var-id', v.id);
+        span.setAttribute('data-var-name', v.name);
+        span.className =
+          'draft-var-span bg-yellow-200/90 text-blue-900 border border-yellow-400 font-semibold px-1 py-0.5 rounded transition-all cursor-pointer';
+        span.title = `{{${v.name}}} - ${v.label || v.name}`;
+        span.textContent = target;
+
+        after.parentNode?.insertBefore(span, after);
+        current = after;
+      }
+    });
+  });
+
+  // 5. Fallback bọc qua findRangeForText cho trường hợp text bị ngắt giữa các node khác nhau
+  matchTargets.forEach(({ target, v }) => {
+    paragraphs.forEach((p) => {
+      const pText = p.textContent || '';
+      if (!pText.includes(target)) return;
+
+      const hasVarSpan = Array.from(p.querySelectorAll('span[data-var-name]')).some(
+        (s) => s.getAttribute('data-var-name') === v.name
+      );
+      if (hasVarSpan) return;
+
+      const range = findRangeForText(p, target);
+      if (range) {
+        try {
+          const span = document.createElement('span');
+          span.setAttribute('data-var-id', v.id);
+          span.setAttribute('data-var-name', v.name);
+          span.className =
+            'draft-var-span bg-yellow-200/90 text-blue-900 border border-yellow-400 font-semibold px-1 py-0.5 rounded transition-all cursor-pointer';
+          span.title = `{{${v.name}}} - ${v.label || v.name}`;
+          try {
+            range.surroundContents(span);
+          } catch {
+            const frag = range.extractContents();
+            span.appendChild(frag);
+            range.insertNode(span);
+          }
+        } catch (err) {
+          console.warn('Fallback range error:', err);
+        }
+      }
+    });
+  });
+}
+
 // ==================== MAIN COMPONENT ====================
 
 export const DraftingView: React.FC = () => {
@@ -118,6 +320,8 @@ export const DraftingView: React.FC = () => {
   const draftPreviewContainerRef = useRef<HTMLDivElement>(null);
   const draftPristineHtmlRef = useRef<string>('');
   const [jvMembers, setJvMembers] = useState<JVMember[]>([]);
+  const [activeVarName, setActiveVarName] = useState<string | null>(null);
+  const [previewRenderVersion, setPreviewRenderVersion] = useState(0);
 
   // Loading states
   const [isRendering, setIsRendering] = useState(false);
@@ -319,10 +523,12 @@ export const DraftingView: React.FC = () => {
         if (tpl.previewHtml) {
           previewContainerRef.current.innerHTML = tpl.previewHtml;
           fixDocxPreviewStyles(previewContainerRef.current);
+          ensurePreviewVariablesWrapped(previewContainerRef.current, tpl.variables || []);
         } else if (tpl.fileBase64) {
           const buf = base64ToArrayBuffer(tpl.fileBase64);
           await renderAsync(buf, previewContainerRef.current, undefined, DOCX_PREVIEW_OPTIONS);
           fixDocxPreviewStyles(previewContainerRef.current);
+          ensurePreviewVariablesWrapped(previewContainerRef.current, tpl.variables || []);
         }
       }
     }, 150);
@@ -336,6 +542,7 @@ export const DraftingView: React.FC = () => {
     setSelectedTemplateId(templateId);
     setDraftVariables(template.variables.map((v) => ({ ...v, value: '' })));
     setJvMembers([]);
+    setActiveVarName(null);
   };
 
   // Tự động render văn bản xem trước khi chọn mẫu (đảm bảo ref luôn sẵn sàng, không bị race condition)
@@ -362,13 +569,17 @@ export const DraftingView: React.FC = () => {
           await renderAsync(buf, draftPreviewContainerRef.current, undefined, DOCX_PREVIEW_OPTIONS);
           if (isMounted) {
             fixDocxPreviewStyles(draftPreviewContainerRef.current);
+            ensurePreviewVariablesWrapped(draftPreviewContainerRef.current, template.variables);
             draftPristineHtmlRef.current = draftPreviewContainerRef.current.innerHTML;
+            setPreviewRenderVersion((v) => v + 1);
           }
         } else if (template.previewHtml) {
           draftPreviewContainerRef.current.innerHTML = template.previewHtml;
           if (isMounted) {
             fixDocxPreviewStyles(draftPreviewContainerRef.current);
+            ensurePreviewVariablesWrapped(draftPreviewContainerRef.current, template.variables);
             draftPristineHtmlRef.current = template.previewHtml;
+            setPreviewRenderVersion((v) => v + 1);
           }
         }
       } catch (err) {
@@ -630,20 +841,36 @@ export const DraftingView: React.FC = () => {
       return;
     }
 
+    const container = draftPreviewContainerRef.current;
+    const allSpans = Array.from(
+      container.querySelectorAll('span[data-var-name], span[data-var-id]')
+    ) as HTMLElement[];
+
     // Update each variable span (tìm tất cả span cùng data-var-id hoặc data-var-name)
     draftVariables.forEach((v) => {
       if (v.type === 'joint_venture') return;
 
-      const elements = draftPreviewContainerRef.current?.querySelectorAll(
-        `span[data-var-id="${v.id}"], span[data-var-name="${v.name}"]`
+      const matchedElements = allSpans.filter(
+        (el) =>
+          el.getAttribute('data-var-name') === v.name ||
+          el.getAttribute('data-var-id') === v.id
       );
-      elements?.forEach((el) => {
-        let displayValue = v.value;
+
+      const isFocused = activeVarName === v.name;
+
+      matchedElements.forEach((el) => {
+        // Cho phép click trực tiếp vào biến trên văn bản để focus vào ô nhập bên trái
+        el.onclick = () => {
+          setActiveVarName(v.name);
+        };
+        el.style.cursor = 'pointer';
+
+        let displayValue = v.value || '';
         if (v.type === 'number' && v.value) displayValue = formatVnNumber(v.value);
         else if (v.type === 'date' && v.value) displayValue = formatVNDateString(v.value);
 
-        if (v.type === 'long_text' && displayValue) {
-          (el as HTMLElement).innerHTML = '';
+        if ((v.type === 'long_text' || v.type === 'legal_doc') && displayValue) {
+          el.innerHTML = '';
           const lines = displayValue.split('\n');
           lines.forEach((line) => {
             const p = document.createElement('div');
@@ -654,17 +881,36 @@ export const DraftingView: React.FC = () => {
             }
             el.appendChild(p);
           });
-          (el as HTMLElement).className = 'bg-green-100 px-1 rounded text-green-900 border-b border-green-300';
         } else if (displayValue) {
           el.textContent = displayValue;
-          (el as HTMLElement).className = 'bg-green-100 px-1 rounded text-green-900 border-b border-green-300';
         } else {
-          el.textContent = `{{${v.name}}}`;
-          (el as HTMLElement).className =
-            'bg-yellow-200 px-1 rounded text-blue-900 border-b border-yellow-400 font-semibold';
+          el.textContent = `[${v.name}]`;
+        }
+
+        // Định dạng màu sắc & highlight biến đang nhập
+        if (isFocused) {
+          el.className =
+            'draft-var-span bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded border border-amber-500 ring-2 ring-blue-500 shadow-lg inline-block animate-pulse scale-[1.02] transition-all';
+          el.title = `Biến đang soạn thảo: {{${v.name}}}`;
+        } else if (displayValue) {
+          el.className =
+            'draft-var-span bg-emerald-100 text-emerald-950 font-semibold px-1 py-0.5 rounded border border-emerald-300 transition-colors';
+          el.title = `{{${v.name}}}: ${displayValue.slice(0, 50)}`;
+        } else {
+          el.className =
+            'draft-var-span bg-yellow-200/90 text-blue-900 border border-yellow-400 font-semibold px-1 py-0.5 rounded transition-colors';
+          el.title = `Chưa nhập dữ liệu: {{${v.name}}}`;
         }
       });
     });
+
+    // Auto-scroll tới biến đang được focus (nếu có)
+    if (activeVarName) {
+      const activeEl = allSpans.find((el) => el.getAttribute('data-var-name') === activeVarName);
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
 
     // ==================== JV BLOCK CLONING IN PREVIEW ====================
     if (jvMembers.length > 0) {
@@ -775,7 +1021,7 @@ export const DraftingView: React.FC = () => {
         }
       }
     }
-  }, [draftVariables, selectedTemplateId, jvMembers]);
+  }, [draftVariables, selectedTemplateId, jvMembers, activeVarName, previewRenderVersion]);
 
   // ==================== EXPORT WORD ====================
   const handleExport = async () => {
@@ -803,9 +1049,14 @@ export const DraftingView: React.FC = () => {
         if (v.type === 'number') displayValueRaw = formatVnNumber(v.value || '');
         else if (v.type === 'date') displayValueRaw = formatVNDateString(v.value || '');
 
-        // Tập hợp tất cả các chuỗi text gốc cần thay thế cho biến này (gồm originalText và các vị trí đã gán thêm)
+        // Tập hợp tất cả các chuỗi text gốc cần thay thế cho biến này (gồm originalText, [name], {{name}} và các vị trí đã gán thêm)
         const textsToReplace = Array.from(
-          new Set([v.originalText, ...(v.originalTexts || [])].filter(Boolean))
+          new Set([
+            `[${v.name}]`,
+            `{{${v.name}}}`,
+            v.originalText,
+            ...(v.originalTexts || []),
+          ].filter(Boolean))
         );
 
         textsToReplace.forEach((origText) => {
@@ -813,7 +1064,7 @@ export const DraftingView: React.FC = () => {
             xmlContent,
             origText,
             displayValueRaw,
-            v.type === 'long_text',
+            v.type === 'long_text' || v.type === 'legal_doc',
             v.paragraphIndent
           );
         });
@@ -1274,6 +1525,8 @@ export const DraftingView: React.FC = () => {
                   companies={companies}
                   costPackages={costPackages[selectedProjectId] || []}
                   legalDocs={legalDocs[selectedProjectId] || []}
+                  activeVarName={activeVarName}
+                  onFocusVar={setActiveVarName}
                   onVariableChange={handleDraftVariableChange}
                   onNumberInput={handleDraftNumberInput}
                 />
