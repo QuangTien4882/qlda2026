@@ -192,7 +192,7 @@ select option[value=""] {
   font-family: "Times New Roman", Times, serif !important;
 }
 
-/* Highlight biến đã gán trong preview */
+/* Highlight biến đã gán trong preview - Đảm bảo thừa kế 100% định dạng chữ gốc của Word */
 .docx-preview-container span[data-var-id],
 .docx-preview-container span[data-var-name],
 .docx-preview-container .draft-var-span {
@@ -201,4 +201,6 @@ select option[value=""] {
   z-index: 10;
   user-select: all !important;
   -webkit-user-select: all !important;
+  font-family: inherit !important;
+  line-height: inherit !important;
 }

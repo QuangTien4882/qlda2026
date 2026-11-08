@@ -81,6 +81,12 @@ function fixDocxPreviewStyles(container: HTMLElement) {
     if (htmlEl.style.fontWeight) {
       htmlEl.style.setProperty('font-weight', htmlEl.style.fontWeight, 'important');
     }
+    if (htmlEl.style.fontStyle) {
+      htmlEl.style.setProperty('font-style', htmlEl.style.fontStyle, 'important');
+    }
+    if (htmlEl.style.textDecoration) {
+      htmlEl.style.setProperty('text-decoration', htmlEl.style.textDecoration, 'important');
+    }
     if (htmlEl.style.lineHeight) {
       htmlEl.style.setProperty('line-height', htmlEl.style.lineHeight, 'important');
     }
@@ -88,6 +94,37 @@ function fixDocxPreviewStyles(container: HTMLElement) {
       htmlEl.style.setProperty('color', htmlEl.style.color, 'important');
     }
   });
+}
+
+/**
+ * Sao chép định dạng chữ gốc (font-style, font-weight, color, font-size, text-decoration)
+ * từ phần tử Word run cha sang thẻ span của biến, bảo đảm 100% không làm mất in nghiêng, in đậm gốc.
+ */
+function applyInheritedTypography(targetSpan: HTMLElement, sourceEl: HTMLElement | null) {
+  if (!sourceEl) return;
+  const comp = window.getComputedStyle(sourceEl);
+  const fontStyle = sourceEl.style.fontStyle || comp.fontStyle;
+  if (fontStyle && fontStyle !== 'normal') {
+    targetSpan.style.fontStyle = fontStyle;
+  }
+  const fontWeight = sourceEl.style.fontWeight || comp.fontWeight;
+  if (fontWeight && fontWeight !== '400' && fontWeight !== 'normal') {
+    targetSpan.style.fontWeight = fontWeight;
+  } else if (fontWeight === '400' || fontWeight === 'normal') {
+    targetSpan.style.fontWeight = 'normal';
+  }
+  const fontSize = sourceEl.style.fontSize || comp.fontSize;
+  if (fontSize) {
+    targetSpan.style.fontSize = fontSize;
+  }
+  const color = sourceEl.style.color || comp.color;
+  if (color && color !== 'inherit') {
+    targetSpan.style.color = color;
+  }
+  const textDecoration = sourceEl.style.textDecoration || comp.textDecoration;
+  if (textDecoration && textDecoration !== 'none') {
+    targetSpan.style.textDecoration = textDecoration;
+  }
 }
 
 /**
@@ -240,6 +277,7 @@ function ensurePreviewVariablesWrapped(container: HTMLElement, variables: Templa
         const idx = current.nodeValue.indexOf(target);
         if (idx === -1) break;
 
+        const parentEl = current.parentElement;
         const after = current.splitText(idx);
         after.nodeValue = after.nodeValue!.substring(target.length);
 
@@ -248,9 +286,10 @@ function ensurePreviewVariablesWrapped(container: HTMLElement, variables: Templa
         span.setAttribute('data-var-name', v.name);
         span.setAttribute('contenteditable', 'false');
         span.className =
-          'draft-var-span bg-yellow-200/90 text-blue-900 border border-yellow-400 font-semibold px-1 py-0.5 rounded transition-all cursor-pointer';
+          'draft-var-span bg-yellow-200/90 text-inherit border border-yellow-400 px-1 py-0.5 rounded transition-all cursor-pointer';
         span.title = `{{${v.name}}} - ${v.label || v.name}`;
         span.textContent = target;
+        applyInheritedTypography(span, parentEl);
 
         after.parentNode?.insertBefore(span, after);
         current = after;
@@ -272,13 +311,18 @@ function ensurePreviewVariablesWrapped(container: HTMLElement, variables: Templa
       const range = findRangeForText(p, target);
       if (range) {
         try {
+          const startEl =
+            range.startContainer.nodeType === Node.ELEMENT_NODE
+              ? (range.startContainer as HTMLElement)
+              : range.startContainer.parentElement;
           const span = document.createElement('span');
           span.setAttribute('data-var-id', v.id);
           span.setAttribute('data-var-name', v.name);
           span.setAttribute('contenteditable', 'false');
           span.className =
-            'draft-var-span bg-yellow-200/90 text-blue-900 border border-yellow-400 font-semibold px-1 py-0.5 rounded transition-all cursor-pointer';
+            'draft-var-span bg-yellow-200/90 text-inherit border border-yellow-400 px-1 py-0.5 rounded transition-all cursor-pointer';
           span.title = `{{${v.name}}} - ${v.label || v.name}`;
+          applyInheritedTypography(span, startEl);
           try {
             range.surroundContents(span);
           } catch {
@@ -579,13 +623,20 @@ export const DraftingView: React.FC = () => {
     // Bọc đoạn text đã chọn trên DOM preview bằng thẻ span highlight biến
     if (range) {
       try {
+        const startEl =
+          range.startContainer.nodeType === Node.ELEMENT_NODE
+            ? (range.startContainer as HTMLElement)
+            : range.startContainer.parentElement;
+
         const span = document.createElement('span');
         span.setAttribute('data-var-id', activeVarId);
         span.setAttribute('data-var-name', targetName);
         span.setAttribute('contenteditable', 'false');
         span.className =
-          'bg-yellow-200 px-1 py-0.5 rounded text-blue-900 border border-yellow-400 font-semibold cursor-pointer';
+          'draft-var-span bg-yellow-200/90 text-inherit px-1 py-0.5 rounded border border-yellow-400 cursor-pointer';
         span.title = `{{${targetName}}} - ${varConfig.label || targetName}`;
+        applyInheritedTypography(span, startEl);
+
         try {
           range.surroundContents(span);
         } catch {
@@ -1511,6 +1562,11 @@ export const DraftingView: React.FC = () => {
             const p = document.createElement('div');
             p.textContent = line;
             p.style.margin = '0';
+            p.style.fontFamily = 'inherit';
+            p.style.fontSize = 'inherit';
+            p.style.fontWeight = 'inherit';
+            p.style.fontStyle = 'inherit';
+            p.style.color = 'inherit';
             if (v.paragraphIndent && Number(v.paragraphIndent) > 0) {
               p.style.textIndent = `${v.paragraphIndent}cm`;
             }
@@ -1522,18 +1578,18 @@ export const DraftingView: React.FC = () => {
           el.textContent = `[${v.name}]`;
         }
 
-        // Định dạng màu sắc & highlight biến đang nhập
+        // Định dạng màu sắc & highlight biến đang nhập (giữ nguyên font-weight & font-style gốc của Word)
         if (isFocused) {
           el.className =
-            'draft-var-span bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded border border-amber-500 ring-2 ring-blue-500 shadow-lg inline-block animate-pulse scale-[1.02] transition-all';
+            'draft-var-span bg-amber-200/90 text-inherit px-1.5 py-0.5 rounded border border-amber-500 ring-2 ring-blue-500 shadow-sm inline-block scale-[1.01] transition-all';
           el.title = `Biến đang soạn thảo: {{${v.name}}}`;
         } else if (displayValue) {
           el.className =
-            'draft-var-span bg-emerald-100 text-emerald-950 font-semibold px-1 py-0.5 rounded border border-emerald-300 transition-colors';
+            'draft-var-span bg-emerald-100/80 text-inherit px-1 py-0.5 rounded border border-emerald-300/80 transition-colors';
           el.title = `{{${v.name}}}: ${displayValue.slice(0, 50)}`;
         } else {
           el.className =
-            'draft-var-span bg-yellow-200/90 text-blue-900 border border-yellow-400 font-semibold px-1 py-0.5 rounded transition-colors';
+            'draft-var-span bg-yellow-200/90 text-inherit border border-yellow-400 px-1 py-0.5 rounded transition-colors';
           el.title = `Chưa nhập dữ liệu: {{${v.name}}}`;
         }
       });
@@ -1641,11 +1697,11 @@ export const DraftingView: React.FC = () => {
                   if (fieldValue) {
                     span.textContent = fieldValue;
                     (span as HTMLElement).className =
-                      'bg-purple-100 px-1 rounded text-purple-900 border-b border-purple-300 font-semibold';
+                      'draft-var-span bg-purple-100/80 text-inherit px-1 rounded border-b border-purple-300';
                   } else {
                     span.textContent = `{{${matchingVar.name}}}`;
                     (span as HTMLElement).className =
-                      'bg-yellow-200 px-1 rounded text-blue-900 border-b border-yellow-400 font-semibold';
+                      'draft-var-span bg-yellow-200/90 text-inherit px-1 rounded border-b border-yellow-400';
                   }
                 }
               });
