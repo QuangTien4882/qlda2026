@@ -117,8 +117,6 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
       );
     } else if (newType === 'cost_package_dependent') {
       compat = existingVariables.filter((v) => v.type === 'cost_package');
-    } else if (newType === 'legal_doc_dependent') {
-      compat = existingVariables.filter((v) => v.type === 'legal_doc');
     } else if (newType === 'number_to_words') {
       compat = existingVariables.filter(
         (v) =>
@@ -222,12 +220,6 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
       const highCompat = existingVariables.filter((v) => v.type === 'cost_package');
       const others = existingVariables.filter((v) => !highCompat.includes(v));
       return { highCompat, others, highLabel: 'Biến chọn gói thầu từ dự án (Khuyên dùng)' };
-    }
-
-    if (type === 'legal_doc_dependent') {
-      const highCompat = existingVariables.filter((v) => v.type === 'legal_doc');
-      const others = existingVariables.filter((v) => !highCompat.includes(v));
-      return { highCompat, others, highLabel: 'Biến chọn hồ sơ pháp lý (Khuyên dùng)' };
     }
 
     if (type === 'dependent_dropdown') {
@@ -396,13 +388,13 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
                 <option value="dropdown">Danh sách chọn (cố định)</option>
               </optgroup>
               <optgroup label="Tự động lấy từ Dự án / Gói thầu / Nhà thầu">
+                <option value="project">Chọn Tên Dự án (từ cơ sở dữ liệu)</option>
                 <option value="project_dependent">Thông tin Dự án (tên, mã, địa điểm, tổng mức...)</option>
                 <option value="cost_package">Chọn Gói thầu / Nội dung chi phí (từ dự án)</option>
                 <option value="cost_package_dependent">Trích xuất từ Gói thầu (tên nhà thầu, giá trị, hình thức...)</option>
                 <option value="contractor">Chọn Nhà thầu (danh mục đối tác)</option>
                 <option value="contractor_dependent">Trích xuất từ Nhà thầu (MST, địa chỉ, người ĐD, chức vụ...)</option>
                 <option value="legal_doc">Hồ sơ pháp lý (tích chọn nhiều hồ sơ có tìm kiếm)</option>
-                <option value="legal_doc_dependent">Trích xuất từ Hồ sơ pháp lý (số QĐ, trích yếu, ngày ban hành...)</option>
               </optgroup>
               <optgroup label="Tự động nâng cao">
                 <option value="number_to_words">Đọc số thành chữ (tiền tệ VNĐ tự động)</option>
@@ -414,6 +406,16 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
             </select>
           </div>
 
+          {/* project */}
+          {type === 'project' && (
+            <div className="p-3 bg-blue-950/20 border border-blue-500/30 rounded-xl text-xs text-blue-300 flex items-center gap-2">
+              <span className="text-base shrink-0">🏛️</span>
+              <span>
+                Biến này sẽ hiển thị danh sách tất cả các <strong>Dự án</strong> từ cơ sở dữ liệu để chọn khi soạn thảo văn bản.
+              </span>
+            </div>
+          )}
+
           {/* project_dependent */}
           {type === 'project_dependent' && (
             <div>
@@ -424,7 +426,7 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
                 className={inputClass}
               >
                 <option value="">-- Chọn trường thông tin --</option>
-                <option value="name">Tên dự án</option>
+                <option value="name">Tên dự án (Chọn dự án từ CSDL)</option>
                 <option value="code">Mã dự án</option>
                 <option value="location">Địa điểm xây dựng</option>
                 <option value="totalInvestment">Tổng mức đầu tư</option>
@@ -545,54 +547,6 @@ export const VariableConfigDialog: React.FC<VariableConfigDialogProps> = ({
                   <option value="bankAccount">Số tài khoản ngân hàng</option>
                   <option value="bankName">Tên ngân hàng</option>
                   <option value="shortName">Tên viết tắt</option>
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* legal_doc_dependent */}
-          {type === 'legal_doc_dependent' && (
-            <div className="space-y-3 p-3 bg-[#0c1424] border border-[#232f4e] rounded-xl">
-              <div>
-                <label className={labelClass}>Lấy từ biến hồ sơ pháp lý nào?</label>
-                <select
-                  value={sourceVariableId}
-                  onChange={(e) => setSourceVariableId(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">-- Tự động lấy hồ sơ pháp lý đầu tiên --</option>
-                  {highCompat.length > 0 && (
-                    <optgroup label={highLabel}>
-                      {highCompat.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {`{{${v.name}}}`} — {v.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {others.length > 0 && (
-                    <optgroup label="Các biến khác">
-                      {others.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {`{{${v.name}}}`} — {v.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className={labelClass}>Trường thông tin cần trích xuất</label>
-                <select
-                  value={dependentConfig}
-                  onChange={(e) => setDependentConfig(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">-- Chọn trường --</option>
-                  <option value="content">Nội dung trích yếu hồ sơ pháp lý</option>
-                  <option value="fileName">Tên tệp đính kèm</option>
-                  <option value="note">Ghi chú</option>
                 </select>
               </div>
             </div>

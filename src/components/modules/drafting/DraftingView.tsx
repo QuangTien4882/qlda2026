@@ -14,6 +14,8 @@ import {
   X,
   Check,
   AlertCircle,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { useSettings } from '../../../context/SettingsContext';
 import { useData } from '../../../context/DataContext';
@@ -32,7 +34,7 @@ import { AppButton } from '../../common/AppButton';
 // Sub-components
 import { TemplateFolderSidebar } from './components/TemplateFolderSidebar';
 import { VariableConfigDialog } from './components/VariableConfigDialog';
-import { VariableForm } from './components/VariableForm';
+import { VariableForm, isProjectSelectorVar } from './components/VariableForm';
 import { DraftSaveLoadPanel } from './components/DraftSaveLoadPanel';
 import { JointVenturePicker, JV_STT_WORDS } from './components/JointVenturePicker';
 
@@ -541,6 +543,17 @@ export const DraftingView: React.FC = () => {
     }
   };
 
+  const handleMoveTemplateVariable = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= currentVariables.length) return;
+    setCurrentVariables((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(index, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  };
+
   const handleStartModalContentEdit = () => {
     const container = previewContainerRef.current;
     if (!container) return;
@@ -768,14 +781,15 @@ export const DraftingView: React.FC = () => {
       let updated = prev.map((v) => (v.name === varName ? { ...v, value } : v));
 
       const targetVar = prev.find((v) => v.name === varName);
-      // Khi chọn hoặc hủy chọn dự án
-      if (targetVar?.type === 'project') {
+      // Khi chọn hoặc hủy chọn dự án (hỗ trợ cả type === 'project' lẫn project_dependent tên dự án)
+      const isProj = targetVar && isProjectSelectorVar(targetVar, prev);
+      if (isProj) {
         if (!value) {
           setSelectedProjectId('');
           // Khi hủy chọn dự án: reset toàn bộ biến phụ thuộc dự án & gói thầu về rỗng
           updated = updated.map((v) => {
             if (
-              v.type === 'project_dependent' ||
+              (v.type === 'project_dependent' && !isProjectSelectorVar(v, prev)) ||
               v.type === 'cost_package' ||
               v.type === 'cost_package_dependent' ||
               v.type === 'contractor_dependent' ||
@@ -818,6 +832,44 @@ export const DraftingView: React.FC = () => {
       }
 
       return updated;
+    });
+  };
+
+  const handleReorderDraftVariables = (fromIndex: number, toIndex: number) => {
+    setDraftVariables((prev) => {
+      const uniqueVars: TemplateVariable[] = [];
+      prev.forEach((v) => {
+        if (!uniqueVars.find((u) => u.name === v.name)) uniqueVars.push(v);
+      });
+      if (fromIndex < 0 || fromIndex >= uniqueVars.length || toIndex < 0 || toIndex >= uniqueVars.length) {
+        return prev;
+      }
+
+      const newUnique = [...uniqueVars];
+      const [moved] = newUnique.splice(fromIndex, 1);
+      newUnique.splice(toIndex, 0, moved);
+
+      const orderMap = new Map(newUnique.map((v, i) => [v.name, i]));
+      const nextDraft = [...prev].sort((a, b) => {
+        const orderA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999;
+        const orderB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999;
+        return orderA - orderB;
+      });
+
+      // Cập nhật và lưu lại thứ tự biến vào biểu mẫu đang chọn
+      if (selectedTemplateId) {
+        const currentTpl = docTemplates.find((t) => t.id === selectedTemplateId);
+        if (currentTpl) {
+          const updatedVars = [...currentTpl.variables].sort((a, b) => {
+            const orderA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999;
+            const orderB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999;
+            return orderA - orderB;
+          });
+          updateTemplate({ ...currentTpl, variables: updatedVars });
+        }
+      }
+
+      return nextDraft;
     });
   };
 
@@ -1034,7 +1086,7 @@ export const DraftingView: React.FC = () => {
     // Xác định ID dự án hiệu lực dựa trên biến 'project' hoặc 'cost_package'
     let effectiveProjectId = selectedProjectId;
 
-    const projVar = newDraft.find((s) => s.type === 'project' && s.value);
+    const projVar = newDraft.find((s) => isProjectSelectorVar(s, newDraft) && s.value);
     if (projVar) {
       const matched = projects.find(
         (p) =>
@@ -1060,7 +1112,7 @@ export const DraftingView: React.FC = () => {
           }
           const matchedProj = projects.find((p) => p.id === pid);
           if (matchedProj) {
-            const pVar = newDraft.find((s) => s.type === 'project');
+            const pVar = newDraft.find((s) => isProjectSelectorVar(s, newDraft));
             if (pVar && pVar.value !== matchedProj.name) {
               pVar.value = matchedProj.name;
               anyUpdated = true;
@@ -1212,7 +1264,18 @@ export const DraftingView: React.FC = () => {
 
         // 4. project_dependent (Thông tin dự án)
         if (v.type === 'project_dependent') {
-          if (currentProject) {
+          if (isProjectSelectorVar(v, newDraft)) {
+            // Biến này đóng vai trò là biến chọn dự án: giữ tên dự án hiện tại
+            if (currentProject && v.value !== currentProject.name) {
+              v.value = currentProject.name;
+              passUpdated = true;
+              anyUpdated = true;
+            } else if (!currentProject && v.value) {
+              v.value = '';
+              passUpdated = true;
+              anyUpdated = true;
+            }
+          } else if (currentProject) {
             const fieldMap: Record<string, string> = {
               name: currentProject.name,
               code: currentProject.code,
@@ -1866,7 +1929,7 @@ export const DraftingView: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-1.5 overflow-y-auto flex-1 pr-1">
-                  {currentVariables.map((v) => (
+                  {currentVariables.map((v, index) => (
                     <div
                       key={v.id}
                       className="flex items-center gap-2 p-2 bg-[#080d1a] border border-[#232f4e] rounded-lg group hover:border-blue-500/40 transition-colors"
@@ -1884,7 +1947,25 @@ export const DraftingView: React.FC = () => {
                           {v.label} · <span className="text-slate-500 font-mono">[{v.type}]</span>
                         </p>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => handleMoveTemplateVariable(index, 'up')}
+                          className="p-1 text-slate-400 hover:text-white disabled:opacity-20 disabled:hover:text-slate-400 transition-colors"
+                          title="Di chuyển lên trên"
+                        >
+                          <ChevronUp size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === currentVariables.length - 1}
+                          onClick={() => handleMoveTemplateVariable(index, 'down')}
+                          className="p-1 text-slate-400 hover:text-white disabled:opacity-20 disabled:hover:text-slate-400 transition-colors"
+                          title="Di chuyển xuống dưới"
+                        >
+                          <ChevronDown size={13} />
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -2046,13 +2127,15 @@ export const DraftingView: React.FC = () => {
                   allCostPackages={costPackages}
                   legalDocs={selectedProjectId ? (legalDocs[selectedProjectId] || []) : []}
                   activeVarName={activeVarName}
+                  selectedProjectId={selectedProjectId}
                   onFocusVar={setActiveVarName}
+                  onReorderVar={handleReorderDraftVariables}
                   onProjectChange={(pid) => {
                     setSelectedProjectId(pid);
                     const p = projects.find((x) => x.id === pid);
                     if (p) {
                       setDraftVariables((prev) =>
-                        prev.map((v) => (v.type === 'project' ? { ...v, value: p.name } : v))
+                        prev.map((v) => (isProjectSelectorVar(v, prev) ? { ...v, value: p.name } : v))
                       );
                     } else {
                       setDraftVariables((prev) =>
@@ -2079,7 +2162,7 @@ export const DraftingView: React.FC = () => {
                       const p = projects.find((x) => x.id === cp.projectId);
                       if (p) {
                         setDraftVariables((prev) =>
-                          prev.map((v) => (v.type === 'project' ? { ...v, value: p.name } : v))
+                          prev.map((v) => (isProjectSelectorVar(v, prev) ? { ...v, value: p.name } : v))
                         );
                       }
                     }

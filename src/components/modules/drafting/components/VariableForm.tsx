@@ -1,11 +1,40 @@
 import React, { useState } from 'react';
-import { FileText, Search, CheckSquare, Square } from 'lucide-react';
+import { FileText, Search, CheckSquare, Square, ChevronUp, ChevronDown } from 'lucide-react';
 import { TemplateVariable } from '../../../../types/drafting';
 import { formatVnNumber } from '../../../../utils/numberUtils';
 import { VnDateInput } from '../../../common/VnDateInput';
 import { ProjectListItem, ContractorItem, CostPackageItem, LegalDocItem } from '../../../../types/project';
 
-interface VariableFormProps {
+/**
+ * Kiểm tra xem một biến có đóng vai trò là biến chọn Dự án hay không.
+ * Hỗ trợ cả type === 'project' lẫn type === 'project_dependent' khi cấu hình là tên dự án
+ * hoặc tên biến / nhãn là 'Tên dự án'.
+ */
+export const isProjectSelectorVar = (
+  v: TemplateVariable,
+  allVars?: TemplateVariable[]
+): boolean => {
+  if (v.type === 'project') return true;
+  if (v.type === 'project_dependent') {
+    // Nếu trong danh sách đã có biến với type === 'project' tường minh thì ưu tiên biến đó
+    if (allVars && allVars.some((o) => o.id !== v.id && o.type === 'project')) {
+      return false;
+    }
+    const nameLower = (v.name || '').toLowerCase();
+    const labelLower = (v.label || '').toLowerCase();
+    return (
+      v.dependentConfig === 'name' ||
+      nameLower === 'ten_du_an' ||
+      nameLower === 'du_an' ||
+      nameLower.includes('ten_du_an') ||
+      labelLower.includes('tên dự án') ||
+      labelLower === 'dự án'
+    );
+  }
+  return false;
+};
+
+export interface VariableFormProps {
   draftVariables: TemplateVariable[];
   projects: ProjectListItem[];
   companies: ContractorItem[];
@@ -13,11 +42,13 @@ interface VariableFormProps {
   allCostPackages?: Record<string, CostPackageItem[]>;
   legalDocs?: LegalDocItem[];
   activeVarName?: string | null;
+  selectedProjectId?: string;
   onFocusVar?: (varName: string) => void;
   onProjectChange?: (projectId: string) => void;
   onCostPackageSelect?: (costPackage: CostPackageItem) => void;
   onVariableChange: (varName: string, value: string) => void;
   onNumberInput: (varName: string, value: string) => void;
+  onReorderVar?: (fromIndex: number, toIndex: number) => void;
 }
 
 // ==================== BỘ TÍCH CHỌN NHIỀU HỒ SƠ PHÁP LÝ (CÓ TÌM KIẾM) ====================
@@ -277,11 +308,13 @@ export const VariableForm: React.FC<VariableFormProps> = ({
   allCostPackages,
   legalDocs = [],
   activeVarName,
+  selectedProjectId,
   onFocusVar,
   onProjectChange,
   onCostPackageSelect,
   onVariableChange,
   onNumberInput,
+  onReorderVar,
 }) => {
   const inputClass =
     'w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-blue-500 transition-colors text-sm';
@@ -294,8 +327,8 @@ export const VariableForm: React.FC<VariableFormProps> = ({
   });
 
   // Xác định trạng thái chọn của các biến cha trong toàn bộ biểu mẫu
-  const projectVar = draftVariables.find((u) => u.type === 'project');
-  const hasProjectSelected = projectVar ? Boolean(projectVar.value?.trim()) : false;
+  const projectVar = draftVariables.find((u) => isProjectSelectorVar(u, draftVariables));
+  const hasProjectSelected = Boolean(selectedProjectId) || Boolean(projectVar?.value?.trim());
 
   const packageVar = draftVariables.find((u) => u.type === 'cost_package');
   const hasPackageSelected = packageVar ? Boolean(packageVar.value?.trim()) : false;
@@ -311,22 +344,47 @@ export const VariableForm: React.FC<VariableFormProps> = ({
 
   return (
     <>
-      {uniqueVars.map((v) => {
+      {uniqueVars.map((v, index) => {
         const isFocused = activeVarName === v.name;
         return (
           <div key={v.id} className="space-y-1">
-            <label
-              className={`${labelClass} flex items-center justify-between ${
-                isFocused ? 'text-amber-400 font-bold' : 'text-slate-400'
-              }`}
-            >
-              <span>{v.label || v.name}</span>
-              {isFocused && (
-                <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/30 px-1.5 py-0.2 rounded font-mono font-medium">
-                  Đang xem trên văn bản 👁️
-                </span>
+            <div className="flex items-center justify-between mb-1">
+              <label
+                className={`${labelClass} flex items-center gap-1.5 mb-0 ${
+                  isFocused ? 'text-amber-400 font-bold' : 'text-slate-400'
+                }`}
+              >
+                <span>{v.label || v.name}</span>
+                {isFocused && (
+                  <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/30 px-1.5 py-0.2 rounded font-mono font-medium">
+                    Đang xem trên văn bản 👁️
+                  </span>
+                )}
+              </label>
+
+              {onReorderVar && uniqueVars.length > 1 && (
+                <div className="flex items-center gap-0.5 opacity-60 hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    disabled={index === 0}
+                    onClick={() => onReorderVar(index, index - 1)}
+                    className="p-0.5 text-slate-400 hover:text-white disabled:opacity-20 disabled:hover:text-slate-400 transition-colors"
+                    title="Di chuyển biến lên trên"
+                  >
+                    <ChevronUp size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={index === uniqueVars.length - 1}
+                    onClick={() => onReorderVar(index, index + 1)}
+                    className="p-0.5 text-slate-400 hover:text-white disabled:opacity-20 disabled:hover:text-slate-400 transition-colors"
+                    title="Di chuyển biến xuống dưới"
+                  >
+                    <ChevronDown size={13} />
+                  </button>
+                </div>
               )}
-            </label>
+            </div>
 
             {v.type === 'text' && (
               <input
@@ -409,31 +467,37 @@ export const VariableForm: React.FC<VariableFormProps> = ({
               </select>
             )}
 
-            {v.type === 'project' && (
+            {isProjectSelectorVar(v, uniqueVars) && (
               <select
-                value={v.value}
-                onChange={(e) => {
-                  const selectedVal = e.target.value;
-                  onVariableChange(v.name, selectedVal);
-                  const matched = projects.find(
+                value={
+                  projects.find(
                     (p) =>
-                      p.name === selectedVal ||
-                      p.id === selectedVal ||
-                      (p.code && selectedVal.includes(p.code))
-                  );
+                      p.name === v.value ||
+                      p.id === v.value ||
+                      (p.code && v.value?.includes(p.code))
+                  )?.id ||
+                  (selectedProjectId && projects.some((p) => p.id === selectedProjectId)
+                    ? selectedProjectId
+                    : '')
+                }
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  const matched = projects.find((p) => p.id === selectedId);
                   if (matched) {
+                    onVariableChange(v.name, matched.name);
                     onProjectChange?.(matched.id);
                   } else {
+                    onVariableChange(v.name, '');
                     onProjectChange?.('');
                   }
                 }}
                 onFocus={() => onFocusVar?.(v.name)}
-                className={`${inputClass} ${isFocused ? 'border-amber-400 ring-1 ring-amber-400' : ''}`}
+                className={`${inputClass} font-medium ${isFocused ? 'border-amber-400 ring-1 ring-amber-400' : ''}`}
               >
                 <option value="">-- Chọn dự án --</option>
                 {projects.map((p) => (
-                  <option key={p.id} value={p.name}>
-                    {p.code} - {p.name}
+                  <option key={p.id} value={p.id}>
+                    {p.code ? `${p.code} - ` : ''}{p.name}
                   </option>
                 ))}
               </select>
@@ -512,7 +576,7 @@ export const VariableForm: React.FC<VariableFormProps> = ({
             )}
 
             {/* Biến phụ thuộc vào Dự án */}
-            {v.type === 'project_dependent' && (
+            {v.type === 'project_dependent' && !isProjectSelectorVar(v, uniqueVars) && (
               <div className="space-y-1">
                 <div className="relative" onFocus={() => onFocusVar?.(v.name)}>
                   <input
