@@ -32,6 +32,10 @@ interface DraftingContextType {
   // Export/Import cho JSON backup
   exportDraftingData: () => DraftingDatabase;
   importDraftingData: (data: DraftingDatabase) => void;
+
+  // Trạng thái đang soạn thảo có dữ liệu chưa lưu (dùng để cảnh báo khi thoát trang)
+  isDraftingDirty: boolean;
+  setIsDraftingDirty: (dirty: boolean) => void;
 }
 
 const DraftingContext = createContext<DraftingContextType | undefined>(undefined);
@@ -40,6 +44,7 @@ export const DraftingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [templateFolders, setTemplateFolders] = useState<TemplateFolder[]>([]);
   const [docTemplates, setDocTemplates] = useState<DocTemplate[]>([]);
   const [draftDocuments, setDraftDocuments] = useState<DraftDocument[]>([]);
+  const [isDraftingDirty, setIsDraftingDirty] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Debounce timer ref để tránh ghi IDB quá nhiều
@@ -157,6 +162,8 @@ export const DraftingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         deleteDraft,
         exportDraftingData,
         importDraftingData,
+        isDraftingDirty,
+        setIsDraftingDirty,
       }}
     >
       {children}

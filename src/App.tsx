@@ -1,4 +1,4 @@
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { MainMenuType } from './types/project';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
@@ -10,6 +10,7 @@ import { SettingsModal } from './components/modules/settings/SettingsModal';
 import { BackupManagerModal } from './components/modules/settings/BackupManagerModal';
 import { ShortcutsGuideModal } from './components/common/ShortcutsGuideModal';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useDrafting } from './context/DraftingContext';
 import { Save, CheckCircle2, Loader2 } from 'lucide-react';
 
 // Lazy load module soạn thảo văn bản (giảm initial bundle ~200KB)
@@ -19,11 +20,43 @@ const LazyDraftingView = React.lazy(() =>
 
 export const AppContent: React.FC = () => {
   const [currentMenu, setCurrentMenu] = useState<MainMenuType>('projects');
+  const [hasVisitedDrafting, setHasVisitedDrafting] = useState(false);
   const [isOpenMobileMenu, setIsOpenMobileMenu] = useState(false);
   const [isOpenSettingsModal, setIsOpenSettingsModal] = useState(false);
   const [isOpenBackupModal, setIsOpenBackupModal] = useState(false);
   const [isOpenShortcutsModal, setIsOpenShortcutsModal] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
+  const { isDraftingDirty } = useDrafting();
+
+  useEffect(() => {
+    if (currentMenu === 'drafting') {
+      setHasVisitedDrafting(true);
+    }
+  }, [currentMenu]);
+
+  // Cảnh báo khi người dùng chuyển trang lúc đang có dữ liệu soạn thảo chưa lưu
+  const handleSelectMenu = (menu: MainMenuType) => {
+    if (menu === currentMenu) return;
+    if (currentMenu === 'drafting' && isDraftingDirty) {
+      const confirmLeave = window.confirm(
+        'Bạn đang có nội dung soạn thảo văn bản chưa lưu / chưa xuất file.\n\nBạn có chắc chắn muốn rời khỏi trang không?'
+      );
+      if (!confirmLeave) return;
+    }
+    setCurrentMenu(menu);
+  };
+
+  // Cảnh báo khi người dùng tắt hoặc tải lại trang web lúc đang soạn thảo
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (currentMenu === 'drafting' && isDraftingDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [currentMenu, isDraftingDirty]);
 
   // Bắt phím tắt toàn hệ thống: Ctrl+S để lưu nhanh, F1/? để mở hướng dẫn phím tắt
   useKeyboardShortcuts({
@@ -49,7 +82,7 @@ export const AppContent: React.FC = () => {
         {/* Left Sidebar */}
         <Sidebar
           currentMenu={currentMenu}
-          onSelectMenu={setCurrentMenu}
+          onSelectMenu={handleSelectMenu}
           isOpenMobile={isOpenMobileMenu}
           onCloseMobile={() => setIsOpenMobileMenu(false)}
           onOpenSettings={() => setIsOpenSettingsModal(true)}
@@ -62,15 +95,19 @@ export const AppContent: React.FC = () => {
           <div className="flex-1 min-h-0 flex flex-col w-full h-full">
             {currentMenu === 'projects' && <ProjectsModuleView />}
             {currentMenu === 'reports' && <ReportsView />}
-            {currentMenu === 'drafting' && (
-              <Suspense fallback={
-                <div className="flex-1 flex items-center justify-center text-slate-400 gap-3">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="text-sm">Đang tải module Soạn thảo văn bản...</span>
-                </div>
-              }>
-                <LazyDraftingView />
-              </Suspense>
+            {hasVisitedDrafting && (
+              <div className={`flex-1 min-h-0 flex flex-col w-full h-full ${currentMenu === 'drafting' ? '' : 'hidden'}`}>
+                <Suspense
+                  fallback={
+                    <div className="flex-1 flex items-center justify-center text-slate-400 gap-3">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="text-sm">Đang tải module Soạn thảo văn bản...</span>
+                    </div>
+                  }
+                >
+                  <LazyDraftingView />
+                </Suspense>
+              </div>
             )}
             {currentMenu === 'companies' && <CompaniesView />}
           </div>
@@ -80,7 +117,7 @@ export const AppContent: React.FC = () => {
       {/* Bottom Nav on Mobile */}
       <MobileNav
         currentMenu={currentMenu}
-        onSelectMenu={setCurrentMenu}
+        onSelectMenu={handleSelectMenu}
         onOpenSettings={() => setIsOpenSettingsModal(true)}
       />
 

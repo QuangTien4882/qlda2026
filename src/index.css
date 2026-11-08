@@ -193,8 +193,12 @@ select option[value=""] {
 }
 
 /* Highlight biến đã gán trong preview */
-.docx-preview-container span[data-var-id] {
+.docx-preview-container span[data-var-id],
+.docx-preview-container span[data-var-name],
+.docx-preview-container .draft-var-span {
   cursor: pointer !important;
   position: relative;
   z-index: 10;
+  user-select: all !important;
+  -webkit-user-select: all !important;
 }

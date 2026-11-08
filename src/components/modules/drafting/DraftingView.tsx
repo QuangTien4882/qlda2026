@@ -246,6 +246,7 @@ function ensurePreviewVariablesWrapped(container: HTMLElement, variables: Templa
         const span = document.createElement('span');
         span.setAttribute('data-var-id', v.id);
         span.setAttribute('data-var-name', v.name);
+        span.setAttribute('contenteditable', 'false');
         span.className =
           'draft-var-span bg-yellow-200/90 text-blue-900 border border-yellow-400 font-semibold px-1 py-0.5 rounded transition-all cursor-pointer';
         span.title = `{{${v.name}}} - ${v.label || v.name}`;
@@ -274,6 +275,7 @@ function ensurePreviewVariablesWrapped(container: HTMLElement, variables: Templa
           const span = document.createElement('span');
           span.setAttribute('data-var-id', v.id);
           span.setAttribute('data-var-name', v.name);
+          span.setAttribute('contenteditable', 'false');
           span.className =
             'draft-var-span bg-yellow-200/90 text-blue-900 border border-yellow-400 font-semibold px-1 py-0.5 rounded transition-all cursor-pointer';
           span.title = `{{${v.name}}} - ${v.label || v.name}`;
@@ -325,6 +327,7 @@ export const DraftingView: React.FC = () => {
     deleteTemplate,
     saveDraft,
     deleteDraft,
+    setIsDraftingDirty,
   } = useDrafting();
 
   // Tab state
@@ -372,6 +375,79 @@ export const DraftingView: React.FC = () => {
 
   // Loading states
   const [isRendering, setIsRendering] = useState(false);
+
+  // Xác định người dùng có đang có dữ liệu soạn thảo chưa lưu / xuất file không
+  const hasActiveDraftData =
+    isEditingTemplateContent ||
+    Boolean(
+      selectedTemplateId &&
+      draftVariables.some((v) => v.value && v.value.trim().length > 0)
+    );
+
+  useEffect(() => {
+    setIsDraftingDirty(hasActiveDraftData);
+    return () => {
+      setIsDraftingDirty(false);
+    };
+  }, [hasActiveDraftData, setIsDraftingDirty]);
+
+  // Cảnh báo người dùng khi chuyển tab nội bộ (từ Soạn thảo sang Quản lý Mẫu)
+  const handleSwitchTab = (tab: 'templates' | 'draft') => {
+    if (tab === activeTab) return;
+    if (activeTab === 'draft' && tab === 'templates') {
+      if (isEditingTemplateContent) {
+        const confirmLeave = window.confirm(
+          'Bạn đang ở chế độ chỉnh sửa nội dung biểu mẫu chưa lưu. Chuyển sang Quản lý Mẫu sẽ hủy các câu từ đang sửa dở.\n\nBạn có chắc chắn muốn chuyển không?'
+        );
+        if (!confirmLeave) return;
+        handleCancelEditTemplateContent();
+      } else if (hasActiveDraftData) {
+        const confirmLeave = window.confirm(
+          'Bạn đang có dữ liệu soạn thảo văn bản chưa xuất file.\n\nBạn có chắc chắn muốn chuyển sang Quản lý Mẫu không?'
+        );
+        if (!confirmLeave) return;
+      }
+    }
+    setActiveTab(tab);
+  };
+
+  // Tự động phục hồi hoặc vẽ lại preview nếu container bị rỗng khi quay lại tab Soạn thảo
+  useEffect(() => {
+    if (activeTab !== 'draft' || !selectedTemplateId) return;
+
+    const container = draftPreviewContainerRef.current;
+    if (!container) return;
+
+    if (container.children.length === 0 || container.innerHTML.trim() === '') {
+      const template = docTemplates.find((t) => t.id === selectedTemplateId);
+      if (!template) return;
+
+      if (draftPristineHtmlRef.current) {
+        container.innerHTML = draftPristineHtmlRef.current;
+        fixDocxPreviewStyles(container);
+        ensurePreviewVariablesWrapped(container, template.variables);
+        setPreviewRenderVersion((v) => v + 1);
+      } else if (template.fileBase64) {
+        setIsRendering(true);
+        const buf = base64ToArrayBuffer(template.fileBase64);
+        renderAsync(buf, container, undefined, DOCX_PREVIEW_OPTIONS)
+          .then(() => {
+            fixDocxPreviewStyles(container);
+            ensurePreviewVariablesWrapped(container, template.variables);
+            draftPristineHtmlRef.current = container.innerHTML;
+            setPreviewRenderVersion((v) => v + 1);
+          })
+          .catch((err) => console.error('Lỗi phục hồi preview:', err))
+          .finally(() => setIsRendering(false));
+      } else if (template.previewHtml) {
+        container.innerHTML = template.previewHtml;
+        fixDocxPreviewStyles(container);
+        ensurePreviewVariablesWrapped(container, template.variables);
+        draftPristineHtmlRef.current = template.previewHtml;
+        setPreviewRenderVersion((v) => v + 1);
+      }
+    }
+  }, [activeTab, selectedTemplateId, docTemplates]);
 
   useEffect(() => {
     setHeaderTitle('SOẠN THẢO VĂN BẢN THEO BIỂU MẪU');
@@ -506,6 +582,7 @@ export const DraftingView: React.FC = () => {
         const span = document.createElement('span');
         span.setAttribute('data-var-id', activeVarId);
         span.setAttribute('data-var-name', targetName);
+        span.setAttribute('contenteditable', 'false');
         span.className =
           'bg-yellow-200 px-1 py-0.5 rounded text-blue-900 border border-yellow-400 font-semibold cursor-pointer';
         span.title = `{{${targetName}}} - ${varConfig.label || targetName}`;
@@ -557,6 +634,11 @@ export const DraftingView: React.FC = () => {
   const handleStartModalContentEdit = () => {
     const container = previewContainerRef.current;
     if (!container) return;
+
+    // Đảm bảo tất cả thẻ span biến không bị gõ lọt ký tự vào bên trong
+    container
+      .querySelectorAll('span[data-var-name], span[data-var-id], .draft-var-span')
+      .forEach((s) => s.setAttribute('contenteditable', 'false'));
 
     const leafBlocks = getDocParagraphs(container);
     const snapshot: { id: string; originalText: string }[] = [];
@@ -890,6 +972,11 @@ export const DraftingView: React.FC = () => {
       fixDocxPreviewStyles(container);
       ensurePreviewVariablesWrapped(container, template.variables);
     }
+
+    // Đảm bảo tất cả thẻ span biến không bị gõ lọt ký tự vào bên trong
+    container
+      .querySelectorAll('span[data-var-name], span[data-var-id], .draft-var-span')
+      .forEach((s) => s.setAttribute('contenteditable', 'false'));
 
     // 2. Snapshot leaf paragraphs
     const leafBlocks = getDocParagraphs(container);
@@ -1714,7 +1801,7 @@ export const DraftingView: React.FC = () => {
         {/* Tab switcher */}
         <div className="flex gap-1 bg-[#0b1222] p-1 rounded-lg border border-[#232f4e] shrink-0">
           <button
-            onClick={() => setActiveTab('templates')}
+            onClick={() => handleSwitchTab('templates')}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
               activeTab === 'templates'
                 ? 'bg-blue-600 text-white shadow'
@@ -1724,7 +1811,7 @@ export const DraftingView: React.FC = () => {
             ⚙️ Quản lý Mẫu
           </button>
           <button
-            onClick={() => setActiveTab('draft')}
+            onClick={() => handleSwitchTab('draft')}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
               activeTab === 'draft'
                 ? 'bg-blue-600 text-white shadow'
@@ -1737,9 +1824,8 @@ export const DraftingView: React.FC = () => {
       </div>
 
       {/* ==================== TAB: QUẢN LÝ MẪU ==================== */}
-      {activeTab === 'templates' && (
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <div className="flex gap-4 flex-1 min-h-0">
+      <div className={`flex-1 min-h-0 flex flex-col overflow-hidden ${activeTab === 'templates' ? '' : 'hidden'}`}>
+        <div className="flex gap-4 flex-1 min-h-0">
             {/* Sidebar folders */}
             <div className="w-48 shrink-0 overflow-y-auto pr-2 border-r border-[#232f4e]">
               <TemplateFolderSidebar
@@ -1810,7 +1896,6 @@ export const DraftingView: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
 
       {/* ==================== MODAL TẠO / SỬA MẪU VĂN BẢN (CẤP 1) ==================== */}
       <AppModal
@@ -2065,8 +2150,7 @@ export const DraftingView: React.FC = () => {
       </AppModal>
 
       {/* ==================== TAB: SOẠN THẢO ==================== */}
-      {activeTab === 'draft' && (
-        <div className="flex-1 min-h-0 flex gap-3 overflow-hidden h-full">
+      <div className={`flex-1 min-h-0 flex gap-3 overflow-hidden h-full ${activeTab === 'draft' ? '' : 'hidden'}`}>
           {/* Cột trái: Bước 1 (Mẫu văn bản) + Bước 2 (Điền biến) + Xuất file (thu hẹp còn 320px để mở rộng bản xem trước) */}
           <div className="w-72 lg:w-[320px] shrink-0 flex flex-col gap-2.5 overflow-y-auto pr-1 h-full">
             {/* Bước 1: Chọn mẫu văn bản */}
@@ -2314,7 +2398,6 @@ export const DraftingView: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
 
       {/* ==================== MODAL CẤU HÌNH BIẾN (CẤP 2 - 90% CẤP 1) ==================== */}
       <VariableConfigDialog
