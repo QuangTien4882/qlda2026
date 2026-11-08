@@ -16,6 +16,13 @@ import {
   AlertCircle,
   ChevronUp,
   ChevronDown,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  RotateCcw,
+  Printer,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useSettings } from '../../../context/SettingsContext';
 import { useData } from '../../../context/DataContext';
@@ -30,6 +37,7 @@ import { renderAsync } from 'docx-preview';
 import { saveAs } from 'file-saver';
 import { AppModal } from '../../common/AppModal';
 import { AppButton } from '../../common/AppButton';
+import { processDocxExport } from '../../../utils/docxExportEngine';
 
 // Sub-components
 import { TemplateFolderSidebar } from './components/TemplateFolderSidebar';
@@ -419,6 +427,85 @@ export const DraftingView: React.FC = () => {
 
   // Loading states
   const [isRendering, setIsRendering] = useState(false);
+
+  // Zoom states & refs cho bản xem trước
+  const [draftZoom, setDraftZoom] = useState(1.0);
+  const [modalZoom, setModalZoom] = useState(1.0);
+  const previewScrollParentRef = useRef<HTMLDivElement>(null);
+  const modalPreviewScrollParentRef = useRef<HTMLDivElement>(null);
+
+  // Tiến trình xuất file Word qua Web Worker
+  const [exportProgress, setExportProgress] = useState<{
+    isExporting: boolean;
+    progress: number;
+    message: string;
+  } | null>(null);
+
+  // Tự động căn chỉnh vừa khung (Fit Width)
+  const handleFitDraftWidth = () => {
+    if (!previewScrollParentRef.current || !draftPreviewContainerRef.current) return;
+    const parentWidth = previewScrollParentRef.current.clientWidth - 48;
+    const section = draftPreviewContainerRef.current.querySelector('section.docx') as HTMLElement;
+    const docWidth = section?.offsetWidth || 800;
+    if (docWidth > 0 && parentWidth > 0) {
+      const scale = Number((parentWidth / docWidth).toFixed(2));
+      setDraftZoom(Math.max(0.5, Math.min(2.0, scale)));
+    }
+  };
+
+  const handleFitModalWidth = () => {
+    if (!modalPreviewScrollParentRef.current || !previewContainerRef.current) return;
+    const parentWidth = modalPreviewScrollParentRef.current.clientWidth - 48;
+    const section = previewContainerRef.current.querySelector('section.docx') as HTMLElement;
+    const docWidth = section?.offsetWidth || 800;
+    if (docWidth > 0 && parentWidth > 0) {
+      const scale = Number((parentWidth / docWidth).toFixed(2));
+      setModalZoom(Math.max(0.5, Math.min(2.0, scale)));
+    }
+  };
+
+  // Điều hướng nhanh giữa các biến (Next / Prev)
+  const activeVarIndex = draftVariables.findIndex((v) => v.name === activeVarName);
+
+  const handleNavigateVar = (direction: 'next' | 'prev') => {
+    if (draftVariables.length === 0) return;
+    let targetIndex = 0;
+    if (activeVarIndex === -1) {
+      targetIndex = direction === 'next' ? 0 : draftVariables.length - 1;
+    } else {
+      if (direction === 'next') {
+        targetIndex = (activeVarIndex + 1) % draftVariables.length;
+      } else {
+        targetIndex = (activeVarIndex - 1 + draftVariables.length) % draftVariables.length;
+      }
+    }
+    const targetVar = draftVariables[targetIndex];
+    if (targetVar) {
+      setActiveVarName(targetVar.name);
+    }
+  };
+
+  // Phím tắt điều hướng nhanh giữa các biến: F2 (tiếp), Shift+F2 (trước), Alt+Down (tiếp), Alt+Up (trước)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (activeTab !== 'draft' || !selectedTemplateId) return;
+      if (e.key === 'F2' && !e.shiftKey) {
+        e.preventDefault();
+        handleNavigateVar('next');
+      } else if (e.key === 'F2' && e.shiftKey) {
+        e.preventDefault();
+        handleNavigateVar('prev');
+      } else if (e.altKey && e.key === 'ArrowDown') {
+        e.preventDefault();
+        handleNavigateVar('next');
+      } else if (e.altKey && e.key === 'ArrowUp') {
+        e.preventDefault();
+        handleNavigateVar('prev');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, selectedTemplateId, draftVariables, activeVarIndex]);
 
   // Xác định người dùng có đang có dữ liệu soạn thảo chưa lưu / xuất file không
   const hasActiveDraftData =
@@ -1714,7 +1801,30 @@ export const DraftingView: React.FC = () => {
     }
   }, [draftVariables, selectedTemplateId, jvMembers, activeVarName, previewRenderVersion, isEditingTemplateContent]);
 
-  // ==================== EXPORT WORD ====================
+  // ==================== EXPORT WORD & PDF ====================
+  const fallbackExportMainThread = async (fileBase64: string, exportFileName: string) => {
+    try {
+      const blob = await processDocxExport({
+        fileBase64,
+        draftVariables,
+        jvMembers,
+        onProgress: (progress, message) => {
+          setExportProgress({ isExporting: true, progress, message });
+        },
+      });
+      saveAs(blob, exportFileName);
+      setExportProgress({
+        isExporting: true,
+        progress: 100,
+        message: 'Xuất file Word thành công!',
+      });
+      setTimeout(() => setExportProgress(null), 800);
+    } catch (err: unknown) {
+      setExportProgress(null);
+      alert(`Lỗi xuất file: ${err instanceof Error ? err.message : 'Không xác định'}`);
+    }
+  };
+
   const handleExport = async () => {
     const template = docTemplates.find((t) => t.id === selectedTemplateId);
     if (!template?.fileBase64) {
@@ -1722,91 +1832,204 @@ export const DraftingView: React.FC = () => {
       return;
     }
 
+    const projectName = projects.find((p) => p.id === selectedProjectId)?.code || 'Export';
+    const exportFileName = `${template.name}_${projectName}.docx`;
+
+    setExportProgress({
+      isExporting: true,
+      progress: 10,
+      message: 'Đang khởi chạy tiến trình xử lý ngầm (Web Worker)...',
+    });
+
+    // 1. Thử xuất ngầm bằng Web Worker để main thread luôn mượt mà 60fps
     try {
-      const content = base64ToArrayBuffer(template.fileBase64);
-      const zip = new PizZip(content);
-
-      let xmlContent = zip.file('word/document.xml')?.asText() || '';
-
-      const sortedVars = [...draftVariables].sort(
-        (a, b) => (b.originalText || '').length - (a.originalText || '').length
-      );
-
-      // Thay thế tất cả các biến vào Word XML
-      sortedVars.forEach((v) => {
-        if (v.type === 'joint_venture' || v.type === 'table') return;
-
-        let displayValueRaw = v.value || '';
-        if (v.type === 'number') displayValueRaw = formatVnNumber(v.value || '');
-        else if (v.type === 'date') displayValueRaw = formatVNDateString(v.value || '');
-
-        // Tập hợp tất cả các chuỗi text gốc cần thay thế cho biến này (gồm originalText, [name], {{name}} và các vị trí đã gán thêm)
-        const textsToReplace = Array.from(
-          new Set([
-            `[${v.name}]`,
-            `{{${v.name}}}`,
-            v.originalText,
-            ...(v.originalTexts || []),
-          ].filter(Boolean))
+      if (typeof window !== 'undefined' && window.Worker) {
+        const worker = new Worker(
+          new URL('../../../workers/docxExportWorker.ts', import.meta.url),
+          { type: 'module' }
         );
 
-        textsToReplace.forEach((origText) => {
-          xmlContent = replaceAllInXml(
-            xmlContent,
-            origText,
-            displayValueRaw,
-            v.type === 'long_text' || v.type === 'legal_doc',
-            v.paragraphIndent
-          );
-        });
-      });
+        const workerJobId = generateId('job');
 
-      // JV block cloning
-      if (jvMembers.length > 0) {
-        xmlContent = cloneJvBlockInXml(xmlContent, jvMembers, draftVariables);
-      }
+        worker.onmessage = (e: MessageEvent) => {
+          const { id, type, progress, message, blob, error } = e.data;
+          if (id !== workerJobId) return;
 
-      zip.file('word/document.xml', xmlContent);
-
-      // Handle table variables with Docxtemplater
-      const docData: Record<string, unknown[]> = {};
-      let hasTables = false;
-      draftVariables.forEach((v) => {
-        if (v.type === 'table') {
-          hasTables = true;
-          try {
-            const match = v.originalText.match(/#([a-zA-Z0-9_]+)/);
-            const key = match ? match[1] : v.name;
-            const rows = v.value ? JSON.parse(v.value) : [];
-            docData[key] = rows;
-          } catch {
-            docData[v.name] = [];
+          if (type === 'progress') {
+            setExportProgress({
+              isExporting: true,
+              progress,
+              message,
+            });
+          } else if (type === 'success') {
+            saveAs(blob, exportFileName);
+            setExportProgress({
+              isExporting: true,
+              progress: 100,
+              message: 'Xuất file Word thành công!',
+            });
+            setTimeout(() => {
+              setExportProgress(null);
+              worker.terminate();
+            }, 800);
+          } else if (type === 'error') {
+            worker.terminate();
+            console.warn('Worker error, switching to fallback:', error);
+            fallbackExportMainThread(template.fileBase64!, exportFileName);
           }
-        }
-      });
+        };
 
-      let finalZip = zip;
-      if (hasTables) {
-        try {
-          const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-          doc.render(docData);
-          finalZip = doc.getZip() as unknown as PizZip;
-        } catch (e) {
-          console.error('Docxtemplater error:', e);
-        }
+        worker.onerror = (err) => {
+          console.warn('Web Worker error, switching to fallback:', err);
+          worker.terminate();
+          fallbackExportMainThread(template.fileBase64!, exportFileName);
+        };
+
+        worker.postMessage({
+          id: workerJobId,
+          type: 'export',
+          options: {
+            fileBase64: template.fileBase64,
+            draftVariables,
+            jvMembers,
+          },
+        });
+        return;
       }
-
-      const blob = finalZip.generate({
-        type: 'blob',
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      });
-
-      const projectName = projects.find((p) => p.id === selectedProjectId)?.code || 'Export';
-      saveAs(blob, `${template.name}_${projectName}.docx`);
-    } catch (error: unknown) {
-      console.error('Export Error:', error);
-      alert(`Lỗi xuất file: ${error instanceof Error ? error.message : 'Không xác định'}`);
+    } catch (workerErr) {
+      console.warn('Worker initialization failed:', workerErr);
     }
+
+    // 2. Fallback Main Thread
+    await fallbackExportMainThread(template.fileBase64, exportFileName);
+  };
+
+  // ==================== IN / XUẤT TRỰC TIẾP PDF ====================
+  const handleExportPdf = () => {
+    const container = draftPreviewContainerRef.current;
+    if (!container || !selectedTemplateId) {
+      alert('Vui lòng chọn mẫu văn bản trước khi in / xuất PDF!');
+      return;
+    }
+
+    // 1. Tạo bản sao DOM container
+    const clone = container.cloneNode(true) as HTMLElement;
+
+    // 2. Tẩy sạch các class highlight màu sắc của biến để văn bản in ra chuẩn 100% như tài liệu hành chính
+    clone.querySelectorAll('.draft-var-span, [data-var-id], [data-var-name]').forEach((el) => {
+      const htmlEl = el as HTMLElement;
+      htmlEl.style.backgroundColor = 'transparent';
+      htmlEl.style.border = 'none';
+      htmlEl.style.boxShadow = 'none';
+      htmlEl.style.padding = '0';
+      htmlEl.style.borderRadius = '0';
+      htmlEl.classList.remove(
+        'bg-yellow-200/90',
+        'bg-emerald-100',
+        'bg-emerald-100/80',
+        'bg-amber-200/90',
+        'bg-amber-300',
+        'border',
+        'border-yellow-400',
+        'border-emerald-300',
+        'border-amber-500',
+        'ring-2',
+        'ring-blue-500',
+        'shadow-sm',
+        'shadow-lg'
+      );
+    });
+
+    // 3. Tạo một iframe ẩn để in tài liệu cách ly hoàn toàn với giao diện app
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      alert('Không thể khởi tạo môi trường in PDF.');
+      return;
+    }
+
+    // Lấy tất cả các thẻ style của docx-preview
+    let styleHtml = '';
+    document.querySelectorAll('style').forEach((s) => {
+      if (
+        s.textContent &&
+        (s.textContent.includes('docx') ||
+          s.textContent.includes('Times New Roman') ||
+          s.textContent.includes('.docx-preview'))
+      ) {
+        styleHtml += s.outerHTML;
+      }
+    });
+
+    const title = `${currentTemplateName || 'Van_Ban'}_${currentProjectName || 'Du_An'}`;
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${title}</title>
+          ${styleHtml}
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 15mm 15mm 15mm 20mm;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              background: #fff !important;
+              color: #000 !important;
+              font-family: "Times New Roman", Times, serif !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .docx-wrapper {
+              background: transparent !important;
+              padding: 0 !important;
+            }
+            section.docx {
+              margin: 0 auto !important;
+              box-shadow: none !important;
+              padding: 0 !important;
+              background: #fff !important;
+              page-break-after: always;
+            }
+            section.docx:last-child {
+              page-break-after: avoid;
+            }
+            .draft-var-span {
+              background: transparent !important;
+              border: none !important;
+              box-shadow: none !important;
+              padding: 0 !important;
+            }
+          </style>
+        </head>
+        <body>
+          ${clone.outerHTML}
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 2000);
+    }, 500);
   };
 
   // ==================== HELPERS ====================
@@ -2149,6 +2372,46 @@ export const DraftingView: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {/* Zoom controls cho Modal */}
+                <div className="flex items-center gap-1 bg-[#131c33] border border-[#232f4e] px-1.5 py-0.5 rounded-lg text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setModalZoom((z) => Math.max(0.5, Number((z - 0.1).toFixed(2))))}
+                    disabled={modalZoom <= 0.5}
+                    className="p-1 text-slate-300 hover:text-white disabled:opacity-30 rounded transition-colors"
+                    title="Thu nhỏ bản xem trước"
+                  >
+                    <ZoomOut size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalZoom(1.0)}
+                    className="px-1.5 py-0.5 text-[11px] font-mono font-semibold text-blue-300 hover:text-white rounded hover:bg-blue-600/20 transition-colors"
+                    title="Nhấp để đặt lại 100%"
+                  >
+                    {Math.round(modalZoom * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalZoom((z) => Math.min(2.0, Number((z + 0.1).toFixed(2))))}
+                    disabled={modalZoom >= 2.0}
+                    className="p-1 text-slate-300 hover:text-white disabled:opacity-30 rounded transition-colors"
+                    title="Phóng to bản xem trước"
+                  >
+                    <ZoomIn size={13} />
+                  </button>
+                  <div className="w-[1px] h-3.5 bg-slate-700 mx-0.5" />
+                  <button
+                    type="button"
+                    onClick={handleFitModalWidth}
+                    className="p-1 text-slate-300 hover:text-white rounded hover:bg-slate-700/60 transition-colors flex items-center gap-1 text-[11px]"
+                    title="Vừa chiều ngang màn hình (Fit Width)"
+                  >
+                    <Maximize2 size={12} />
+                    <span className="hidden xl:inline text-[10px]">Vừa khung</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -2180,7 +2443,10 @@ export const DraftingView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-[#8c92a4] flex justify-center py-6 px-4 relative">
+            <div
+              ref={modalPreviewScrollParentRef}
+              className="flex-1 overflow-y-auto bg-[#8c92a4] flex justify-center py-6 px-4 relative"
+            >
               {isRendering && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 backdrop-blur-xs">
                   <div className="flex items-center gap-2 bg-[#0c1424] px-4 py-2 rounded-lg border border-[#232f4e] text-slate-200 text-sm">
@@ -2190,16 +2456,26 @@ export const DraftingView: React.FC = () => {
                 </div>
               )}
               <div
-                ref={previewContainerRef}
-                contentEditable={isEditingTemplateInModal}
-                suppressContentEditableWarning={true}
-                onMouseUp={isEditingTemplateInModal ? undefined : handleMouseUpOnPreview}
-                className={`w-full max-w-4xl mx-auto docx-preview-container select-text ${
-                  isEditingTemplateInModal
-                    ? 'ring-2 ring-amber-500/80 rounded cursor-text'
-                    : ''
-                }`}
-              />
+                style={{
+                  transform: `scale(${modalZoom})`,
+                  transformOrigin: 'top center',
+                  transition: 'transform 0.15s ease-out',
+                  width: modalZoom > 1 ? `${modalZoom * 100}%` : '100%',
+                }}
+                className="flex justify-center"
+              >
+                <div
+                  ref={previewContainerRef}
+                  contentEditable={isEditingTemplateInModal}
+                  suppressContentEditableWarning={true}
+                  onMouseUp={isEditingTemplateInModal ? undefined : handleMouseUpOnPreview}
+                  className={`w-full max-w-4xl mx-auto docx-preview-container select-text ${
+                    isEditingTemplateInModal
+                      ? 'ring-2 ring-amber-500/80 rounded cursor-text'
+                      : ''
+                  }`}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -2315,9 +2591,17 @@ export const DraftingView: React.FC = () => {
                 <div className="flex gap-2 pt-2 border-t border-[#232f4e]">
                   <button
                     onClick={handleExport}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors shadow-lg shadow-blue-600/20"
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors shadow-lg shadow-blue-600/20"
+                    title="Xuất văn bản hoàn chỉnh dạng Word (.docx)"
                   >
-                    <Download size={14} /> Xuất File Word (.docx)
+                    <Download size={14} /> Xuất Word (.docx)
+                  </button>
+                  <button
+                    onClick={handleExportPdf}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-colors shadow-lg shadow-emerald-600/20"
+                    title="In trực tiếp hoặc Lưu file PDF sạch đẹp chuẩn văn bản nhà nước"
+                  >
+                    <Printer size={14} /> In / Xuất PDF
                   </button>
                 </div>
               </div>
@@ -2363,8 +2647,76 @@ export const DraftingView: React.FC = () => {
                   </span>
                 </div>
 
-                {selectedTemplateId && (
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Variable navigation controls */}
+                  {selectedTemplateId && draftVariables.length > 0 && (
+                    <div className="flex items-center gap-1 bg-[#131c33] border border-[#232f4e] px-2 py-0.5 rounded-lg text-xs">
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateVar('prev')}
+                        className="p-1 text-slate-300 hover:text-white hover:bg-slate-700/60 rounded transition-colors"
+                        title="Biến trước đó (Shift+F2 hoặc Alt+Up)"
+                      >
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="text-[11px] font-mono text-slate-300 px-1 truncate max-w-[120px]">
+                        {activeVarIndex >= 0 ? `${activeVarIndex + 1}/${draftVariables.length}` : `${draftVariables.length} biến`}
+                        {activeVarName ? ` · {{${activeVarName}}}` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateVar('next')}
+                        className="p-1 text-slate-300 hover:text-white hover:bg-slate-700/60 rounded transition-colors"
+                        title="Biến tiếp theo (F2 hoặc Alt+Down)"
+                      >
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Zoom controls for Drafting preview */}
+                  {selectedTemplateId && (
+                    <div className="flex items-center gap-1 bg-[#131c33] border border-[#232f4e] px-1.5 py-0.5 rounded-lg text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setDraftZoom((z) => Math.max(0.5, Number((z - 0.1).toFixed(2))))}
+                        disabled={draftZoom <= 0.5}
+                        className="p-1 text-slate-300 hover:text-white disabled:opacity-30 rounded transition-colors"
+                        title="Thu nhỏ bản xem trước"
+                      >
+                        <ZoomOut size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDraftZoom(1.0)}
+                        className="px-1.5 py-0.5 text-[11px] font-mono font-semibold text-blue-300 hover:text-white rounded hover:bg-blue-600/20 transition-colors"
+                        title="Nhấp để đặt lại 100%"
+                      >
+                        {Math.round(draftZoom * 100)}%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDraftZoom((z) => Math.min(2.0, Number((z + 0.1).toFixed(2))))}
+                        disabled={draftZoom >= 2.0}
+                        className="p-1 text-slate-300 hover:text-white disabled:opacity-30 rounded transition-colors"
+                        title="Phóng to bản xem trước"
+                      >
+                        <ZoomIn size={13} />
+                      </button>
+                      <div className="w-[1px] h-3.5 bg-slate-700 mx-0.5" />
+                      <button
+                        type="button"
+                        onClick={handleFitDraftWidth}
+                        className="p-1 text-slate-300 hover:text-white rounded hover:bg-slate-700/60 transition-colors flex items-center gap-1 text-[11px]"
+                        title="Vừa chiều ngang màn hình (Fit Width)"
+                      >
+                        <Maximize2 size={12} />
+                        <span className="hidden xl:inline text-[10px]">Vừa khung</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedTemplateId && (
                     <button
                       type="button"
                       onClick={handleStartEditTemplateContent}
@@ -2374,8 +2726,8 @@ export const DraftingView: React.FC = () => {
                       <Edit3 size={13} className="text-amber-400" />
                       <span>Chỉnh sửa nội dung biểu mẫu</span>
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ) : (
               <div className="bg-amber-950/70 px-4 py-2 border-b border-amber-500/40 shrink-0 flex items-center justify-between gap-2 flex-wrap animate-fadeIn">
@@ -2424,7 +2776,10 @@ export const DraftingView: React.FC = () => {
               </div>
             )}
 
-            <div className="flex-1 min-h-0 overflow-y-auto bg-[#7c8394] flex justify-center py-4 px-2 md:px-4 relative">
+            <div
+              ref={previewScrollParentRef}
+              className="flex-1 min-h-0 overflow-y-auto bg-[#7c8394] flex justify-center py-4 px-2 md:px-4 relative"
+            >
               {!selectedTemplateId && (
                 <div className="flex flex-col items-center justify-center h-full text-slate-300 text-sm font-medium py-12">
                   <FileText size={36} className="text-slate-400/60 mb-2" />
@@ -2440,17 +2795,25 @@ export const DraftingView: React.FC = () => {
                 </div>
               )}
               <div
-                ref={draftPreviewContainerRef}
-                contentEditable={isEditingTemplateContent}
-                suppressContentEditableWarning={true}
-                className={`w-full max-w-4xl mx-auto docx-preview-container select-text relative shadow-2xl transition-all ${
-                  !selectedTemplateId ? 'hidden' : ''
-                } ${
-                  isEditingTemplateContent
-                    ? 'ring-2 ring-amber-500/80 rounded-md cursor-text shadow-amber-500/10'
-                    : ''
-                }`}
-              />
+                style={{
+                  transform: `scale(${draftZoom})`,
+                  transformOrigin: 'top center',
+                  transition: 'transform 0.15s ease-out',
+                  width: draftZoom > 1 ? `${draftZoom * 100}%` : '100%',
+                }}
+                className={`flex justify-center ${!selectedTemplateId ? 'hidden' : ''}`}
+              >
+                <div
+                  ref={draftPreviewContainerRef}
+                  contentEditable={isEditingTemplateContent}
+                  suppressContentEditableWarning={true}
+                  className={`w-full max-w-4xl mx-auto docx-preview-container select-text relative shadow-2xl transition-all ${
+                    isEditingTemplateContent
+                      ? 'ring-2 ring-amber-500/80 rounded-md cursor-text shadow-amber-500/10'
+                      : ''
+                  }`}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -2537,6 +2900,32 @@ export const DraftingView: React.FC = () => {
           </div>
         </div>
       </AppModal>
+
+      {/* ==================== MODAL TIẾN TRÌNH XUẤT FILE WORD (WEB WORKER) ==================== */}
+      {exportProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-[#0c1424] border border-[#232f4e] rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4 flex flex-col items-center text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+            <div className="space-y-1 w-full">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">
+                Đang xuất văn bản Word
+              </h4>
+              <p className="text-xs text-slate-400 truncate">{exportProgress.message}</p>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
+              <div
+                className="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${exportProgress.progress}%` }}
+              />
+            </div>
+            <span className="text-xs font-mono font-bold text-blue-400">
+              {exportProgress.progress}%
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

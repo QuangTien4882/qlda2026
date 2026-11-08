@@ -7,7 +7,7 @@ import {
   JVMember,
   DraftingDatabase,
 } from '../types/drafting';
-import { saveDraftingToIdb, loadDraftingFromIdb } from '../services/storage/idbService';
+import { saveDraftingToIdb, loadDraftingFromIdb, deleteTemplateBinaryFromIdb } from '../services/storage/idbService';
 import { generateId } from '../utils/docxUtils';
 
 interface DraftingContextType {
@@ -117,6 +117,8 @@ export const DraftingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setDocTemplates(prev => prev.filter(t => t.id !== id));
     // Xóa luôn bản thảo liên quan
     setDraftDocuments(prev => prev.filter(d => d.templateId !== id));
+    // Dọn dẹp file nhị phân khỏi STORE_FILES
+    deleteTemplateBinaryFromIdb(id);
   };
 
   // ==================== THAO TÁC BẢN THẢO ====================

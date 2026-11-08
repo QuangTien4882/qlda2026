@@ -239,12 +239,14 @@ export const ContractAppendixModal: React.FC<ContractAppendixModalProps> = ({
         ],
         { type: 'text/plain;charset=utf-8' }
       );
-      a.href = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
+      a.href = url;
       a.download = `PLHD_${item.appendixNumber.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
   };
 
   return (

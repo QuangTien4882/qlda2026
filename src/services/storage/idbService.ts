@@ -289,16 +289,95 @@ const DEFAULT_DRAFTING_DB: DraftingDatabase = {
   draftDocuments: [],
 };
 
+const TPL_FILE_PREFIX = 'tpl_file_';
+
+/**
+ * Lưu file nhị phân .docx của biểu mẫu vào STORE_FILES (tách rời khỏi DraftingDatabase)
+ */
+export async function saveTemplateBinaryToIdb(
+  templateId: string,
+  fileName: string,
+  fileBase64: string
+): Promise<boolean> {
+  if (!fileBase64) return false;
+  return saveFileBlobToIdb({
+    fileId: `${TPL_FILE_PREFIX}${templateId}`,
+    fileName: fileName || `template_${templateId}.docx`,
+    fileType: 'docx',
+    dataUrl: fileBase64,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Đọc file nhị phân .docx của biểu mẫu từ STORE_FILES
+ */
+export async function getTemplateBinaryFromIdb(templateId: string): Promise<string | null> {
+  try {
+    const record = await loadFileBlobFromIdb(`${TPL_FILE_PREFIX}${templateId}`);
+    return record?.dataUrl || null;
+  } catch (err) {
+    console.error('Lỗi khi tải file biểu mẫu từ STORE_FILES:', err);
+    return null;
+  }
+}
+
+/**
+ * Xóa file nhị phân của biểu mẫu khi biểu mẫu bị xóa
+ */
+export async function deleteTemplateBinaryFromIdb(templateId: string): Promise<boolean> {
+  try {
+    const db = await openIndexedDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_FILES, 'readwrite');
+      const store = tx.objectStore(STORE_FILES);
+      const req = store.delete(`${TPL_FILE_PREFIX}${templateId}`);
+      req.onsuccess = () => { db.close(); resolve(true); };
+      req.onerror = () => { db.close(); resolve(false); };
+    });
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Lưu toàn bộ dữ liệu module soạn thảo văn bản vào IndexedDB
+ * Áp dụng kỹ thuật Tách rời lưu trữ (Decoupled Template Storage):
+ * - File nhị phân .docx lớn được lưu độc lập vào STORE_FILES
+ * - STORE_DRAFTING chỉ lưu metadata nhẹ (<10KB), giúp lưu/đọc tức thì không bị chậm
  */
 export async function saveDraftingToIdb(data: DraftingDatabase): Promise<boolean> {
   try {
+    // 1. Lưu các file nhị phân vào STORE_FILES nếu có
+    const saveBinaryPromises = (data.docTemplates || []).map(async (tpl) => {
+      if (tpl.fileBase64) {
+        await saveTemplateBinaryToIdb(tpl.id, tpl.fileName || `${tpl.name}.docx`, tpl.fileBase64);
+      }
+    });
+    await Promise.allSettled(saveBinaryPromises);
+
+    // 2. Tạo bản sao lean metadata để ghi vào STORE_DRAFTING
+    const leanTemplates = (data.docTemplates || []).map((tpl) => {
+      // Loại bỏ previewHtml và fileBase64 khỏi STORE_DRAFTING để giữ kích thước siêu gọn
+      const { previewHtml, ...rest } = tpl;
+      return {
+        ...rest,
+        // Giữ lại cờ đánh dấu file có tồn tại
+        hasFile: !!(tpl.fileBase64 || tpl.fileName),
+      };
+    });
+
+    const leanData: DraftingDatabase = {
+      templateFolders: data.templateFolders || [],
+      docTemplates: leanTemplates as any,
+      draftDocuments: data.draftDocuments || [],
+    };
+
     const db = await openIndexedDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_DRAFTING, 'readwrite');
       const store = tx.objectStore(STORE_DRAFTING);
-      const req = store.put(data, 'current');
+      const req = store.put(leanData, 'current');
 
       req.onsuccess = () => { db.close(); resolve(true); };
       req.onerror = () => { db.close(); reject(req.error); };
@@ -311,11 +390,12 @@ export async function saveDraftingToIdb(data: DraftingDatabase): Promise<boolean
 
 /**
  * Tải toàn bộ dữ liệu module soạn thảo từ IndexedDB
+ * Tự động nạp kèm fileBase64 từ STORE_FILES để đảm bảo đầy đủ dữ liệu
  */
 export async function loadDraftingFromIdb(): Promise<DraftingDatabase> {
   try {
     const db = await openIndexedDB();
-    return new Promise((resolve, reject) => {
+    const rawData = await new Promise<DraftingDatabase>((resolve, reject) => {
       const tx = db.transaction(STORE_DRAFTING, 'readonly');
       const store = tx.objectStore(STORE_DRAFTING);
       const req = store.get('current');
@@ -326,6 +406,26 @@ export async function loadDraftingFromIdb(): Promise<DraftingDatabase> {
       };
       req.onerror = () => { db.close(); reject(req.error); };
     });
+
+    const docTemplates = rawData.docTemplates || [];
+
+    // Nạp lại fileBase64 từ STORE_FILES cho từng mẫu nếu chưa có sẵn
+    const hydratedTemplates = await Promise.all(
+      docTemplates.map(async (tpl) => {
+        if (tpl.fileBase64) return tpl;
+        const binary = await getTemplateBinaryFromIdb(tpl.id);
+        return {
+          ...tpl,
+          fileBase64: binary || undefined,
+        };
+      })
+    );
+
+    return {
+      templateFolders: rawData.templateFolders || [],
+      docTemplates: hydratedTemplates,
+      draftDocuments: rawData.draftDocuments || [],
+    };
   } catch (error) {
     console.error('Lỗi khi tải dữ liệu soạn thảo từ IndexedDB:', error);
     return { ...DEFAULT_DRAFTING_DB };
