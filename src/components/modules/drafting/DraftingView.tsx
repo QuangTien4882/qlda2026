@@ -20,7 +20,6 @@ import {
   ZoomOut,
   Maximize2,
   RotateCcw,
-  Printer,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -1904,134 +1903,6 @@ export const DraftingView: React.FC = () => {
     await fallbackExportMainThread(template.fileBase64, exportFileName);
   };
 
-  // ==================== IN / XUẤT TRỰC TIẾP PDF ====================
-  const handleExportPdf = () => {
-    const container = draftPreviewContainerRef.current;
-    if (!container || !selectedTemplateId) {
-      alert('Vui lòng chọn mẫu văn bản trước khi in / xuất PDF!');
-      return;
-    }
-
-    // 1. Tạo bản sao DOM container
-    const clone = container.cloneNode(true) as HTMLElement;
-
-    // 2. Tẩy sạch các class highlight màu sắc của biến để văn bản in ra chuẩn 100% như tài liệu hành chính
-    clone.querySelectorAll('.draft-var-span, [data-var-id], [data-var-name]').forEach((el) => {
-      const htmlEl = el as HTMLElement;
-      htmlEl.style.backgroundColor = 'transparent';
-      htmlEl.style.border = 'none';
-      htmlEl.style.boxShadow = 'none';
-      htmlEl.style.padding = '0';
-      htmlEl.style.borderRadius = '0';
-      htmlEl.classList.remove(
-        'bg-yellow-200/90',
-        'bg-emerald-100',
-        'bg-emerald-100/80',
-        'bg-amber-200/90',
-        'bg-amber-300',
-        'border',
-        'border-yellow-400',
-        'border-emerald-300',
-        'border-amber-500',
-        'ring-2',
-        'ring-blue-500',
-        'shadow-sm',
-        'shadow-lg'
-      );
-    });
-
-    // 3. Tạo một iframe ẩn để in tài liệu cách ly hoàn toàn với giao diện app
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.top = '-9999px';
-    iframe.style.left = '-9999px';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) {
-      document.body.removeChild(iframe);
-      alert('Không thể khởi tạo môi trường in PDF.');
-      return;
-    }
-
-    // Lấy tất cả các thẻ style của docx-preview
-    let styleHtml = '';
-    document.querySelectorAll('style').forEach((s) => {
-      if (
-        s.textContent &&
-        (s.textContent.includes('docx') ||
-          s.textContent.includes('Times New Roman') ||
-          s.textContent.includes('.docx-preview'))
-      ) {
-        styleHtml += s.outerHTML;
-      }
-    });
-
-    const title = `${currentTemplateName || 'Van_Ban'}_${currentProjectName || 'Du_An'}`;
-
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>${title}</title>
-          ${styleHtml}
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 15mm 15mm 15mm 20mm;
-            }
-            body {
-              margin: 0;
-              padding: 0;
-              background: #fff !important;
-              color: #000 !important;
-              font-family: "Times New Roman", Times, serif !important;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            .docx-wrapper {
-              background: transparent !important;
-              padding: 0 !important;
-            }
-            section.docx {
-              margin: 0 auto !important;
-              box-shadow: none !important;
-              padding: 0 !important;
-              background: #fff !important;
-              page-break-after: always;
-            }
-            section.docx:last-child {
-              page-break-after: avoid;
-            }
-            .draft-var-span {
-              background: transparent !important;
-              border: none !important;
-              box-shadow: none !important;
-              padding: 0 !important;
-            }
-          </style>
-        </head>
-        <body>
-          ${clone.outerHTML}
-        </body>
-      </html>
-    `);
-    doc.close();
-
-    setTimeout(() => {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 2000);
-    }, 500);
-  };
-
   // ==================== HELPERS ====================
   const handleAddFolder = () => {
     const name = prompt('Nhập tên thư mục mới:');
@@ -2591,17 +2462,10 @@ export const DraftingView: React.FC = () => {
                 <div className="flex gap-2 pt-2 border-t border-[#232f4e]">
                   <button
                     onClick={handleExport}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors shadow-lg shadow-blue-600/20"
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors shadow-lg shadow-blue-600/20"
                     title="Xuất văn bản hoàn chỉnh dạng Word (.docx)"
                   >
-                    <Download size={14} /> Xuất Word (.docx)
-                  </button>
-                  <button
-                    onClick={handleExportPdf}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-colors shadow-lg shadow-emerald-600/20"
-                    title="In trực tiếp hoặc Lưu file PDF sạch đẹp chuẩn văn bản nhà nước"
-                  >
-                    <Printer size={14} /> In / Xuất PDF
+                    <Download size={14} /> Xuất File Word (.docx)
                   </button>
                 </div>
               </div>
