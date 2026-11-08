@@ -431,3 +431,126 @@ export async function loadDraftingFromIdb(): Promise<DraftingDatabase> {
     return { ...DEFAULT_DRAFTING_DB };
   }
 }
+
+// ==================== TỆP ĐÍNH KÈM TOÀN DIỆN (FULL ATTACHMENTS FOR .PROJECTM BACKUP) ====================
+
+/**
+ * Đọc tất cả các tệp đính kèm nhị phân đã lưu trong STORE_FILES
+ * (bao gồm các file pháp lý, nghiệm thu, hợp đồng và file .docx của biểu mẫu)
+ */
+export async function getAllFileBlobsFromIdb(): Promise<FileBlobRecord[]> {
+  try {
+    const db = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_FILES, 'readonly');
+      const store = tx.objectStore(STORE_FILES);
+      const req = store.getAll();
+
+      req.onsuccess = () => {
+        db.close();
+        resolve((req.result as FileBlobRecord[]) || []);
+      };
+      req.onerror = () => {
+        db.close();
+        reject(req.error);
+      };
+    });
+  } catch (error) {
+    console.error('Lỗi khi đọc toàn bộ tệp đính kèm từ IndexedDB:', error);
+    return [];
+  }
+}
+
+/**
+ * Phục hồi danh sách các tệp đính kèm vào STORE_FILES khi nạp bản sao lưu .projectm
+ */
+export async function restoreFileBlobsToIdb(records: FileBlobRecord[]): Promise<boolean> {
+  if (!records || !Array.isArray(records) || records.length === 0) return true;
+  try {
+    const db = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_FILES, 'readwrite');
+      const store = tx.objectStore(STORE_FILES);
+
+      for (const rec of records) {
+        if (rec && rec.fileId) {
+          store.put(rec);
+        }
+      }
+
+      tx.oncomplete = () => {
+        db.close();
+        resolve(true);
+      };
+      tx.onerror = () => {
+        db.close();
+        reject(tx.error);
+      };
+    });
+  } catch (error) {
+    console.error('Lỗi khi khôi phục danh sách tệp đính kèm vào IndexedDB:', error);
+    return false;
+  }
+}
+
+// ==================== QUẢN LÝ DIRECTORY HANDLE (FILE SYSTEM ACCESS API AUTO-SYNC) ====================
+
+const DIR_HANDLE_KEY = 'local_sync_directory_handle';
+
+/**
+ * Lưu FileSystemDirectoryHandle vào IndexedDB để duy trì liên kết thư mục máy tính
+ */
+export async function saveSyncDirectoryHandle(handle: unknown): Promise<boolean> {
+  try {
+    const db = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MAIN, 'readwrite');
+      const store = tx.objectStore(STORE_MAIN);
+      const req = store.put(handle, DIR_HANDLE_KEY);
+      req.onsuccess = () => { db.close(); resolve(true); };
+      req.onerror = () => { db.close(); reject(req.error); };
+    });
+  } catch (err) {
+    console.warn('Không thể lưu DirectoryHandle vào IndexedDB:', err);
+    return false;
+  }
+}
+
+/**
+ * Lấy FileSystemDirectoryHandle đã lưu từ IndexedDB
+ */
+export async function getSyncDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const db = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MAIN, 'readonly');
+      const store = tx.objectStore(STORE_MAIN);
+      const req = store.get(DIR_HANDLE_KEY);
+      req.onsuccess = () => {
+        db.close();
+        resolve((req.result as FileSystemDirectoryHandle) || null);
+      };
+      req.onerror = () => { db.close(); reject(req.error); };
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Xóa FileSystemDirectoryHandle khỏi IndexedDB (ngắt kết nối thư mục)
+ */
+export async function removeSyncDirectoryHandle(): Promise<boolean> {
+  try {
+    const db = await openIndexedDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_MAIN, 'readwrite');
+      const store = tx.objectStore(STORE_MAIN);
+      const req = store.delete(DIR_HANDLE_KEY);
+      req.onsuccess = () => { db.close(); resolve(true); };
+      req.onerror = () => { db.close(); reject(req.error); };
+    });
+  } catch {
+    return false;
+  }
+}

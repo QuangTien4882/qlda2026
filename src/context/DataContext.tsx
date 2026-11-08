@@ -31,6 +31,22 @@ import {
   checkFileOnDiskViaBridge, 
   requestPersistentStorage 
 } from '../services/storage/localBridgeService';
+import { 
+  exportFullProjectMPackage, 
+  inspectBackupFile, 
+  applyRestorePackage, 
+  PackageManifestStats, 
+  PackageInspectionResult 
+} from '../services/storage/projectmPackageService';
+import { 
+  isDirectoryPickerSupported, 
+  pickAndConnectLocalFolder, 
+  syncDatabaseToLocalDirectory, 
+  disconnectLocalFolderSync as disconnectFolderSyncApi, 
+  restoreLocalFolderHandle, 
+  verifyDirectoryPermission, 
+  LocalFolderSyncStatus 
+} from '../services/storage/localFolderSyncService';
 import { formatCustomVnDate } from '../utils/dateUtils';
 
 const STORAGE_KEY = 'projectm_master_database_v3';
@@ -131,6 +147,18 @@ interface DataContextType {
   restoreFromBackup: (backupItem: BackupSnapshotItem) => Promise<boolean>;
   getBackupList: () => Promise<BackupSnapshotItem[]>;
   deleteBackup: (backupId: string) => Promise<boolean>;
+
+  // Đồng bộ trực tiếp ra thư mục ổ đĩa máy tính (Local Folder Auto-Sync)
+  localFolderSyncStatus: LocalFolderSyncStatus;
+  connectLocalFolderSync: () => Promise<{ success: boolean; message: string }>;
+  disconnectLocalFolderSync: () => Promise<void>;
+  syncNowToLocalFolder: () => Promise<{ success: boolean; message: string }>;
+  verifyLocalFolderPermission: () => Promise<boolean>;
+
+  // Gói sao lưu toàn vẹn (.projectm kèm toàn bộ tệp đính kèm)
+  exportFullBackupPackage: (note?: string) => Promise<{ success: boolean; message: string; stats?: PackageManifestStats; fileName?: string }>;
+  inspectBackupPackage: (file: File) => Promise<PackageInspectionResult>;
+  applyRestoreBackupPackage: (inspected: PackageInspectionResult) => Promise<{ success: boolean; message: string }>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -237,6 +265,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fileHandleRef = useRef<any>(null);
 
+  // Thư mục máy tính tự động đồng bộ (Local Folder Auto-Sync)
+  const localFolderHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+  const [localFolderSyncStatus, setLocalFolderSyncStatus] = useState<LocalFolderSyncStatus>({
+    isSupported: isDirectoryPickerSupported(),
+    isConnected: false,
+    folderName: '',
+    lastSyncTime: '',
+    hasPermission: false,
+    status: 'disconnected',
+  });
+
   // Tính dung lượng lưu trữ và cập nhật thời gian
   const calculateStorage = useCallback((data: AppDatabase) => {
     try {
@@ -305,6 +344,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.warn('Không thể ghi tự động vào file đĩa:', fileErr);
         }
       }
+
+      // 5. Tự động đồng bộ trực tiếp ra thư mục máy tính đã kết nối (Local Folder Auto-Sync)
+      if (localFolderHandleRef.current) {
+        try {
+          const folderRes = await syncDatabaseToLocalDirectory(localFolderHandleRef.current, dbWithMeta);
+          if (folderRes.success) {
+            setLocalFolderSyncStatus((prev) => ({
+              ...prev,
+              isConnected: true,
+              folderName: localFolderHandleRef.current!.name,
+              lastSyncTime: folderRes.writtenAt,
+              hasPermission: true,
+              status: 'synced',
+              errorMessage: undefined,
+            }));
+          } else {
+            setLocalFolderSyncStatus((prev) => ({
+              ...prev,
+              status: 'error',
+              errorMessage: folderRes.message,
+            }));
+          }
+        } catch (fErr) {
+          console.warn('[LocalFolderSync] Không thể ghi tự động vào thư mục:', fErr);
+        }
+      }
     } catch (e) {
       console.error('Lỗi lưu trữ dữ liệu:', e);
     }
@@ -336,6 +401,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         // 0. Yêu cầu quyền lưu trữ bền vững (Persistent Storage)
         requestPersistentStorage();
+
+        // 0.1. Khôi phục kết nối thư mục máy tính tự động đồng bộ (nếu có)
+        try {
+          const folderRestored = await restoreLocalFolderHandle();
+          if (folderRestored.handle && isMounted) {
+            localFolderHandleRef.current = folderRestored.handle;
+            setLocalFolderSyncStatus({
+              isSupported: true,
+              isConnected: true,
+              folderName: folderRestored.folderName,
+              lastSyncTime: folderRestored.hasPermission ? 'Đã kết nối' : 'Cần kích hoạt quyền',
+              hasPermission: folderRestored.hasPermission,
+              status: folderRestored.hasPermission ? 'synced' : 'permission_needed',
+            });
+          }
+        } catch (fInitErr) {
+          console.warn('[LocalFolderSync] Lỗi khôi phục thư mục đồng bộ:', fInitErr);
+        }
 
         // 1. Kiểm tra nạp từ file ổ đĩa máy tính trước (nếu có Bridge và file chứa dữ liệu hợp lệ)
         let loadedDb: AppDatabase | null = null;
@@ -1350,6 +1433,87 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
+  // ==================== CÁC HÀM ĐỒNG BỘ THƯ MỤC Ổ ĐĨA MÁY TÍNH (LOCAL FOLDER AUTO-SYNC) ====================
+  const connectLocalFolderSync = async (): Promise<{ success: boolean; message: string }> => {
+    const res = await pickAndConnectLocalFolder();
+    if (res.success && res.handle) {
+      localFolderHandleRef.current = res.handle;
+      const syncRes = await syncDatabaseToLocalDirectory(res.handle, database);
+      setLocalFolderSyncStatus({
+        isSupported: true,
+        isConnected: true,
+        folderName: res.folderName || res.handle.name,
+        lastSyncTime: syncRes.writtenAt || 'Vừa kết nối',
+        hasPermission: true,
+        status: 'synced',
+      });
+      return { success: true, message: res.message };
+    }
+    return { success: false, message: res.message };
+  };
+
+  const disconnectLocalFolderSync = async (): Promise<void> => {
+    await disconnectFolderSyncApi();
+    localFolderHandleRef.current = null;
+    setLocalFolderSyncStatus((prev) => ({
+      ...prev,
+      isConnected: false,
+      folderName: '',
+      lastSyncTime: '',
+      hasPermission: false,
+      status: 'disconnected',
+    }));
+  };
+
+  const syncNowToLocalFolder = async (): Promise<{ success: boolean; message: string }> => {
+    if (!localFolderHandleRef.current) {
+      return { success: false, message: 'Chưa kết nối với thư mục máy tính nào.' };
+    }
+    const hasPerm = await verifyDirectoryPermission(localFolderHandleRef.current, true);
+    if (!hasPerm) {
+      setLocalFolderSyncStatus((prev) => ({ ...prev, status: 'permission_needed', hasPermission: false }));
+      return { success: false, message: 'Chưa được cấp quyền ghi vào thư mục này. Vui lòng bấm kích hoạt quyền.' };
+    }
+    const res = await syncDatabaseToLocalDirectory(localFolderHandleRef.current, database);
+    if (res.success) {
+      setLocalFolderSyncStatus((prev) => ({
+        ...prev,
+        lastSyncTime: res.writtenAt,
+        status: 'synced',
+        hasPermission: true,
+      }));
+    }
+    return res;
+  };
+
+  const verifyLocalFolderPermission = async (): Promise<boolean> => {
+    if (!localFolderHandleRef.current) return false;
+    const ok = await verifyDirectoryPermission(localFolderHandleRef.current, true);
+    setLocalFolderSyncStatus((prev) => ({
+      ...prev,
+      hasPermission: ok,
+      status: ok ? 'synced' : 'permission_needed',
+    }));
+    return ok;
+  };
+
+  // ==================== CÁC HÀM GÓI SAO LƯU TOÀN VẸN (.PROJECTM) ====================
+  const exportFullBackupPackage = async (note?: string) => {
+    return await exportFullProjectMPackage(database, note);
+  };
+
+  const inspectBackupPackage = async (file: File) => {
+    return await inspectBackupFile(file);
+  };
+
+  const applyRestoreBackupPackage = async (inspected: PackageInspectionResult) => {
+    const res = await applyRestorePackage(inspected);
+    if (res.success && res.database) {
+      setDatabase(res.database);
+    }
+    return { success: res.success, message: res.message };
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -1413,6 +1577,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         restoreFromBackup,
         getBackupList,
         deleteBackup,
+        localFolderSyncStatus,
+        connectLocalFolderSync,
+        disconnectLocalFolderSync,
+        syncNowToLocalFolder,
+        verifyLocalFolderPermission,
+        exportFullBackupPackage,
+        inspectBackupPackage,
+        applyRestoreBackupPackage,
       }}
     >
       {children}

@@ -24,3 +24,4 @@ self.onmessage = async (e: MessageEvent<WorkerExportMessage>) => {
     self.postMessage({ id, type: 'error', error: errorMessage });
   }
 };
+

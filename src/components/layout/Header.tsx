@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { useData } from '../../context/DataContext';
-import { Menu, FileSpreadsheet, ArrowLeft, HardDrive, Clock, AlertTriangle } from 'lucide-react';
+import { Menu, FileSpreadsheet, ArrowLeft, HardDrive, Clock, AlertTriangle, FolderSync } from 'lucide-react';
 import { AppBadge } from '../common/AppBadge';
 import { formatVnNumber } from '../../utils/numberUtils';
 import { calculateContractDeadline, getPackageEffectiveDeadline } from '../../utils/dateUtils';
 import { ContractDeadlineAlertModal } from '../modules/projects/ContractDeadlineAlertModal';
+import { LocalFolderSyncModal } from '../modules/settings/LocalFolderSyncModal';
 
 interface HeaderProps {
   onToggleMobileMenu: () => void;
@@ -21,10 +22,18 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigateToCostPackage,
 }) => {
   const { headerTitle, activeProjectInfo } = useSettings();
-  const { lastSavedTime, isDirectFileConnected, projects, costPackages, contractAppendices } = useData();
+  const { 
+    lastSavedTime, 
+    isDirectFileConnected, 
+    projects, 
+    costPackages, 
+    contractAppendices,
+    localFolderSyncStatus 
+  } = useData();
   const displayTitle = title || headerTitle;
 
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
+  const [isFolderSyncModalOpen, setIsFolderSyncModalOpen] = useState(false);
 
   // Tính số lượng hợp đồng sắp hết hạn hoặc quá hạn trên toàn hệ thống
   const { overdueCount, urgentCount, totalWarningCount } = useMemo(() => {
@@ -178,6 +187,32 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
+        {/* Nút chỉ báo Đồng bộ Thư mục máy tính (Local Folder Auto-Sync) */}
+        {localFolderSyncStatus.isConnected ? (
+          <button
+            type="button"
+            onClick={() => setIsFolderSyncModalOpen(true)}
+            title={`Thư mục máy tính tự động đồng bộ: "${localFolderSyncStatus.folderName}". Bấm để cấu hình hoặc ngắt kết nối.`}
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#09152b] hover:bg-[#112447] border border-blue-500/40 text-blue-300 text-xs cursor-pointer transition-colors shadow-sm"
+          >
+            <FolderSync size={13} className="text-blue-400 shrink-0" />
+            <span className={`w-2 h-2 rounded-full ${localFolderSyncStatus.status === 'permission_needed' ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse shrink-0`} />
+            <span className="text-[11px] font-mono text-slate-200 max-w-[120px] truncate">
+              {localFolderSyncStatus.folderName}
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsFolderSyncModalOpen(true)}
+            title="Kết nối thư mục trên máy tính để tự động đồng bộ cơ sở dữ liệu."
+            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0c1626] hover:bg-[#14233c] border border-slate-700/60 text-slate-400 hover:text-slate-200 text-xs cursor-pointer transition-colors"
+          >
+            <FolderSync size={13} />
+            <span className="text-[11px]">Đồng bộ thư mục</span>
+          </button>
+        )}
+
         {/* Nút chỉ báo lưu trữ Offline & Drive */}
         <button
           type="button"
@@ -213,6 +248,12 @@ export const Header: React.FC<HeaderProps> = ({
         isOpen={isDeadlineModalOpen}
         onClose={() => setIsDeadlineModalOpen(false)}
         onNavigateToCostPackage={onNavigateToCostPackage}
+      />
+
+      {/* Modal Đồng bộ Thư mục máy tính */}
+      <LocalFolderSyncModal
+        isOpen={isFolderSyncModalOpen}
+        onClose={() => setIsFolderSyncModalOpen(false)}
       />
     </header>
   );

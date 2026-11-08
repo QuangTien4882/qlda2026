@@ -29,6 +29,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { BackupManagerModal } from './BackupManagerModal';
+import { LocalFolderSyncModal } from './LocalFolderSyncModal';
 import { 
   getNetworkInfo, 
   browseSaveLocationViaBridge, 
@@ -185,6 +186,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [isFolderSyncModalOpen, setIsFolderSyncModalOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -587,12 +589,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <AppButton
                     size="sm"
+                    variant="primary"
+                    icon={<FolderSync size={14} />}
+                    onClick={() => setIsFolderSyncModalOpen(true)}
+                    className="shadow-md shadow-blue-900/40"
+                  >
+                    Đồng Bộ Thư Mục Máy Tính (Local Folder Auto-Sync)
+                  </AppButton>
+
+                  <AppButton
+                    size="sm"
                     variant="ghost"
                     icon={<Database size={14} className="text-purple-400" />}
                     onClick={() => setIsBackupModalOpen(true)}
                     className="border border-purple-700/50 hover:bg-purple-950/50 text-purple-200"
                   >
-                    Mở Quản Lý Sao Lưu (Auto-backup 7 ngày)
+                    Quản Lý Gói Sao Lưu (.projectm) & Snapshot
                   </AppButton>
 
                   <AppButton
@@ -601,7 +613,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     icon={<Download size={14} />}
                     onClick={() => exportDatabaseToJson('du_lieu_du_an.json')}
                   >
-                    Tải ngay file du_lieu_du_an.json về máy ({projects.length} dự án)
+                    Tải file JSON về máy ({projects.length} dự án)
                   </AppButton>
 
                   <AppButton
@@ -783,10 +795,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         }
       />
 
-      {/* Modal Quản lý Sao lưu IndexedDB */}
+      {/* Modal Quản lý Sao lưu IndexedDB & Gói .projectm */}
       <BackupManagerModal
         isOpen={isBackupModalOpen}
         onClose={() => setIsBackupModalOpen(false)}
+      />
+
+      {/* Modal Đồng bộ Thư mục máy tính */}
+      <LocalFolderSyncModal
+        isOpen={isFolderSyncModalOpen}
+        onClose={() => setIsFolderSyncModalOpen(false)}
       />
     </>
   );
