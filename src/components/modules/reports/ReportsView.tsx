@@ -2,14 +2,20 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, 
   ChevronDown, 
-  ChevronRight,
+  ChevronRight, 
   FileText, 
+  FileSpreadsheet,
+  FolderSync,
+  Upload,
+  CheckCircle2,
+  Share2,
   X, 
   Check, 
-  Building2
+  Building2 
 } from 'lucide-react';
+import { saveAs } from 'file-saver';
 import { formatVnNumber } from '../../../utils/numberUtils';
-import { parseCustomVnDate } from '../../../utils/dateUtils';
+import { parseCustomVnDate, formatCustomVnDate } from '../../../utils/dateUtils';
 import { useSettings } from '../../../context/SettingsContext';
 import { useData } from '../../../context/DataContext';
 import { VnDateInput } from '../../common/VnDateInput';
@@ -192,9 +198,54 @@ export const ReportsView: React.FC = () => {
     costPackages, 
     inspections, 
     getEffectiveContractValue,
-    getContractAppendicesByPackage
+    getContractAppendicesByPackage,
+    lastSavedTime,
+    importDatabaseFromJson,
+    inspectBackupPackage,
+    applyRestoreBackupPackage
   } = useData();
   const isMobile = useIsMobile(1024);
+
+  // Thao tác cập nhật nhanh từ Google Drive / Tệp
+  const driveFileInputRef = useRef<HTMLInputElement>(null);
+  const [updateFeedback, setUpdateFeedback] = useState<string | null>(null);
+  const [isUpdatingFromDrive, setIsUpdatingFromDrive] = useState(false);
+
+  const handleDriveFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    setIsUpdatingFromDrive(true);
+    try {
+      if (file.name.endsWith('.projectm') || file.name.endsWith('.zip')) {
+        const inspected = await inspectBackupPackage(file);
+        if (inspected.isValid) {
+          const res = await applyRestoreBackupPackage(inspected);
+          if (res.success) {
+            setUpdateFeedback(`Đã nạp ${inspected.stats.projectsCount} dự án từ gói sao lưu!`);
+            setTimeout(() => setUpdateFeedback(null), 4000);
+          } else {
+            alert(res.message);
+          }
+        } else {
+          alert(inspected.errorMessage || 'File không hợp lệ');
+        }
+      } else {
+        const res = await importDatabaseFromJson(file);
+        if (res.success) {
+          setUpdateFeedback(`Đã cập nhật số liệu mới nhất từ Google Drive!`);
+          setTimeout(() => setUpdateFeedback(null), 4000);
+        } else {
+          alert(res.message);
+        }
+      }
+    } catch (err) {
+      alert(`Lỗi khi nạp dữ liệu: ${err instanceof Error ? err.message : 'Không xác định'}`);
+    } finally {
+      setIsUpdatingFromDrive(false);
+    }
+  };
 
   useEffect(() => {
     setHeaderTitle('BÁO CÁO NGHIỆM THU DỰ ÁN');
@@ -464,12 +515,162 @@ export const ReportsView: React.FC = () => {
     }));
   };
 
+  // Hàm chia sẻ trực tiếp qua Zalo / Tin nhắn (trên Mobile) hoặc tải về máy
+  const shareFileOrSaveAs = async (
+    blob: Blob,
+    fileName: string,
+    mimeType: string,
+    title: string,
+    text: string
+  ) => {
+    try {
+      const file = new File([blob], fileName, { type: mimeType });
+      const navAny = navigator as unknown as { 
+        canShare?: (data: unknown) => boolean; 
+        share?: (data: unknown) => Promise<void> 
+      };
+
+      if (navAny.canShare && navAny.canShare({ files: [file] }) && navAny.share) {
+        await navAny.share({
+          files: [file],
+          title,
+          text,
+        });
+        return;
+      }
+    } catch (shareErr) {
+      if ((shareErr as Error)?.name === 'AbortError') return;
+      console.warn('Web Share không thực hiện được, chuyển sang tải file:', shareErr);
+    }
+    saveAs(blob, fileName);
+  };
+
+  // ==================== XUẤT FILE EXCEL (.XLS) VỚI ĐỊNH DẠNG CHUẨN BẢNG TÍNH ====================
+  const handleExportExcel = async () => {
+    if (reportData.projects.length === 0) {
+      alert('Không có dữ liệu nào trong báo cáo để xuất Excel.');
+      return;
+    }
+
+    const todayStr = formatCustomVnDate(new Date());
+    const safeDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+    let rowsHtml = '';
+    reportData.projects.forEach((proj) => {
+      // Dòng Dự án
+      rowsHtml += `
+        <tr style="background-color: #dbeafe; font-weight: bold;">
+          <td style="text-align: center; border: 1px solid #94a3b8; font-weight: bold;">${proj.projectStt}</td>
+          <td colspan="2" style="border: 1px solid #94a3b8; font-weight: bold; color: #1e40af;">${proj.projectName}</td>
+          <td style="text-align: right; border: 1px solid #94a3b8; font-weight: bold; mso-number-format:'\\#\\,\\#\\#0';">${proj.contractTotal}</td>
+          <td style="text-align: right; border: 1px solid #94a3b8; font-weight: bold; mso-number-format:'\\#\\,\\#\\#0';">${proj.inspTotal}</td>
+          <td style="text-align: right; border: 1px solid #94a3b8; font-weight: bold; mso-number-format:'\\#\\,\\#\\#0';">${proj.payTotal}</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; font-weight: bold;">${proj.ratioNtHd.toFixed(1).replace('.', ',')}%</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; font-weight: bold;">${proj.ratioTtNt.toFixed(1).replace('.', ',')}%</td>
+        </tr>
+      `;
+
+      // Các gói thầu con
+      proj.packages.forEach((pkg) => {
+        rowsHtml += `
+          <tr>
+            <td style="text-align: center; border: 1px solid #cbd5e1;">${pkg.subStt}</td>
+            <td style="border: 1px solid #cbd5e1;">${pkg.content}</td>
+            <td style="border: 1px solid #cbd5e1;">${pkg.contractor || '—'}</td>
+            <td style="text-align: right; border: 1px solid #cbd5e1; mso-number-format:'\\#\\,\\#\\#0';">${pkg.contractValue}</td>
+            <td style="text-align: right; border: 1px solid #cbd5e1; mso-number-format:'\\#\\,\\#\\#0';">${pkg.inspectionValue}</td>
+            <td style="text-align: right; border: 1px solid #cbd5e1; mso-number-format:'\\#\\,\\#\\#0';">${pkg.paymentValue}</td>
+            <td style="text-align: center; border: 1px solid #cbd5e1;">${pkg.ratioNtHd.toFixed(1).replace('.', ',')}%</td>
+            <td style="text-align: center; border: 1px solid #cbd5e1;">${pkg.ratioTtNt.toFixed(1).replace('.', ',')}%</td>
+          </tr>
+        `;
+      });
+    });
+
+    const excelHtml = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <!--[if gte mso 9]>
+        <xml>
+        <x:ExcelWorkbook>
+          <x:ExcelWorksheets>
+            <x:ExcelWorksheet>
+              <x:Name>BaoCaoNghiemThuGiaiNgan</x:Name>
+              <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+            </x:ExcelWorksheet>
+          </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+          body { font-family: 'Times New Roman', Arial; font-size: 11pt; }
+          table { border-collapse: collapse; width: 100%; }
+          th { background-color: #0284c7; color: #ffffff; font-weight: bold; border: 1px solid #334155; padding: 8px; text-align: center; }
+          td { padding: 6px; }
+          .title { font-size: 14pt; font-weight: bold; text-align: center; color: #0f172a; }
+          .subtitle { font-size: 10pt; font-style: italic; text-align: center; color: #475569; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr>
+            <td colspan="8" class="title">BÁO CÁO TỔNG HỢP TIẾN ĐỘ NGHIỆM THU VÀ GIẢI NGÂN CÁC DỰ ÁN</td>
+          </tr>
+          <tr>
+            <td colspan="8" class="subtitle">Thời điểm lập báo cáo: ${todayStr} • Phần mềm Quản lý Dự án ProjectM</td>
+          </tr>
+          <tr><td colspan="8"></td></tr>
+          <thead>
+            <tr>
+              <th style="width: 50px;">STT</th>
+              <th style="width: 320px;">DỰ ÁN / NỘI DUNG CHI PHÍ, GÓI THẦU</th>
+              <th style="width: 240px;">ĐƠN VỊ THỰC HIỆN</th>
+              <th style="width: 150px;">GIÁ TRỊ HỢP ĐỒNG (ĐỒNG)</th>
+              <th style="width: 150px;">GIÁ TRỊ NGHIỆM THU (ĐỒNG)</th>
+              <th style="width: 150px;">GIÁ TRỊ THANH TOÁN (ĐỒNG)</th>
+              <th style="width: 90px;">TỶ LỆ NT/HĐ (%)</th>
+              <th style="width: 90px;">TỶ LỆ TT/NT (%)</th>
+            </tr>
+            <tr style="background-color: #0369a1; color: white; font-weight: bold;">
+              <td style="text-align: center; border: 1px solid #334155;">—</td>
+              <td colspan="2" style="border: 1px solid #334155; font-weight: bold;">TỔNG CỘNG TOÀN BỘ (${reportData.projects.length} dự án)</td>
+              <td style="text-align: right; border: 1px solid #334155; font-weight: bold; mso-number-format:'\\#\\,\\#\\#0';">${reportData.grandContract}</td>
+              <td style="text-align: right; border: 1px solid #334155; font-weight: bold; mso-number-format:'\\#\\,\\#\\#0';">${reportData.grandInsp}</td>
+              <td style="text-align: right; border: 1px solid #334155; font-weight: bold; mso-number-format:'\\#\\,\\#\\#0';">${reportData.grandPay}</td>
+              <td style="text-align: center; border: 1px solid #334155; font-weight: bold;">${reportData.grandRatioNtHd.toFixed(1).replace('.', ',')}%</td>
+              <td style="text-align: center; border: 1px solid #334155; font-weight: bold;">${reportData.grandRatioTtNt.toFixed(1).replace('.', ',')}%</td>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob(['\uFEFF' + excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const fileName = `Bao_Cao_Giai_Ngan_${safeDate}.xls`;
+
+    await shareFileOrSaveAs(
+      blob,
+      fileName,
+      'application/vnd.ms-excel',
+      'Báo cáo Nghiệm thu Giải ngân ProjectM',
+      `Báo cáo tổng hợp số liệu nghiệm thu và giải ngân - Ngày ${todayStr}`
+    );
+  };
+
   // ==================== XUẤT FILE WORD (.DOC) ====================
-  const handleExportWord = () => {
+  const handleExportWord = async () => {
     if (reportData.projects.length === 0) {
       alert('Không có dữ liệu nào trong báo cáo để xuất Word.');
       return;
     }
+
+    const todayStr = formatCustomVnDate(new Date());
+    const safeDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
     let rowsHtml = '';
     reportData.projects.forEach((proj) => {
@@ -519,7 +720,7 @@ export const ReportsView: React.FC = () => {
         <div style="text-align: center; margin-bottom: 20px;">
           <h2 style="margin: 0; text-transform: uppercase;">BÁO CÁO NGHIỆM THU VÀ GIẢI NGÂN CÁC GÓI THẦU</h2>
           <p style="margin: 5px 0; font-style: italic;">Tổng hợp số liệu thực hiện và nghiệm thu dự án đầu tư xây dựng</p>
-          <p style="margin: 3px 0; font-size: 10pt;">Ngày lập báo cáo: ${new Date().toLocaleDateString('vi-VN')}</p>
+          <p style="margin: 3px 0; font-size: 10pt;">Ngày lập báo cáo: ${todayStr}</p>
         </div>
 
         <table>
@@ -552,14 +753,15 @@ export const ReportsView: React.FC = () => {
     `;
 
     const blob = new Blob(['\uFEFF' + wordContent], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Bao_Cao_Nghiem_Thu_${new Date().toISOString().slice(0, 10)}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const fileName = `Bao_Cao_Nghiem_Thu_${safeDate}.doc`;
+
+    await shareFileOrSaveAs(
+      blob,
+      fileName,
+      'application/msword',
+      'Báo cáo Nghiệm thu Dự án (Word)',
+      `Báo cáo nghiệm thu và giải ngân - Ngày ${todayStr}`
+    );
   };
 
   return (
@@ -593,6 +795,49 @@ export const ReportsView: React.FC = () => {
               <X size={13} />
             </button>
           )}
+        </div>
+      </div>
+
+      {/* THANH ĐỒNG BỘ NHANH: CẬP NHẬT SỐ LIỆU TỪ GOOGLE DRIVE / TỆP (DÀNH CHO ĐIỆN THOẠI & MÁY TÍNH) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#0d1627] p-2.5 sm:px-3.5 sm:py-2.5 rounded-xl border border-blue-500/30 shadow-md shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 rounded-lg bg-emerald-950/80 border border-emerald-600/60 text-emerald-400 shrink-0">
+            <FolderSync size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-slate-100 flex items-center gap-2 flex-wrap">
+              <span>Đồng bộ Báo cáo Mobile & Google Drive</span>
+              {updateFeedback && (
+                <span className="text-[11px] font-medium text-emerald-300 bg-emerald-950/70 border border-emerald-700/60 px-2 py-0.5 rounded flex items-center gap-1">
+                  <CheckCircle2 size={12} />
+                  {updateFeedback}
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-slate-400 font-mono truncate">
+              {lastSavedTime ? `Thời gian lưu gần nhất: ${lastSavedTime}` : 'Sẵn sàng'} • Hiện có <strong className="text-blue-300">{projects.length}</strong> dự án trong máy
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <input
+            ref={driveFileInputRef}
+            type="file"
+            accept=".json,.projectm"
+            className="hidden"
+            onChange={handleDriveFileChange}
+          />
+          <button
+            type="button"
+            onClick={() => driveFileInputRef.current?.click()}
+            disabled={isUpdatingFromDrive}
+            className="w-full sm:w-auto px-3.5 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-950/50 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+            title="Chọn file projectm_data.json từ Google Drive hoặc bộ nhớ điện thoại để cập nhật số liệu mới nhất"
+          >
+            <Upload size={15} />
+            <span>{isUpdatingFromDrive ? 'Đang nạp số liệu...' : 'Cập nhật từ Google Drive / Tệp'}</span>
+          </button>
         </div>
       </div>
 
@@ -877,15 +1122,32 @@ export const ReportsView: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. NÚT XUẤT WORD GÓC PHẢI (THEO ĐÚNG HÌNH ẢNH 1) */}
-      <div className="flex items-center justify-end gap-2 pt-0.5">
-        <button
-          onClick={handleExportWord}
-          className="px-3.5 py-1.5 rounded-lg bg-[#2563eb] hover:bg-blue-600 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-blue-900/40 transition-colors"
-        >
-          <FileText size={15} />
-          <span>Xuất Word</span>
-        </button>
+      {/* 4. NÚT XUẤT BÁO CÁO: EXCEL & WORD & CHIA SẺ TRỰC TIẾP */}
+      <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
+        <div className="text-xs text-slate-400 italic hidden sm:block">
+          * Xuất số liệu tổng hợp nghiệm thu và thanh toán các dự án
+        </div>
+        <div className="flex items-center gap-2 ml-auto w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            className="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/40 transition-all cursor-pointer"
+            title="Xuất file bảng tính Excel (.xls) và mở bảng chia sẻ Zalo/Email nếu trên điện thoại"
+          >
+            <FileSpreadsheet size={15} />
+            <span>Xuất Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportWord}
+            className="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg bg-[#2563eb] hover:bg-blue-600 active:scale-95 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/40 transition-all cursor-pointer"
+            title="Xuất file văn bản Word (.doc)"
+          >
+            <FileText size={15} />
+            <span>Xuất Word</span>
+          </button>
+        </div>
       </div>
 
       {/* 5. BẢNG PHÂN CẤP DỰ ÁN & GÓI THẦU */}

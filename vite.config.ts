@@ -341,6 +341,7 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './',
   plugins: [react(), localStorageBridgePlugin()],
   resolve: {
     alias: {

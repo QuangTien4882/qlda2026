@@ -284,3 +284,4 @@ export const LocalFolderSyncModal: React.FC<LocalFolderSyncModalProps> = ({ isOp
     </AppModal>
   );
 };
+
