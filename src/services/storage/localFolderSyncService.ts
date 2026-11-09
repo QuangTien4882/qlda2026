@@ -15,6 +15,17 @@ export interface LocalFolderSyncStatus {
   errorMessage?: string;
 }
 
+export interface DetectedDbFile {
+  fileName: string;
+  projectCount: number;
+  sizeBytes: number;
+  lastModified: string;
+  data: AppDatabase;
+}
+
+/** Danh sách tên tệp CSDL phổ biến của ProjectM cần ưu tiên rà quét */
+const KNOWN_DB_FILENAMES = ['projectm_data.json', 'Duan_Data.json', 'du_lieu_du_an.json'];
+
 /**
  * Kiểm tra trình duyệt có hỗ trợ File System Access API (showDirectoryPicker) hay không
  */
@@ -51,12 +62,93 @@ export async function verifyDirectoryPermission(
 }
 
 /**
+ * Rà quét thư mục để tìm tất cả các tệp CSDL ProjectM hợp lệ
+ */
+export async function scanDirectoryForDatabaseFiles(
+  dirHandle: FileSystemDirectoryHandle
+): Promise<DetectedDbFile[]> {
+  const detectedFiles: DetectedDbFile[] = [];
+
+  // 1. Thử đọc các tên tệp quen thuộc trước
+  for (const fileName of KNOWN_DB_FILENAMES) {
+    try {
+      const fileHandle = await dirHandle.getFileHandle(fileName, { create: false });
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      const parsed = JSON.parse(text) as AppDatabase;
+
+      if (parsed && Array.isArray(parsed.projects)) {
+        detectedFiles.push({
+          fileName,
+          projectCount: parsed.projects.length,
+          sizeBytes: file.size,
+          lastModified: new Date(file.lastModified).toLocaleString('vi-VN'),
+          data: parsed,
+        });
+      }
+    } catch {
+      // Bỏ qua nếu file không tồn tại hoặc lỗi parse
+    }
+  }
+
+  // Sắp xếp ưu tiên: tệp có số lượng dự án nhiều nhất, sau đó dung lượng lớn nhất
+  detectedFiles.sort((a, b) => {
+    if (b.projectCount !== a.projectCount) {
+      return b.projectCount - a.projectCount;
+    }
+    return b.sizeBytes - a.sizeBytes;
+  });
+
+  return detectedFiles;
+}
+
+/**
+ * Đọc bản CSDL tốt nhất có sẵn trong thư mục
+ */
+export async function readBestDatabaseFromDirectory(
+  dirHandle: FileSystemDirectoryHandle
+): Promise<{
+  success: boolean;
+  data?: AppDatabase;
+  fileName?: string;
+  projectCount?: number;
+  message: string;
+}> {
+  try {
+    const files = await scanDirectoryForDatabaseFiles(dirHandle);
+    if (files.length === 0) {
+      return {
+        success: false,
+        message: `Thư mục "${dirHandle.name}" chưa chứa tệp dữ liệu nào của ProjectM.`,
+      };
+    }
+
+    const best = files[0];
+    return {
+      success: true,
+      data: best.data,
+      fileName: best.fileName,
+      projectCount: best.projectCount,
+      message: `Đã tìm thấy tệp "${best.fileName}" chứa ${best.projectCount} dự án (${(best.sizeBytes / 1024).toFixed(1)} KB).`,
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      message: `Lỗi đọc dữ liệu từ thư mục: ${err instanceof Error ? err.message : 'Không xác định'}`,
+    };
+  }
+}
+
+/**
  * Mở hộp thoại chọn thư mục máy tính và lưu handle vào IndexedDB
  */
 export async function pickAndConnectLocalFolder(): Promise<{
   success: boolean;
   handle?: FileSystemDirectoryHandle;
   folderName?: string;
+  existingData?: AppDatabase;
+  existingFileName?: string;
+  projectCount?: number;
   message: string;
 }> {
   if (!isDirectoryPickerSupported()) {
@@ -89,11 +181,24 @@ export async function pickAndConnectLocalFolder(): Promise<{
     // Lưu handle vào IndexedDB
     await saveSyncDirectoryHandle(dirHandle);
 
+    // Tự động rà quét xem thư mục này đã có sẵn dữ liệu trước đó hay chưa
+    const bestCheck = await readBestDatabaseFromDirectory(dirHandle);
+
+    let msg = `Đã kết nối thành công với thư mục "${dirHandle.name}".`;
+    if (bestCheck.success && (bestCheck.projectCount || 0) > 0) {
+      msg += ` Phát hiện có sẵn ${bestCheck.projectCount} dự án trong tệp "${bestCheck.fileName}".`;
+    } else {
+      msg += ` Dữ liệu sẽ được tự động đồng bộ vào tệp projectm_data.json.`;
+    }
+
     return {
       success: true,
       handle: dirHandle,
       folderName: dirHandle.name,
-      message: `Đã kết nối thành công với thư mục "${dirHandle.name}". Mọi thay đổi dữ liệu sẽ được tự động đồng bộ vào file projectm_data.json trong thư mục này!`,
+      existingData: bestCheck.data,
+      existingFileName: bestCheck.fileName,
+      projectCount: bestCheck.projectCount,
+      message: msg,
     };
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
@@ -108,12 +213,27 @@ export async function pickAndConnectLocalFolder(): Promise<{
 
 /**
  * Ghi tự động CSDL ra file projectm_data.json trong thư mục đã kết nối
+ * Có cơ chế bảo vệ: Không bao giờ ghi đè database rỗng lên file đang chứa dữ liệu!
  */
 export async function syncDatabaseToLocalDirectory(
   dirHandle: FileSystemDirectoryHandle,
   data: AppDatabase
 ): Promise<{ success: boolean; message: string; writtenAt: string; sizeBytes: number }> {
   try {
+    // CƠ CHẾ BẢO VỆ DỮ LIỆU: Nếu data hiện tại rỗng (0 dự án), kiểm tra xem file trên đĩa có dữ liệu không
+    if (!data.projects || data.projects.length === 0) {
+      const existing = await readBestDatabaseFromDirectory(dirHandle);
+      if (existing.success && (existing.projectCount || 0) > 0) {
+        console.warn(`[LocalFolderSync] Ngăn chặn ghi đè dữ liệu rỗng lên tệp ${existing.fileName} chứa ${existing.projectCount} dự án.`);
+        return {
+          success: false,
+          message: `Từ chối ghi: Bộ nhớ tạm hiện tại rỗng (0 dự án). Hệ thống tự động bảo vệ tệp "${existing.fileName}" chứa ${existing.projectCount} dự án trên máy của bạn không bị xóa.`,
+          writtenAt: '',
+          sizeBytes: 0,
+        };
+      }
+    }
+
     const fileHandle = await dirHandle.getFileHandle('projectm_data.json', { create: true });
     const writable = await fileHandle.createWritable();
     const jsonStr = JSON.stringify(data, null, 2);
@@ -147,30 +267,7 @@ export async function syncDatabaseToLocalDirectory(
 export async function readDatabaseFromLocalDirectory(
   dirHandle: FileSystemDirectoryHandle
 ): Promise<{ success: boolean; data?: AppDatabase; message: string }> {
-  try {
-    const fileHandle = await dirHandle.getFileHandle('projectm_data.json', { create: false });
-    const file = await fileHandle.getFile();
-    const text = await file.text();
-    const parsed: AppDatabase = JSON.parse(text);
-
-    if (!parsed || !Array.isArray(parsed.projects)) {
-      return {
-        success: false,
-        message: 'File projectm_data.json trong thư mục không đúng cấu trúc CSDL ProjectM.',
-      };
-    }
-
-    return {
-      success: true,
-      data: parsed,
-      message: `Đã nạp thành công ${parsed.projects.length} dự án từ thư mục "${dirHandle.name}".`,
-    };
-  } catch (err: unknown) {
-    return {
-      success: false,
-      message: `Không thể đọc file từ thư mục: ${err instanceof Error ? err.message : 'File chưa tồn tại'}`,
-    };
-  }
+  return await readBestDatabaseFromDirectory(dirHandle);
 }
 
 /**

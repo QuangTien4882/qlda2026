@@ -13,3 +13,4 @@ WshShell.Run "cmd.exe /c npm run dev", 0, False
 ' 2. Đợi 2 giây để server sẵn sàng rồi tự động mở trình duyệt
 WScript.Sleep 2000
 WshShell.Run "http://localhost:3000"
+

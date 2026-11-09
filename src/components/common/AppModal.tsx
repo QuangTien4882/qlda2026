@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { modalStack } from '../../utils/modalStack';
 
@@ -69,22 +70,22 @@ export const AppModal: React.FC<AppModalProps> = ({
   const levelConfig: Record<number, { wrapperClass: string; zContainer: string; badgeLabel: string }> = {
     1: {
       wrapperClass: 'w-[96vw] max-w-[1850px] h-[94vh]',
-      zContainer: 'z-50',
+      zContainer: 'z-[9990]',
       badgeLabel: 'Cấp 1',
     },
     2: {
       wrapperClass: 'w-[94vw] max-w-[1750px] h-[94vh]',
-      zContainer: 'z-[60]',
+      zContainer: 'z-[9992]',
       badgeLabel: 'Cấp 2',
     },
     3: {
       wrapperClass: 'w-[86vw] max-w-5xl h-[92vh]',
-      zContainer: 'z-[70]',
+      zContainer: 'z-[9994]',
       badgeLabel: 'Cấp 3',
     },
     4: {
       wrapperClass: 'w-[72vw] max-w-2xl max-h-[92vh]',
-      zContainer: 'z-[80]',
+      zContainer: 'z-[9996]',
       badgeLabel: 'Cấp 4',
     },
   };
@@ -107,7 +108,7 @@ export const AppModal: React.FC<AppModalProps> = ({
     sizeClass = 'w-full h-full max-w-none max-h-none rounded-none border-none';
   }
 
-  return (
+  const modalNode = (
     <div
       className={`fixed inset-0 ${currentLevelConfig.zContainer} flex items-center justify-center ${
         isFull ? 'p-0' : 'p-2 sm:p-4'
@@ -171,4 +172,10 @@ export const AppModal: React.FC<AppModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalNode, document.body);
+  }
+
+  return modalNode;
 };

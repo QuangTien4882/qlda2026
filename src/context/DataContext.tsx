@@ -45,7 +45,10 @@ import {
   disconnectLocalFolderSync as disconnectFolderSyncApi, 
   restoreLocalFolderHandle, 
   verifyDirectoryPermission, 
-  LocalFolderSyncStatus 
+  scanDirectoryForDatabaseFiles,
+  readBestDatabaseFromDirectory,
+  LocalFolderSyncStatus,
+  DetectedDbFile
 } from '../services/storage/localFolderSyncService';
 import { formatCustomVnDate } from '../utils/dateUtils';
 
@@ -150,10 +153,13 @@ interface DataContextType {
 
   // Đồng bộ trực tiếp ra thư mục ổ đĩa máy tính (Local Folder Auto-Sync)
   localFolderSyncStatus: LocalFolderSyncStatus;
+  detectedFolderFiles: DetectedDbFile[];
   connectLocalFolderSync: () => Promise<{ success: boolean; message: string }>;
   disconnectLocalFolderSync: () => Promise<void>;
   syncNowToLocalFolder: () => Promise<{ success: boolean; message: string }>;
   verifyLocalFolderPermission: () => Promise<boolean>;
+  reloadFromLocalFolder: () => Promise<{ success: boolean; message: string; projectCount?: number }>;
+  scanConnectedFolder: () => Promise<DetectedDbFile[]>;
 
   // Gói sao lưu toàn vẹn (.projectm kèm toàn bộ tệp đính kèm)
   exportFullBackupPackage: (note?: string) => Promise<{ success: boolean; message: string; stats?: PackageManifestStats; fileName?: string }>;
@@ -275,6 +281,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     hasPermission: false,
     status: 'disconnected',
   });
+  const [detectedFolderFiles, setDetectedFolderFiles] = useState<DetectedDbFile[]>([]);
 
   // Tính dung lượng lưu trữ và cập nhật thời gian
   const calculateStorage = useCallback((data: AppDatabase) => {
@@ -415,6 +422,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               hasPermission: folderRestored.hasPermission,
               status: folderRestored.hasPermission ? 'synced' : 'permission_needed',
             });
+
+            // Tự động rà quét và nạp bản CSDL có sẵn nếu có quyền truy cập
+            if (folderRestored.hasPermission) {
+              try {
+                const scanned = await scanDirectoryForDatabaseFiles(folderRestored.handle);
+                if (isMounted) setDetectedFolderFiles(scanned);
+
+                const bestCheck = await readBestDatabaseFromDirectory(folderRestored.handle);
+                if (bestCheck.success && bestCheck.data && (bestCheck.data.projects?.length || 0) > 0) {
+                  if (isMounted && (!database.projects || database.projects.length === 0)) {
+                    setDatabase(bestCheck.data);
+                    await saveDatabaseToIdb(bestCheck.data);
+                  }
+                }
+              } catch (scanErr) {
+                console.warn('[LocalFolderSync] Lỗi rà quét tệp thư mục lúc khởi động:', scanErr);
+              }
+            }
           }
         } catch (fInitErr) {
           console.warn('[LocalFolderSync] Lỗi khôi phục thư mục đồng bộ:', fInitErr);
@@ -1438,7 +1463,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await pickAndConnectLocalFolder();
     if (res.success && res.handle) {
       localFolderHandleRef.current = res.handle;
-      const syncRes = await syncDatabaseToLocalDirectory(res.handle, database);
+
+      // Nạp dữ liệu có sẵn nếu thư mục có tệp chứa dự án
+      let currentDb = database;
+      if (res.existingData && res.existingData.projects && res.existingData.projects.length > 0) {
+        if (!database.projects || database.projects.length === 0 || res.existingData.projects.length >= database.projects.length) {
+          currentDb = res.existingData;
+          setDatabase(res.existingData);
+          await saveDatabaseToIdb(res.existingData);
+        }
+      }
+
+      const syncRes = await syncDatabaseToLocalDirectory(res.handle, currentDb);
       setLocalFolderSyncStatus({
         isSupported: true,
         isConnected: true,
@@ -1447,6 +1483,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasPermission: true,
         status: 'synced',
       });
+
+      const scanned = await scanDirectoryForDatabaseFiles(res.handle);
+      setDetectedFolderFiles(scanned);
+
       return { success: true, message: res.message };
     }
     return { success: false, message: res.message };
@@ -1455,6 +1495,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const disconnectLocalFolderSync = async (): Promise<void> => {
     await disconnectFolderSyncApi();
     localFolderHandleRef.current = null;
+    setDetectedFolderFiles([]);
     setLocalFolderSyncStatus((prev) => ({
       ...prev,
       isConnected: false,
@@ -1463,6 +1504,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       hasPermission: false,
       status: 'disconnected',
     }));
+  };
+
+  const reloadFromLocalFolder = async (): Promise<{ success: boolean; message: string; projectCount?: number }> => {
+    if (!localFolderHandleRef.current) {
+      return { success: false, message: 'Chưa kết nối với thư mục máy tính nào.' };
+    }
+    const hasPerm = await verifyDirectoryPermission(localFolderHandleRef.current, false);
+    if (!hasPerm) {
+      setLocalFolderSyncStatus((prev) => ({ ...prev, status: 'permission_needed', hasPermission: false }));
+      return { success: false, message: 'Chưa được cấp quyền truy cập thư mục.' };
+    }
+    const bestCheck = await readBestDatabaseFromDirectory(localFolderHandleRef.current);
+    if (bestCheck.success && bestCheck.data && (bestCheck.data.projects?.length || 0) > 0) {
+      setDatabase(bestCheck.data);
+      await saveDatabaseToIdb(bestCheck.data);
+      const scanned = await scanDirectoryForDatabaseFiles(localFolderHandleRef.current);
+      setDetectedFolderFiles(scanned);
+      return {
+        success: true,
+        message: `Đã nạp thành công ${bestCheck.data.projects.length} dự án từ tệp "${bestCheck.fileName}".`,
+        projectCount: bestCheck.data.projects.length,
+      };
+    }
+    return {
+      success: false,
+      message: bestCheck.message || 'Không tìm thấy tệp CSDL hợp lệ trong thư mục.',
+    };
+  };
+
+  const scanConnectedFolder = async (): Promise<DetectedDbFile[]> => {
+    if (!localFolderHandleRef.current) return [];
+    try {
+      const scanned = await scanDirectoryForDatabaseFiles(localFolderHandleRef.current);
+      setDetectedFolderFiles(scanned);
+      return scanned;
+    } catch {
+      return [];
+    }
   };
 
   const syncNowToLocalFolder = async (): Promise<{ success: boolean; message: string }> => {
@@ -1578,10 +1657,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         getBackupList,
         deleteBackup,
         localFolderSyncStatus,
+        detectedFolderFiles,
         connectLocalFolderSync,
         disconnectLocalFolderSync,
         syncNowToLocalFolder,
         verifyLocalFolderPermission,
+        reloadFromLocalFolder,
+        scanConnectedFolder,
         exportFullBackupPackage,
         inspectBackupPackage,
         applyRestoreBackupPackage,
