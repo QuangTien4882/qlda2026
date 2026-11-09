@@ -1,12 +1,12 @@
 @echo off
-chcp 65001 > nul
-title Tắt máy chủ ProjectM ngầm
+title ProjectM - Tat may chu
+cd /d "%~dp0"
 
 echo ==========================================================
-echo        DỪNG TIẾN TRÌNH PROJECTM CHẠY NGẦM
+echo        DUNG TIEN TRINH PROJECTM HE THONG
 echo ==========================================================
 echo.
-echo Đang tìm và tắt tiến trình cổng 3030...
+echo Dang tim va tat tien trinh tren cong 3030...
 
 set FOUND=0
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3030" ^| findstr "LISTENING"') do (
@@ -15,12 +15,11 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3030" ^| findstr "LISTENING
 )
 
 if "%FOUND%"=="1" (
-    echo [THÀNH CÔNG] Đã tắt hoàn toàn máy chủ ProjectM trên cổng 3030.
+    echo [THANH CONG] Da tat may chu ProjectM tren cong 3030.
 ) else (
-    echo [THÔNG BÁO] Không có máy chủ ProjectM nào đang chạy trên cổng 3030.
+    echo [THONG BAO] Khong co may chu ProjectM nao dang chay tren cong 3030.
 )
 
-echo.
-timeout /t 2 > nul
+echo Cua so se tu dong dong sau 2 giay...
+ping 127.0.0.1 -n 3 > nul
 exit
-
