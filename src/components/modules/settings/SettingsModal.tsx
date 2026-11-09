@@ -59,6 +59,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     connectedFileName,
     diskFilePath,
     setDiskFilePath,
+    activeDataFilePath,
+    activeDataFileName,
+    handleUserSaveAs,
+    handleUserOpenFile,
     isBridgeActive,
     lastDiskWriteTime,
     diskFileSize,
@@ -76,18 +80,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   } = useData();
 
   const [activeTab, setActiveTab] = useState<'drive' | 'appearance'>('drive');
-  const [inputDiskPath, setInputDiskPath] = useState(diskFilePath);
+  const [inputDiskPath, setInputDiskPath] = useState(activeDataFilePath || diskFilePath);
   const [networkInfo, setNetworkInfo] = useState<{ primaryIp: string; port: string; mobileUrl: string } | null>(null);
-  const [copiedMobileUrl, setCopiedMobileUrl] = useState(false);
+  const [customIp, setCustomIp] = useState<string>(() => {
+    try {
+      return localStorage.getItem('projectm_custom_lan_ip') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [copiedGhUrl, setCopiedGhUrl] = useState(false);
+  const [copiedLanUrl, setCopiedLanUrl] = useState(false);
   const [drivePath, setDrivePath] = useState(
     settings.googleDrivePath || 'D:\\Google Drive\\ProjectM\\du_lieu_du_an.json'
   );
 
   React.useEffect(() => {
-    if (diskFilePath) {
+    if (activeDataFilePath) {
+      setInputDiskPath(activeDataFilePath);
+    } else if (diskFilePath) {
       setInputDiskPath(diskFilePath);
     }
-  }, [diskFilePath]);
+  }, [activeDataFilePath, diskFilePath]);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -99,11 +113,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     }
   }, [isOpen]);
 
-  const handleCopyMobileUrl = () => {
-    if (!networkInfo?.mobileUrl) return;
-    navigator.clipboard.writeText(networkInfo.mobileUrl);
-    setCopiedMobileUrl(true);
-    setTimeout(() => setCopiedMobileUrl(false), 2500);
+  const GITHUB_PAGES_URL = 'https://quangtien4882.github.io/qlda2026/';
+  const lanPort = networkInfo?.port || (typeof window !== 'undefined' ? window.location.port : '3000') || '3000';
+  const effectiveLanIp = customIp.trim() || (networkInfo?.primaryIp && networkInfo.primaryIp !== '127.0.0.1' ? networkInfo.primaryIp : '');
+  const lanMobileUrl = effectiveLanIp ? `http://${effectiveLanIp}:${lanPort}` : '';
+
+  const handleCopyGhUrl = () => {
+    navigator.clipboard.writeText(GITHUB_PAGES_URL);
+    setCopiedGhUrl(true);
+    setTimeout(() => setCopiedGhUrl(false), 2500);
+  };
+
+  const handleCopyLanUrl = () => {
+    if (!lanMobileUrl) return;
+    navigator.clipboard.writeText(lanMobileUrl);
+    setCopiedLanUrl(true);
+    setTimeout(() => setCopiedLanUrl(false), 2500);
+  };
+
+  const handleSaveCustomIp = (val: string) => {
+    setCustomIp(val);
+    try {
+      localStorage.setItem('projectm_custom_lan_ip', val);
+    } catch {}
   };
 
   const handleApplyDiskPath = () => {
@@ -111,6 +143,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setDiskFilePath(inputDiskPath.trim());
     setNotification({ type: 'success', message: 'Đã cập nhật đường dẫn lưu trữ ổ cứng.' });
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleSaveAsClick = async () => {
+    const res = await handleUserSaveAs();
+    if (res.success && res.filePath) {
+      setInputDiskPath(res.filePath);
+      setNotification({ type: 'success', message: res.message });
+    } else if (res.message && !res.message.includes('Đã hủy')) {
+      setNotification({ type: 'error', message: res.message });
+    }
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  const handleOpenFileClick = async () => {
+    const res = await handleUserOpenFile();
+    if (res.success) {
+      if (activeDataFilePath) setInputDiskPath(activeDataFilePath);
+      setNotification({ type: 'success', message: res.message });
+    } else if (res.message && !res.message.includes('Đã hủy') && !res.message.includes('Vui lòng chọn')) {
+      setNotification({ type: 'error', message: res.message });
+    }
+    setTimeout(() => setNotification(null), 5000);
   };
 
   // Mở hộp thoại Windows SaveFileDialog để người dùng chọn vị trí file mới
@@ -354,19 +408,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           {/* Tab 2: Drive Sync, Local Storage Bridge & Kết nối Điện thoại PWA */}
           {activeTab === 'drive' && (
             <div className="space-y-4">
-              {/* KHỐI 1: GHI TRỰC TIẾP VÀO Ổ CỨNG MÁY TÍNH (WINDOWS LOCAL STORAGE BRIDGE) */}
+              {/* KHỐI 1: TỆP DỮ LIỆU HOẠT ĐỘNG CHÍNH (TỰ ĐỘNG LƯU TRỰC TIẾP TRÊN Ổ CỨNG) */}
               <div className="p-4 bg-[#091428] border-2 border-emerald-500/60 rounded-xl space-y-3.5 shadow-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-500/30 pb-2.5">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                     <span className="font-bold text-emerald-400 text-xs sm:text-sm uppercase tracking-wide flex items-center gap-1.5">
                       <HardDrive size={16} />
-                      1. Ghi Trực Tiếp Vào File Ổ Cứng Máy Tính (Windows Local Bridge)
+                      1. Tệp Dữ Liệu Hoạt Động (Tự Động Lưu Trực Tiếp Trên Ổ Cứng Máy Tính)
                     </span>
                   </div>
                   <span className="text-xs font-mono text-emerald-300 bg-emerald-950/80 px-2.5 py-1 rounded border border-emerald-700/60 flex items-center gap-1">
                     <CheckCircle2 size={13} className="text-emerald-400" />
-                    Trạng thái: <strong>Đang kết nối & Tự động lưu</strong>
+                    Trạng thái: <strong>Đang kết nối & Tự động lưu ngầm</strong>
                   </span>
                 </div>
 
@@ -375,10 +429,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                       <FolderOpen size={14} className="text-emerald-400" />
-                      <span>Đường dẫn file JSON trên máy tính (Nhập hoặc chỉnh sửa đường dẫn bất kỳ):</span>
+                      <span>Đường dẫn tệp dữ liệu JSON đang hoạt động:</span>
                     </label>
                     <span className="text-[11px] text-slate-400 font-mono">
-                      Lần ghi gần nhất: <strong className="text-emerald-300">{lastDiskWriteTime || lastSavedTime}</strong>
+                      Lần lưu gần nhất: <strong className="text-emerald-300">{lastDiskWriteTime || lastSavedTime}</strong>
                     </span>
                   </div>
 
@@ -388,66 +442,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         type="text"
                         value={inputDiskPath}
                         onChange={(e) => setInputDiskPath(e.target.value)}
-                        placeholder="Ví dụ: D:\1. BQL Ban Thach\CSDL (CAM XOA)\du_lieu_du_an.json"
+                        placeholder="Ví dụ: D:\1. BQL Ban Thach\1. Du an\projectm_data.json"
                         className="w-full bg-[#060c18] border border-emerald-600/50 rounded-lg px-3 py-2 text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-all placeholder:text-slate-600"
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleBrowseSaveLocation}
-                      className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-950/50 transition-colors shrink-0 cursor-pointer"
-                      title="Mở hộp thoại Windows để tự do đặt tên và chọn nơi lưu file mới"
-                    >
-                      <Save size={14} />
-                      <span>Chọn vị trí mới (Hộp thoại Windows)...</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleBrowseFolderLocation}
-                      className="px-3 py-2 rounded-lg bg-[#142542] hover:bg-[#1e3660] text-blue-300 border border-blue-500/50 font-medium text-xs flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
-                      title="Mở hộp thoại Windows để chọn thư mục lưu"
-                    >
-                      <FolderOpen size={14} />
-                      <span>Chọn thư mục...</span>
-                    </button>
                     <AppButton
                       size="sm"
                       variant="outline"
                       onClick={handleApplyDiskPath}
                       className="shrink-0 text-xs border-emerald-600/60 text-emerald-300 hover:bg-emerald-950/50"
                     >
-                      Áp dụng
+                      Áp dụng đường dẫn
                     </AppButton>
                   </div>
 
-                  {/* Các nút hành động tức thì với file ổ đĩa */}
+                  {/* 2 Nút hành động chính chuẩn hóa: LƯU DỮ LIỆU & LẤY DỮ LIỆU */}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <AppButton
-                      size="sm"
-                      variant="primary"
-                      icon={<Save size={14} />}
-                      onClick={handleSyncToDiskNow}
-                      className="shadow-md shadow-blue-950/60 font-semibold"
+                    <button
+                      type="button"
+                      onClick={handleSaveAsClick}
+                      className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-950/50 transition-all cursor-pointer active:scale-95"
+                      title="Lưu dữ liệu ra máy tính: Bấm vào đây để chọn thư mục lưu (ổ C, D, E hoặc Google Drive) và đặt tên cho tệp dữ liệu theo nhu cầu của bạn."
                     >
-                      💾 Ghi đè {projects.length} dự án vào file này ngay
-                    </AppButton>
-
-                    <AppButton
-                      size="sm"
-                      variant="secondary"
-                      icon={<RefreshCw size={14} />}
-                      onClick={handleReloadFromDiskNow}
-                      className="font-medium"
-                    >
-                      🔄 Nạp lại dữ liệu từ file này
-                    </AppButton>
+                      <Save size={14} />
+                      <span>💾 Lưu dữ liệu (Chọn nơi lưu / Đổi tên tệp)...</span>
+                    </button>
 
                     <button
-                      onClick={handleSyncToSelectedFile}
-                      className="px-2.5 py-1.5 rounded-lg bg-[#142038] hover:bg-[#1e2f50] text-slate-200 border border-[#2b3e66] text-xs font-medium flex items-center gap-1.5 transition-colors"
+                      type="button"
+                      onClick={handleOpenFileClick}
+                      className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-blue-950/50 transition-all cursor-pointer active:scale-95"
+                      title="Lấy dữ liệu từ máy tính: Bấm vào đây để chọn một tệp dữ liệu (.json / .projectm) đã có trên máy tính và sử dụng làm dữ liệu làm việc chính."
                     >
-                      <Link2 size={13} className="text-blue-400" />
-                      <span>Chọn file qua Windows Explorer...</span>
+                      <FolderOpen size={14} />
+                      <span>📂 Lấy dữ liệu (Chọn tệp có sẵn trên máy)...</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSyncToDiskNow}
+                      className="px-3 py-2 rounded-lg bg-[#142542] hover:bg-[#1e3660] text-slate-200 border border-[#2b3e66] text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Ghi đè dữ liệu hiện tại vào tệp này ngay lập tức"
+                    >
+                      <RefreshCw size={13} className="text-blue-400" />
+                      <span>Đồng bộ lại dữ liệu</span>
                     </button>
                   </div>
                 </div>
@@ -455,9 +493,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 {/* Grid tóm tắt thông số file trên ổ cứng */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1">
                   <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-0.5">
-                    <span className="text-slate-400 block text-[11px]">Dữ liệu phần mềm:</span>
-                    <strong className="text-emerald-300 font-mono text-xs block">
-                      {projects.length} dự án ({storageSizeKb} KB)
+                    <span className="text-slate-400 block text-[11px]">Tệp dữ liệu đang kết nối:</span>
+                    <strong className="text-emerald-300 font-mono text-xs block truncate" title={activeDataFileName || 'Chưa chọn'}>
+                      {activeDataFileName || 'Bộ nhớ máy'}
+                    </strong>
+                    <span className="text-[10px] text-slate-400 block">
+                      Dung lượng: {diskFileSize ? `${(diskFileSize / 1024).toFixed(1)} KB` : `${storageSizeKb} KB`}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-0.5">
+                    <span className="text-slate-400 block text-[11px]">Số lượng dự án trong phần mềm:</span>
+                    <strong className="text-blue-300 font-mono text-xs block">
+                      {projects.length} dự án
                     </strong>
                     <span className="text-[10px] text-slate-400 truncate block" title={projects.map((p) => p.name).join(' • ')}>
                       {projects.map((p) => p.name).join(' • ') || 'Chưa có dự án nào'}
@@ -465,31 +513,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   </div>
 
                   <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-0.5">
-                    <span className="text-slate-400 block text-[11px]">Dung lượng file trên ổ đĩa:</span>
-                    <strong className="text-blue-300 font-mono text-xs block">
-                      {diskFileSize ? `${(diskFileSize / 1024).toFixed(1)} KB (${diskFileSize} bytes)` : `${storageSizeKb} KB`}
-                    </strong>
-                    <span className="text-[10px] text-emerald-400 block">✓ File vật lý Windows</span>
-                  </div>
-
-                  <div className="p-2.5 bg-[#060c18] rounded-lg border border-[#1e2c4c] space-y-0.5">
-                    <span className="text-slate-400 block text-[11px]">Cơ chế bảo vệ:</span>
+                    <span className="text-slate-400 block text-[11px]">Cơ chế lưu trữ:</span>
                     <strong className="text-purple-300 font-mono text-xs block">
-                      Zero-Loss Persistence
+                      Tự động lưu ngầm 100%
                     </strong>
-                    <span className="text-[10px] text-slate-400 block">Miễn nhiễm 100% khi xóa cache</span>
+                    <span className="text-[10px] text-emerald-400 block">Miễn nhiễm khi xóa cache trình duyệt</span>
                   </div>
                 </div>
 
                 <div className="p-2.5 bg-emerald-950/40 border border-emerald-600/40 rounded-lg text-xs text-slate-300 leading-relaxed flex items-start gap-2">
                   <ShieldCheck size={16} className="text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    Mỗi khi bạn thêm, sửa, xóa bất kỳ dự án hay chi phí nào, hệ thống <strong>tự động ghi thẳng vào file vật lý trên máy tính sau 0.02 giây</strong>. Dù bạn có xóa sạch lịch sử web, xóa bộ nhớ đệm (cache) hay cài lại trình duyệt, dữ liệu của bạn trên ổ đĩa <code className="text-emerald-300 font-mono">D:\</code> hay <code className="text-emerald-300 font-mono">E:\</code> vẫn nguyên vẹn 100%!
+                    Mỗi khi bạn thêm, sửa, xóa bất kỳ dự án hay chi phí nào, hệ thống <strong>tự động ghi thẳng vào file vật lý trên máy tính</strong> mà hoàn toàn không cần cấp quyền lại. Dữ liệu trên ổ đĩa của bạn luôn an toàn 100%!
                   </div>
                 </div>
               </div>
 
-              {/* KHỐI 2: KẾT NỐI & SỬ DỤNG TRÊN ĐIỆN THOẠI DI ĐỘNG (PWA & WI-FI LAN) */}
+              {/* KHỐI 2: SỬ DỤNG & CÀI ĐẶT TRÊN ĐIỆN THOẠI DI ĐỘNG (PWA MOBILE) */}
               <div className="p-4 bg-[#0b1426] border-2 border-blue-500/60 rounded-xl space-y-3.5 shadow-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-500/30 pb-2.5">
                   <div className="flex items-center gap-2">
@@ -500,31 +540,103 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     </span>
                   </div>
                   <span className="text-xs font-mono text-blue-300 bg-blue-950/80 px-2.5 py-1 rounded border border-blue-700/60 flex items-center gap-1">
-                    <Wifi size={13} className="text-blue-400" />
-                    Mạng Wi-Fi nội bộ
+                    <Smartphone size={13} className="text-blue-400" />
+                    iOS (iPhone) & Android
                   </span>
                 </div>
 
-                {/* Hộp hiển thị địa chỉ truy cập điện thoại */}
-                <div className="p-3 bg-[#060c18] border border-blue-500/40 rounded-xl space-y-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="space-y-0.5">
-                      <span className="text-slate-400 text-xs block">Địa chỉ mở trên trình duyệt Điện thoại:</span>
-                      <div className="font-mono text-sm sm:text-base font-bold text-cyan-300 bg-cyan-950/60 px-3 py-1.5 rounded-lg border border-cyan-700/60 inline-flex items-center gap-2">
-                        <span>{networkInfo?.mobileUrl || 'http://192.168.1.47:3000'}</span>
+                {/* 2 PHƯƠNG THỨC KẾT NỐI: ONLINE GITHUB PAGES HOẶC WI-FI MÁY TÍNH */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Phương thức 1: Online (Khuyên dùng) */}
+                  <div className="p-3 bg-[#060c18] border border-blue-500/50 rounded-xl space-y-2 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-blue-300 text-xs flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-blue-400" />
+                          Cách 1: Trực tuyến (Khuyên dùng - Sử dụng mọi nơi)
+                        </span>
+                        <span className="text-[10px] bg-blue-950 text-blue-300 px-1.5 py-0.5 rounded border border-blue-700/50 font-mono">4G/5G/Wi-Fi</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mb-2">
+                        Truy cập được trên mọi điện thoại bằng mạng di động hoặc Wi-Fi bất kỳ mà không cần máy tính phải bật:
+                      </p>
+                      <div className="font-mono text-xs font-bold text-cyan-300 bg-cyan-950/60 px-3 py-2 rounded-lg border border-cyan-700/60 break-all select-all">
+                        {GITHUB_PAGES_URL}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="pt-2">
                       <AppButton
                         size="sm"
-                        variant={copiedMobileUrl ? 'success' : 'primary'}
-                        icon={copiedMobileUrl ? <Check size={14} /> : <Copy size={14} />}
-                        onClick={handleCopyMobileUrl}
-                        className="text-xs"
+                        variant={copiedGhUrl ? 'success' : 'primary'}
+                        icon={copiedGhUrl ? <Check size={14} /> : <Copy size={14} />}
+                        onClick={handleCopyGhUrl}
+                        className="text-xs w-full justify-center"
                       >
-                        {copiedMobileUrl ? '✓ Đã chép link' : 'Sao chép link'}
+                        {copiedGhUrl ? '✓ Đã sao chép liên kết trực tuyến' : 'Sao chép link trực tuyến'}
                       </AppButton>
+                    </div>
+                  </div>
+
+                  {/* Phương thức 2: Mạng Wi-Fi nội bộ */}
+                  <div className="p-3 bg-[#060c18] border border-slate-700/60 rounded-xl space-y-2 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+                          <Wifi size={14} className="text-emerald-400" />
+                          Cách 2: Mạng Wi-Fi nội bộ (Khi chạy từ máy tính)
+                        </span>
+                        <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono">Wi-Fi chung</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mb-2">
+                        Kết nối điện thoại vào cùng mạng Wi-Fi với máy tính cơ quan hoặc gia đình:
+                      </p>
+                      
+                      {lanMobileUrl ? (
+                        <div className="font-mono text-xs font-bold text-emerald-300 bg-emerald-950/60 px-3 py-2 rounded-lg border border-emerald-700/60 break-all select-all">
+                          {lanMobileUrl}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={customIp}
+                            onChange={(e) => handleSaveCustomIp(e.target.value)}
+                            placeholder="Nhập IP máy tính (VD: 192.168.1.15)"
+                            className="flex-1 bg-[#091224] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-emerald-300 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
+                          />
+                          <span className="text-xs font-mono text-slate-400">:{lanPort}</span>
+                        </div>
+                      )}
+
+                      <p className="text-[10px] text-slate-400 italic mt-1">
+                        * Mẹo xem IP máy tính: Mở CMD trên máy tính gõ lệnh <code className="text-emerald-300 font-mono">ipconfig</code> và tìm dòng IPv4 Address.
+                      </p>
+                    </div>
+
+                    <div className="pt-2">
+                      {lanMobileUrl ? (
+                        <AppButton
+                          size="sm"
+                          variant={copiedLanUrl ? 'success' : 'secondary'}
+                          icon={copiedLanUrl ? <Check size={14} /> : <Copy size={14} />}
+                          onClick={handleCopyLanUrl}
+                          className="text-xs w-full justify-center"
+                        >
+                          {copiedLanUrl ? '✓ Đã sao chép link Wi-Fi' : 'Sao chép link Wi-Fi nội bộ'}
+                        </AppButton>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const entered = prompt('Nhập địa chỉ IP của máy tính (xem bằng lệnh ipconfig trong CMD):', networkInfo?.primaryIp || '');
+                            if (entered) handleSaveCustomIp(entered.trim());
+                          }}
+                          className="w-full py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700 transition-colors"
+                        >
+                          Thiết lập địa chỉ IP máy tính...
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -534,30 +646,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   <div className="p-3 bg-[#081020] rounded-lg border border-[#1e2d4c] space-y-1">
                     <div className="font-bold text-cyan-300 flex items-center gap-1.5">
                       <span className="w-5 h-5 rounded-full bg-cyan-600/30 text-cyan-300 flex items-center justify-center font-mono text-xs">1</span>
-                      <span>Kết nối Wi-Fi</span>
+                      <span>Mở trình duyệt</span>
                     </div>
                     <p className="text-slate-300 text-[11px] leading-relaxed">
-                      Kết nối điện thoại vào cùng mạng Wi-Fi với máy tính cơ quan hoặc tại nhà.
+                      Trên iPhone mở <strong>Safari</strong>, trên Android mở <strong>Chrome</strong> và dán/nhập địa chỉ ở trên.
                     </p>
                   </div>
 
                   <div className="p-3 bg-[#081020] rounded-lg border border-[#1e2d4c] space-y-1">
                     <div className="font-bold text-cyan-300 flex items-center gap-1.5">
                       <span className="w-5 h-5 rounded-full bg-cyan-600/30 text-cyan-300 flex items-center justify-center font-mono text-xs">2</span>
-                      <span>Mở trình duyệt</span>
+                      <span>Cài đặt ứng dụng</span>
                     </div>
                     <p className="text-slate-300 text-[11px] leading-relaxed">
-                      Mở <strong>Safari</strong> (iPhone) hoặc <strong>Chrome</strong> (Android) và nhập địa chỉ ở trên.
+                      iPhone: bấm nút <strong>Chia sẻ (Share) ➔ "Thêm vào MH chính"</strong>.<br/>
+                      Android: bấm menu <strong>3 chấm ➔ "Cài đặt ứng dụng"</strong>.
                     </p>
                   </div>
 
                   <div className="p-3 bg-[#081020] rounded-lg border border-[#1e2d4c] space-y-1">
                     <div className="font-bold text-cyan-300 flex items-center gap-1.5">
                       <span className="w-5 h-5 rounded-full bg-cyan-600/30 text-cyan-300 flex items-center justify-center font-mono text-xs">3</span>
-                      <span>Thêm vào màn hình</span>
+                      <span>Mở App ProjectM</span>
                     </div>
                     <p className="text-slate-300 text-[11px] leading-relaxed">
-                      Bấm nút <strong>Chia sẻ / Menu 3 chấm</strong> ➔ Chọn <strong>"Thêm vào Màn hình chính" (Add to Home Screen)</strong>.
+                      Biểu tượng <strong>ProjectM</strong> xuất hiện trên màn hình chính như app thông thường, chạy toàn màn hình độc lập.
                     </p>
                   </div>
                 </div>
@@ -565,7 +678,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <div className="p-2.5 bg-blue-950/40 border border-blue-600/40 rounded-lg text-xs text-slate-300 leading-relaxed flex items-start gap-2">
                   <Smartphone size={16} className="text-blue-400 shrink-0 mt-0.5" />
                   <div>
-                    Sau khi cài, trên màn hình điện thoại của bạn sẽ xuất hiện <strong>biểu tượng ứng dụng ProjectM</strong> độc lập. Giao diện tự động tối ưu màn hình cảm ứng, có thanh điều hướng dưới đáy, cho phép tra cứu số liệu dự án, hợp đồng và nhập liệu trực tiếp ngay tại công trường!
+                    Ứng dụng trên điện thoại tự động căn chỉnh tối ưu màn hình cảm ứng, có thanh điều hướng dưới đáy, cho phép bạn tra cứu số liệu dự án, hợp đồng, tình hình giải ngân và tạo mới dự án trực tiếp ngay tại hiện trường!
                   </div>
                 </div>
               </div>

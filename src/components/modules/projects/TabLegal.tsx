@@ -393,13 +393,13 @@ export const TabLegal: React.FC<TabLegalProps> = ({
         emptyMessage="Chưa có hồ sơ pháp lý nào. Bấm 'Thêm mới' ở góc trên để tạo hồ sơ và đính kèm file."
       />
 
-      {/* Modal Thêm / Sửa - Cấp 2 */}
+      {/* Modal Thêm / Sửa - Cấp 2 Mở Full Screen 100% */}
       <AppModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editingItem ? 'Sửa Hồ Sơ Pháp Lý' : 'Thêm Mới Hồ Sơ Pháp Lý'}
         level={2}
-        maxWidth="full"
+        fullScreen={true}
         footer={
           <div className="flex items-center justify-end gap-2.5">
             <AppButton variant="secondary" size="sm" onClick={() => setModalOpen(false)}>

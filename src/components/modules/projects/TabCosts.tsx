@@ -545,12 +545,13 @@ export const TabCosts: React.FC<TabCostsProps> = ({
         emptyMessage="Chưa có gói thầu / nội dung chi phí nào. Bấm 'Thêm mới' ở góc trên để tạo gói thầu."
       />
 
-      {/* Modal Thêm / Sửa - Cấp 2 (Bằng 90% Cấp 1 theo yêu cầu 4) */}
+      {/* Modal Thêm / Sửa - Cấp 2 Mở Full Screen 100% */}
       <AppModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editingItem ? 'Sửa Nội Dung Chi Phí & Hợp Đồng' : 'Thêm Mới Nội Dung Chi Phí'}
         level={2}
+        fullScreen={true}
         footer={
           <div className="flex items-center justify-end gap-2.5">
             <AppButton variant="secondary" size="sm" onClick={() => setModalOpen(false)}>

@@ -331,12 +331,13 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
         emptyMessage="Chưa có đợt nghiệm thu / thanh toán nào. Bấm 'Thêm mới' ở góc trên để tạo đợt nghiệm thu."
       />
 
-      {/* Modal Thêm / Sửa - Cấp 2 */}
+      {/* Modal Thêm / Sửa - Cấp 2 Mở Full Screen 100% */}
       <AppModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editingItem ? 'Sửa Đợt Nghiệm Thu / Thanh Toán' : 'Thêm Mới Đợt Nghiệm Thu'}
         level={2}
+        fullScreen={true}
         footer={
           <div className="flex items-center justify-end gap-2.5">
             <AppButton variant="secondary" size="sm" onClick={() => setModalOpen(false)}>

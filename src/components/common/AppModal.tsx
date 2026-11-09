@@ -26,13 +26,13 @@ export const AppModal: React.FC<AppModalProps> = ({
   maxWidth,
   fullScreen,
 }) => {
-  // Mặc định mở Full Screen 100% cho các Modal Cấp 1 (thêm mới / chỉnh sửa chính) nếu không có giới hạn maxWidth
-  const defaultFullScreen = fullScreen !== undefined ? fullScreen : (level === 1 && !maxWidth);
+  // Mặc định mở Full Screen 100% cho các Modal Cấp 1 & Cấp 2 (thêm mới / chỉnh sửa chính) nếu không có giới hạn maxWidth thu nhỏ
+  const defaultFullScreen = fullScreen !== undefined ? fullScreen : ((level === 1 || level === 2) && (!maxWidth || maxWidth === 'full'));
   const modalIdRef = useRef<string>(`modal-${Math.random().toString(36).slice(2, 9)}`);
   const [isFull, setIsFull] = useState<boolean>(defaultFullScreen);
 
   useEffect(() => {
-    setIsFull(fullScreen !== undefined ? fullScreen : (level === 1 && !maxWidth));
+    setIsFull(fullScreen !== undefined ? fullScreen : ((level === 1 || level === 2) && (!maxWidth || maxWidth === 'full')));
   }, [fullScreen, isOpen, level, maxWidth]);
 
   useEffect(() => {
