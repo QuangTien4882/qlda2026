@@ -24,14 +24,16 @@ export const AppModal: React.FC<AppModalProps> = ({
   footer,
   level = 1,
   maxWidth,
-  fullScreen = false,
+  fullScreen,
 }) => {
+  // Mặc định mở Full Screen 100% cho các Modal Cấp 1 (thêm mới / chỉnh sửa chính) nếu không có giới hạn maxWidth
+  const defaultFullScreen = fullScreen !== undefined ? fullScreen : (level === 1 && !maxWidth);
   const modalIdRef = useRef<string>(`modal-${Math.random().toString(36).slice(2, 9)}`);
-  const [isFull, setIsFull] = useState<boolean>(fullScreen);
+  const [isFull, setIsFull] = useState<boolean>(defaultFullScreen);
 
   useEffect(() => {
-    setIsFull(fullScreen);
-  }, [fullScreen, isOpen]);
+    setIsFull(fullScreen !== undefined ? fullScreen : (level === 1 && !maxWidth));
+  }, [fullScreen, isOpen, level, maxWidth]);
 
   useEffect(() => {
     if (isOpen) {
@@ -158,8 +160,8 @@ export const AppModal: React.FC<AppModalProps> = ({
           </div>
         </div>
 
-        {/* Body Modal */}
-        <div className="p-3 sm:p-4 overflow-hidden flex-1 text-slate-200 min-h-0 flex flex-col">
+        {/* Body Modal - Cho phép cuộn mượt mà để không bao giờ bị che khuất nội dung bên dưới */}
+        <div className="p-3 sm:p-4 overflow-y-auto flex-1 text-slate-200 min-h-0 flex flex-col">
           {children}
         </div>
 

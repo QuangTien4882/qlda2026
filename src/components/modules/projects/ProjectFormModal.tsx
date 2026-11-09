@@ -260,7 +260,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4 text-xs md:text-sm">
+      <form onSubmit={handleSubmit} className="space-y-4 text-xs md:text-sm pb-6">
         {error && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs">
             {error}
@@ -285,6 +285,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 type="number"
                 value={stt}
                 onChange={(e) => setStt(parseInt(e.target.value, 10) || 1)}
+                onFocus={(e) => e.target.select()}
                 className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
                 required
               />

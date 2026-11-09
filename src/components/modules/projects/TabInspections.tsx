@@ -356,6 +356,7 @@ export const TabInspections: React.FC<TabInspectionsProps> = ({
                 type="number"
                 value={stt}
                 onChange={(e) => setStt(parseInt(e.target.value, 10) || 1)}
+                onFocus={(e) => e.target.select()}
                 className="w-full bg-[#080d1a] border border-[#232f4e] rounded-lg px-3 py-2 text-slate-100 font-mono"
               />
             </div>

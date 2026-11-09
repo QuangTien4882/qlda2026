@@ -117,6 +117,27 @@ export const VnNumberInput: React.FC<VnNumberInputProps> = ({
     });
   };
 
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    // Nếu giá trị hiện tại là '0' hoặc 0, tự động xóa trắng ô để người dùng nhập số mới không bị lẫn số 0
+    const num = parseVnNumber(displayValue);
+    if (displayValue === '0' || num === 0) {
+      setDisplayValue('');
+    } else {
+      // Nếu có giá trị khác 0, bôi đen toàn bộ để người dùng có thể gõ đè ngay
+      e.target.select();
+    }
+  };
+
+  const handleBlur = () => {
+    // Khi người dùng click ra ngoài, nếu ô đang để trống thì trả về '0'
+    if (displayValue.trim() === '') {
+      setDisplayValue('0');
+      if (onChange) {
+        onChange(0, '0');
+      }
+    }
+  };
+
   return (
     <div className={`w-full ${className}`}>
       {label && (
@@ -137,6 +158,8 @@ export const VnNumberInput: React.FC<VnNumberInputProps> = ({
           disabled={disabled}
           value={displayValue}
           onChange={handleChange}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           placeholder={placeholder}
           className={`w-full bg-[#0b1222] border rounded-lg py-2 text-slate-100 placeholder:italic placeholder:text-slate-500 font-mono text-right transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
             prefix ? 'pl-8' : 'pl-3'

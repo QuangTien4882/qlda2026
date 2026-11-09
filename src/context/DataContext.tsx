@@ -54,7 +54,7 @@ import { formatCustomVnDate } from '../utils/dateUtils';
 
 const STORAGE_KEY = 'projectm_master_database_v3';
 const APP_VERSION = '1.0.0';
-const DEFAULT_DISK_PATH = 'D:\\1. BQL Ban Thach\\CSDL (CAM XOA)\\du_lieu_du_an.json';
+const DEFAULT_DISK_PATH = 'D:\\1. BQL Ban Thach\\1. Du an\\projectm_data.json';
 const DISK_PATH_STORAGE_KEY = 'projectm_disk_file_path';
 
 interface DataContextType {
@@ -327,17 +327,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLastSavedTime(timeStr);
       calculateStorage(dbWithMeta);
 
-      // 3. Ghi trực tiếp vào file JSON trên ổ cứng máy tính vật lý qua Local Storage Bridge API
-      if (diskFilePath) {
+      // 3. Ghi trực tiếp vào file JSON trên ổ cứng máy tính vật lý qua Local Storage Bridge API (Không cần quyền)
+      const bridgeTargets = Array.from(new Set([
+        diskFilePath,
+        'D:\\1. BQL Ban Thach\\1. Du an\\projectm_data.json',
+        'D:\\1. BQL Ban Thach\\1. Du an\\Duan_Data.json',
+      ])).filter(Boolean);
+
+      for (const targetPath of bridgeTargets) {
         try {
-          const bridgeResult = await writeDatabaseToFileViaBridge(diskFilePath, dbWithMeta);
+          const bridgeResult = await writeDatabaseToFileViaBridge(targetPath, dbWithMeta);
           if (bridgeResult.success) {
             setIsBridgeActive(true);
             setDiskFileSize(bridgeResult.sizeBytes || 0);
             setLastDiskWriteTime(timeStr);
           }
-        } catch (bridgeErr) {
-          console.warn('[Storage Bridge] Tự động ghi ổ đĩa thất bại:', bridgeErr);
+        } catch {
+          // ignore
         }
       }
 
@@ -411,6 +417,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [database]);
+
+  // Tự động kích hoạt quyền đồng bộ thư mục ngay khi người dùng tương tác lần đầu (User Gesture)
+  useEffect(() => {
+    if (localFolderSyncStatus.status !== 'permission_needed' || !localFolderHandleRef.current) return;
+
+    const handleUserGestureActivate = async () => {
+      try {
+        if (!localFolderHandleRef.current) return;
+        const hasPerm = await verifyDirectoryPermission(localFolderHandleRef.current, true);
+        if (hasPerm) {
+          setLocalFolderSyncStatus((prev) => ({
+            ...prev,
+            hasPermission: true,
+            status: 'synced',
+          }));
+          await syncDatabaseToLocalDirectory(localFolderHandleRef.current, database);
+        }
+      } catch (e) {
+        console.warn('[LocalFolderSync] Không thể tự động kích hoạt quyền qua user gesture:', e);
+      }
+    };
+
+    window.addEventListener('click', handleUserGestureActivate, { once: true });
+    window.addEventListener('keydown', handleUserGestureActivate, { once: true });
+    return () => {
+      window.removeEventListener('click', handleUserGestureActivate);
+      window.removeEventListener('keydown', handleUserGestureActivate);
+    };
+  }, [localFolderSyncStatus.status, database]);
 
   // Khởi động hệ thống: Bảo vệ lưu trữ bền vững, nạp từ ổ cứng / IndexedDB & kích hoạt Auto-backup hàng ngày
   useEffect(() => {

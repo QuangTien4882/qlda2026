@@ -11,6 +11,7 @@ import { BackupManagerModal } from './components/modules/settings/BackupManagerM
 import { ShortcutsGuideModal } from './components/common/ShortcutsGuideModal';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useDrafting } from './context/DraftingContext';
+import { useSettings } from './context/SettingsContext';
 import { Save, CheckCircle2, Loader2 } from 'lucide-react';
 
 // Lazy load module soạn thảo văn bản (giảm initial bundle ~200KB)
@@ -27,6 +28,7 @@ export const AppContent: React.FC = () => {
   const [isOpenShortcutsModal, setIsOpenShortcutsModal] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
   const { isDraftingDirty } = useDrafting();
+  const { activeProjectInfo } = useSettings();
 
   useEffect(() => {
     if (currentMenu === 'drafting') {
@@ -36,6 +38,12 @@ export const AppContent: React.FC = () => {
 
   // Cảnh báo khi người dùng chuyển trang lúc đang có dữ liệu soạn thảo chưa lưu
   const handleSelectMenu = (menu: MainMenuType) => {
+    // Nếu người dùng bấm vào "Danh mục dự án" khi đang ở trong chi tiết một dự án:
+    // Lập tức gọi onBack() để quay trở lại màn hình Danh mục các dự án
+    if (menu === 'projects' && activeProjectInfo?.onBack) {
+      activeProjectInfo.onBack();
+    }
+
     if (menu === currentMenu) return;
     if (currentMenu === 'drafting' && isDraftingDirty) {
       const confirmLeave = window.confirm(
