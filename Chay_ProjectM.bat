@@ -7,7 +7,7 @@ echo ==========================================================
 echo.
 echo Đang khởi động hệ thống và mở giao diện phần mềm...
 echo.
-start "" "http://localhost:3000"
+start "" "http://localhost:3030"
 npm run dev
 pause
 

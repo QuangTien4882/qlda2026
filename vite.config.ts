@@ -183,8 +183,8 @@ function localStorageBridgePlugin(): Plugin {
               ips.find((ip) => ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) ||
               ips[0] ||
               '127.0.0.1';
-            const hostHeader = req.headers.host || 'localhost:3000';
-            const port = hostHeader.split(':')[1] || '3000';
+            const hostHeader = req.headers.host || 'localhost:3030';
+            const port = hostHeader.split(':')[1] || '3030';
 
             res.setHeader('Content-Type', 'application/json');
             res.end(
@@ -411,7 +411,8 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: 3030,
+    strictPort: true,
     host: true,
   },
   build: {

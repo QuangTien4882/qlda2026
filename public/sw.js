@@ -1,16 +1,16 @@
 // ProjectM Service Worker for PWA (Offline & Mobile support)
-const CACHE_NAME = 'projectm-shell-v1';
+const CACHE_NAME = 'projectm-shell-v4';
 
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon.svg',
-  '/icon-192.png',
-  '/icon-512.png',
+  './',
+  './index.html',
+  './manifest.json',
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png',
 ];
 
-// Install: Cache core assets
+// Install: Cache core assets and take control immediately
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
@@ -22,13 +22,14 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: Clean up old caches
+// Activate: Clean up all old caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('[SW] Deleting old cache:', key);
             return caches.delete(key);
           }
         })
@@ -37,7 +38,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Network first for APIs, Cache fallback for static assets
+// Fetch: Network-first for everything when online, cache fallback when offline
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -51,7 +52,6 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
-        // Cache successful responses for GET requests
         if (event.request.method === 'GET' && networkResponse && networkResponse.status === 200) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -61,14 +61,12 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       })
       .catch(() => {
-        // Fallback to cache when offline
         return caches.match(event.request).then((cachedResponse) => {
           if (cachedResponse) {
             return cachedResponse;
           }
-          // If request is navigation, fallback to root / index.html
           if (event.request.mode === 'navigate') {
-            return caches.match('/');
+            return caches.match('./') || caches.match('./index.html') || caches.match('/index.html');
           }
           return new Response('Offline: Content not available', { status: 503, statusText: 'Offline' });
         });

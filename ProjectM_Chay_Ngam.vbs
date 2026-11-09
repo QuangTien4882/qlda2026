@@ -10,7 +10,14 @@ strCurrentDir = fso.GetParentFolderName(WScript.ScriptFullName)
 WshShell.CurrentDirectory = strCurrentDir
 WshShell.Run "cmd.exe /c npm run dev", 0, False
 
-' 2. Đợi 2 giây để server sẵn sàng rồi tự động mở trình duyệt
+' 2. Đợi 2 giây để server sẵn sàng rồi tự động mở ứng dụng
 WScript.Sleep 2000
-WshShell.Run "http://localhost:3000"
+
+Dim chromePath
+chromePath = WshShell.ExpandEnvironmentStrings("%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe")
+If fso.FileExists(chromePath) Then
+  WshShell.Run """" & chromePath & """ --app=http://localhost:3030", 1, False
+Else
+  WshShell.Run "http://localhost:3030"
+End If
 

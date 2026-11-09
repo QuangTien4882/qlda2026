@@ -6,10 +6,23 @@ import { DataProvider } from './context/DataContext';
 import { DraftingProvider } from './context/DraftingContext';
 import './index.css';
 
-// Register PWA Service Worker
+// Register PWA Service Worker & auto-update when new version is available
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+    navigator.serviceWorker.register('./sw.js').then((registration) => {
+      registration.update();
+      registration.onupdatefound = () => {
+        const installingWorker = registration.installing;
+        if (installingWorker) {
+          installingWorker.onstatechange = () => {
+            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('[PWA] New version ready, reloading...');
+              window.location.reload();
+            }
+          };
+        }
+      };
+    }).catch((err) => {
       console.warn('[PWA] ServiceWorker registration failed:', err);
     });
   });
