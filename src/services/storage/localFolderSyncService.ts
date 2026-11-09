@@ -220,20 +220,6 @@ export async function syncDatabaseToLocalDirectory(
   data: AppDatabase
 ): Promise<{ success: boolean; message: string; writtenAt: string; sizeBytes: number }> {
   try {
-    // CƠ CHẾ BẢO VỆ DỮ LIỆU: Nếu data hiện tại rỗng (0 dự án), kiểm tra xem file trên đĩa có dữ liệu không
-    if (!data.projects || data.projects.length === 0) {
-      const existing = await readBestDatabaseFromDirectory(dirHandle);
-      if (existing.success && (existing.projectCount || 0) > 0) {
-        console.warn(`[LocalFolderSync] Ngăn chặn ghi đè dữ liệu rỗng lên tệp ${existing.fileName} chứa ${existing.projectCount} dự án.`);
-        return {
-          success: false,
-          message: `Từ chối ghi: Bộ nhớ tạm hiện tại rỗng (0 dự án). Hệ thống tự động bảo vệ tệp "${existing.fileName}" chứa ${existing.projectCount} dự án trên máy của bạn không bị xóa.`,
-          writtenAt: '',
-          sizeBytes: 0,
-        };
-      }
-    }
-
     const fileHandle = await dirHandle.getFileHandle('projectm_data.json', { create: true });
     const writable = await fileHandle.createWritable();
     const jsonStr = JSON.stringify(data, null, 2);

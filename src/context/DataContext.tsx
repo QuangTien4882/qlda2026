@@ -385,14 +385,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Debounce timer ref để tránh ghi đĩa quá nhiều khi database thay đổi liên tục
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Lưu tự động mỗi khi database thay đổi (debounce 800ms để giảm tải ghi đĩa)
+  // Lưu tự động mỗi khi database thay đổi (debounce 200ms để phản hồi tức thời)
   useEffect(() => {
     if (persistTimerRef.current) {
       clearTimeout(persistTimerRef.current);
     }
     persistTimerRef.current = setTimeout(() => {
       persistDatabase(database);
-    }, 800);
+    }, 200);
 
     return () => {
       if (persistTimerRef.current) {
@@ -400,6 +400,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
   }, [database, persistDatabase]);
+
+  // Đảm bảo dữ liệu được ghi tức thì vào LocalStorage nếu người dùng bấm F5 hoặc đóng cửa sổ
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(database));
+      } catch {}
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [database]);
 
   // Khởi động hệ thống: Bảo vệ lưu trữ bền vững, nạp từ ổ cứng / IndexedDB & kích hoạt Auto-backup hàng ngày
   useEffect(() => {
@@ -423,19 +434,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               status: folderRestored.hasPermission ? 'synced' : 'permission_needed',
             });
 
-            // Tự động rà quét và nạp bản CSDL có sẵn nếu có quyền truy cập
+            // Chỉ rà quét danh sách file trong thư mục để hiển thị lên giao diện (KHÔNG tự ý ghi đè dữ liệu khi F5)
             if (folderRestored.hasPermission) {
               try {
                 const scanned = await scanDirectoryForDatabaseFiles(folderRestored.handle);
                 if (isMounted) setDetectedFolderFiles(scanned);
-
-                const bestCheck = await readBestDatabaseFromDirectory(folderRestored.handle);
-                if (bestCheck.success && bestCheck.data && (bestCheck.data.projects?.length || 0) > 0) {
-                  if (isMounted && (!database.projects || database.projects.length === 0)) {
-                    setDatabase(bestCheck.data);
-                    await saveDatabaseToIdb(bestCheck.data);
-                  }
-                }
               } catch (scanErr) {
                 console.warn('[LocalFolderSync] Lỗi rà quét tệp thư mục lúc khởi động:', scanErr);
               }
@@ -445,35 +448,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.warn('[LocalFolderSync] Lỗi khôi phục thư mục đồng bộ:', fInitErr);
         }
 
-        // 1. Kiểm tra nạp từ file ổ đĩa máy tính trước (nếu có Bridge và file chứa dữ liệu hợp lệ)
-        let loadedDb: AppDatabase | null = null;
+        // 1. Nạp từ IndexedDB (Nguồn dữ liệu chính xác và mới nhất của người dùng)
+        let currentData: AppDatabase | null = null;
         try {
-          const checkRes = await checkFileOnDiskViaBridge(diskFilePath);
-          if (checkRes.exists) {
-            const readRes = await readDatabaseFromFileViaBridge(diskFilePath);
-            if (readRes.success && readRes.data?.projects && readRes.data.projects.length > 0) {
-              loadedDb = readRes.data;
-              if (isMounted) {
-                setDatabase(readRes.data);
-                setIsBridgeActive(true);
-                setDiskFileSize(readRes.sizeBytes || 0);
-                const now = new Date();
-                setLastDiskWriteTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`);
-              }
+          const idbData = await loadDatabaseFromIdb();
+          if (isMounted && idbData && idbData.metadata?.lastSavedAt) {
+            currentData = idbData;
+            setDatabase(idbData);
+          } else {
+            // Nếu IndexedDB chưa có, kiểm tra migrate từ LocalStorage
+            const migrated = await autoMigrateFromLocalStorageIfEmpty(STORAGE_KEY);
+            if (isMounted && migrated) {
+              currentData = migrated;
+              setDatabase(migrated);
             }
           }
-        } catch (bridgeErr) {
-          console.warn('[Bridge Startup] Không thể nạp từ ổ đĩa:', bridgeErr);
-        }
-
-        // 2. Nếu file ổ đĩa chưa có dữ liệu, nạp từ IndexedDB hoặc migrate từ LocalStorage
-        let currentData = loadedDb;
-        if (!currentData) {
-          const migratedOrExisting = await autoMigrateFromLocalStorageIfEmpty(STORAGE_KEY);
-          if (isMounted && migratedOrExisting && migratedOrExisting.projects && migratedOrExisting.projects.length > 0) {
-            currentData = migratedOrExisting;
-            setDatabase(migratedOrExisting);
-          }
+        } catch (idbErr) {
+          console.warn('[Storage Startup] Lỗi nạp từ IndexedDB:', idbErr);
         }
 
         // 3. Nếu bộ nhớ có dự án mà file đĩa chưa có hoặc rỗng, lập tức ghi thẳng vào file đĩa!
@@ -619,13 +610,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newPlanTasks = { ...(prev.planTasks || {}) };
       delete newPlanTasks[projectId];
 
-       const newCostBreakdowns = { ...(prev.costBreakdowns || {}) };
+      const newCostBreakdowns = { ...(prev.costBreakdowns || {}) };
       delete newCostBreakdowns[projectId];
 
       const newContractAppendices = { ...(prev.contractAppendices || {}) };
       delete newContractAppendices[projectId];
 
-      return {
+      const updated: AppDatabase = {
         ...prev,
         projects: newProjects,
         projectDetails: newDetails,
@@ -636,7 +627,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         planTasks: newPlanTasks,
         costBreakdowns: newCostBreakdowns,
         contractAppendices: newContractAppendices,
+        metadata: {
+          ...prev.metadata,
+          lastSavedAt: new Date().toISOString(),
+          totalProjects: newProjects.length,
+        },
       };
+
+      // Ghi ngay lập tức vào LocalStorage & IndexedDB để đảm bảo F5 lập tức không bị mất
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        saveDatabaseToIdb(updated);
+      } catch (e) {
+        // ignore
+      }
+
+      return updated;
     });
   };
 
@@ -1076,8 +1082,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resetDatabaseToDefaults = () => {
     const defaults = getDefaultDatabase();
     setDatabase(defaults);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults, null, 2));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults, null, 2));
+    } catch {}
+    saveDatabaseToIdb(defaults);
+    if (localFolderHandleRef.current) {
+      syncDatabaseToLocalDirectory(localFolderHandleRef.current, defaults);
+    }
   };
 
   // ==================== CHỌN THƯ MỤC LƯU FILE TRỰC TIẾP (DIRECTORY PICKER) ====================
