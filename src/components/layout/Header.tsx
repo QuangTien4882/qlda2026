@@ -1,12 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useSettings } from '../../context/SettingsContext';
 import { useData } from '../../context/DataContext';
-import { Menu, FileSpreadsheet, ArrowLeft, HardDrive, Clock, AlertTriangle, FolderSync } from 'lucide-react';
+import { Menu, FileSpreadsheet, ArrowLeft, Clock, AlertTriangle, Save, FolderOpen } from 'lucide-react';
 import { AppBadge } from '../common/AppBadge';
 import { formatVnNumber } from '../../utils/numberUtils';
 import { calculateContractDeadline, getPackageEffectiveDeadline } from '../../utils/dateUtils';
 import { ContractDeadlineAlertModal } from '../modules/projects/ContractDeadlineAlertModal';
-import { LocalFolderSyncModal } from '../modules/settings/LocalFolderSyncModal';
 
 interface HeaderProps {
   onToggleMobileMenu: () => void;
@@ -24,16 +23,45 @@ export const Header: React.FC<HeaderProps> = ({
   const { headerTitle, activeProjectInfo } = useSettings();
   const { 
     lastSavedTime, 
-    isDirectFileConnected, 
     projects, 
     costPackages, 
     contractAppendices,
-    localFolderSyncStatus 
+    activeDataFilePath,
+    activeDataFileName,
+    handleUserSaveAs,
+    handleUserOpenFile
   } = useData();
   const displayTitle = title || headerTitle;
 
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
-  const [isFolderSyncModalOpen, setIsFolderSyncModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleSaveClick = async () => {
+    const res = await handleUserSaveAs();
+    if (res.message) {
+      alert(res.message);
+    }
+  };
+
+  const handleOpenClick = async () => {
+    const res = await handleUserOpenFile();
+    if (res.success) {
+      alert(res.message);
+    } else if (res.message && res.message.includes('Vui lòng chọn một tệp')) {
+      fileInputRef.current?.click();
+    } else if (res.message && !res.message.includes('Đã hủy')) {
+      alert(res.message);
+    }
+  };
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const res = await handleUserOpenFile(file);
+      alert(res.message);
+      e.target.value = '';
+    }
+  };
 
   // Tính số lượng hợp đồng sắp hết hạn hoặc quá hạn trên toàn hệ thống
   const { overdueCount, urgentCount, totalWarningCount } = useMemo(() => {
@@ -187,44 +215,55 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Nút chỉ báo Đồng bộ Thư mục máy tính (Local Folder Auto-Sync) */}
-        {localFolderSyncStatus.isConnected ? (
-          <button
-            type="button"
-            onClick={() => setIsFolderSyncModalOpen(true)}
-            title={`Thư mục máy tính tự động đồng bộ: "${localFolderSyncStatus.folderName}". Bấm để cấu hình hoặc ngắt kết nối.`}
-            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#09152b] hover:bg-[#112447] border border-blue-500/40 text-blue-300 text-xs cursor-pointer transition-colors shadow-sm"
-          >
-            <FolderSync size={13} className="text-blue-400 shrink-0" />
-            <span className={`w-2 h-2 rounded-full ${localFolderSyncStatus.status === 'permission_needed' ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse shrink-0`} />
-            <span className="text-[11px] font-mono text-slate-200 max-w-[120px] truncate">
-              {localFolderSyncStatus.folderName}
-            </span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setIsFolderSyncModalOpen(true)}
-            title="Kết nối thư mục trên máy tính để tự động đồng bộ cơ sở dữ liệu."
-            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0c1626] hover:bg-[#14233c] border border-slate-700/60 text-slate-400 hover:text-slate-200 text-xs cursor-pointer transition-colors"
-          >
-            <FolderSync size={13} />
-            <span className="text-[11px]">Đồng bộ thư mục</span>
-          </button>
-        )}
-
-        {/* Nút chỉ báo lưu trữ Offline & Drive */}
+        {/* 1. NÚT LƯU DỮ LIỆU */}
         <button
           type="button"
-          onClick={onOpenSyncModal}
-          title="Trạng thái lưu trữ Offline & Google Drive. Bấm để mở Sao lưu / Nạp file JSON."
-          className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0c1626] hover:bg-[#14233c] border border-emerald-500/30 text-emerald-400 text-xs cursor-pointer transition-colors shadow-sm"
+          onClick={handleSaveClick}
+          title="Lưu dữ liệu ra máy tính: Bấm vào đây để chọn thư mục lưu (ổ C, D, E hoặc Google Drive) và đặt tên cho tệp dữ liệu theo nhu cầu của bạn."
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/70 text-emerald-200 hover:text-white text-xs font-semibold cursor-pointer transition-all shadow-sm active:scale-95"
         >
-          <span className={`w-2 h-2 rounded-full ${isDirectFileConnected ? 'bg-cyan-400' : 'bg-emerald-400'} animate-pulse`} />
-          <span className="text-[11px] font-mono text-slate-300">
-            {isDirectFileConnected ? 'File đĩa' : 'Đã lưu'}: <strong className="text-emerald-400">{lastSavedTime}</strong>
-          </span>
+          <Save size={14} className="text-emerald-400 shrink-0" />
+          <span className="hidden sm:inline">Lưu dữ liệu</span>
         </button>
+
+        {/* 2. NÚT LẤY DỮ LIỆU */}
+        <button
+          type="button"
+          onClick={handleOpenClick}
+          title="Lấy dữ liệu từ máy tính: Bấm vào đây để chọn một tệp dữ liệu (.json / .projectm) đã có trên máy tính và sử dụng làm dữ liệu làm việc chính."
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-950/80 hover:bg-blue-900 border border-blue-600/70 text-blue-200 hover:text-white text-xs font-semibold cursor-pointer transition-all shadow-sm active:scale-95"
+        >
+          <FolderOpen size={14} className="text-blue-400 shrink-0" />
+          <span className="hidden sm:inline">Lấy dữ liệu</span>
+        </button>
+
+        {/* Input file ẩn phục vụ fallback trên trình duyệt web thông thường */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept=".json,.projectm"
+          onChange={handleFileInputChange}
+          className="hidden"
+        />
+
+        {/* 3. CHỈ BÁO FILE DỮ LIỆU ĐANG KẾT NỐI & TỰ ĐỘNG LƯU NGẦM */}
+        <div
+          className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0c1626] border border-slate-700/60 text-xs"
+          title={
+            activeDataFilePath
+              ? `Tệp dữ liệu đang hoạt động: ${activeDataFilePath}\nMọi thay đổi đều được tự động lưu ngầm vào tệp này mà không cần hỏi lại.`
+              : 'Dữ liệu được lưu trữ tự động trong bộ nhớ thiết bị.'
+          }
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span className="text-[11px] font-mono text-slate-300 max-w-[130px] truncate">
+            {activeDataFileName || 'Bộ nhớ máy'}
+          </span>
+          <span className="text-[10px] text-slate-500">•</span>
+          <span className="text-[11px] font-mono text-emerald-400">
+            {lastSavedTime}
+          </span>
+        </div>
 
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#111a2e] border border-blue-500/40 shadow-sm shrink-0">
           <FileSpreadsheet size={15} className="text-blue-400 shrink-0" />
@@ -248,12 +287,6 @@ export const Header: React.FC<HeaderProps> = ({
         isOpen={isDeadlineModalOpen}
         onClose={() => setIsDeadlineModalOpen(false)}
         onNavigateToCostPackage={onNavigateToCostPackage}
-      />
-
-      {/* Modal Đồng bộ Thư mục máy tính */}
-      <LocalFolderSyncModal
-        isOpen={isFolderSyncModalOpen}
-        onClose={() => setIsFolderSyncModalOpen(false)}
       />
     </header>
   );

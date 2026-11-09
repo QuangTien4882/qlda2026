@@ -197,3 +197,27 @@ export async function browseFolderLocationViaBridge(
     };
   }
 }
+
+/**
+ * Mở hộp thoại OpenFileDialog của Windows thông qua Local Bridge
+ * Cho phép người dùng duyệt và chọn file dữ liệu đã có (.json hoặc .projectm)
+ */
+export async function browseOpenLocationViaBridge(
+  defaultPath?: string
+): Promise<{ success: boolean; filePath?: string; message?: string; cancelled?: boolean }> {
+  try {
+    const res = await fetch('/api/storage/browse-open', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ defaultPath }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Không thể mở hộp thoại chọn file: ${err?.message || 'Lỗi mạng nội bộ'}`,
+    };
+  }
+}

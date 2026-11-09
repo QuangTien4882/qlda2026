@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   ProjectListItem, 
   ProjectDetailItem, 
@@ -29,7 +29,9 @@ import {
   writeDatabaseToFileViaBridge, 
   readDatabaseFromFileViaBridge, 
   checkFileOnDiskViaBridge, 
-  requestPersistentStorage 
+  requestPersistentStorage,
+  browseSaveLocationViaBridge,
+  browseOpenLocationViaBridge
 } from '../services/storage/localBridgeService';
 import { 
   exportFullProjectMPackage, 
@@ -56,6 +58,8 @@ const STORAGE_KEY = 'projectm_master_database_v3';
 const APP_VERSION = '1.0.0';
 const DEFAULT_DISK_PATH = 'D:\\1. BQL Ban Thach\\1. Du an\\projectm_data.json';
 const DISK_PATH_STORAGE_KEY = 'projectm_disk_file_path';
+export const ACTIVE_DATA_FILE_KEY = 'projectm_active_data_file_path';
+export const HAS_CONFIGURED_STORAGE_KEY = 'projectm_has_configured_storage';
 
 interface DataContextType {
   // Dữ liệu
@@ -75,6 +79,14 @@ interface DataContextType {
   storageSizeKb: number;
   isDirectFileConnected: boolean;
   connectedFileName: string;
+
+  // 4 YÊU CẦU MỚI: LƯU & LẤY DỮ LIỆU ĐƠN GIẢN HÓA
+  activeDataFilePath: string;
+  activeDataFileName: string;
+  isFirstRun: boolean;
+  completeOnboarding: () => void;
+  handleUserSaveAs: () => Promise<{ success: boolean; message: string; filePath?: string }>;
+  handleUserOpenFile: (customFile?: File) => Promise<{ success: boolean; message: string; projectCount?: number }>;
 
   // Lưu trữ ổ cứng máy tính vật lý (Windows Local Storage Bridge)
   diskFilePath: string;
@@ -254,14 +266,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return DEFAULT_DISK_PATH;
     }
   });
+
+  // Tệp dữ liệu hoạt động chính (Active Data File & Onboarding)
+  const [activeDataFilePath, setActiveDataFilePathState] = useState<string>(() => {
+    try {
+      return localStorage.getItem(ACTIVE_DATA_FILE_KEY) || localStorage.getItem(DISK_PATH_STORAGE_KEY) || DEFAULT_DISK_PATH;
+    } catch {
+      return DEFAULT_DISK_PATH;
+    }
+  });
+
+  const activeDataFileName = useMemo(() => {
+    if (!activeDataFilePath) return '';
+    const parts = activeDataFilePath.split(/[\\/]/);
+    return parts[parts.length - 1] || activeDataFilePath;
+  }, [activeDataFilePath]);
+
+  const [isFirstRun, setIsFirstRun] = useState<boolean>(() => {
+    try {
+      const configured = localStorage.getItem(HAS_CONFIGURED_STORAGE_KEY);
+      return !configured;
+    } catch {
+      return false;
+    }
+  });
+
+  const completeOnboarding = useCallback(() => {
+    try {
+      localStorage.setItem(HAS_CONFIGURED_STORAGE_KEY, 'true');
+    } catch {}
+    setIsFirstRun(false);
+  }, []);
+
   const [isBridgeActive, setIsBridgeActive] = useState(false);
   const [lastDiskWriteTime, setLastDiskWriteTime] = useState('');
   const [diskFileSize, setDiskFileSize] = useState(0);
 
   const setDiskFilePath = (path: string) => {
     setDiskFilePathState(path);
+    setActiveDataFilePathState(path);
     try {
       localStorage.setItem(DISK_PATH_STORAGE_KEY, path);
+      localStorage.setItem(ACTIVE_DATA_FILE_KEY, path);
     } catch {
       // ignore
     }
@@ -329,9 +375,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 3. Ghi trực tiếp vào file JSON trên ổ cứng máy tính vật lý qua Local Storage Bridge API (Không cần quyền)
       const bridgeTargets = Array.from(new Set([
+        activeDataFilePath,
         diskFilePath,
         'D:\\1. BQL Ban Thach\\1. Du an\\projectm_data.json',
-        'D:\\1. BQL Ban Thach\\1. Du an\\Duan_Data.json',
       ])).filter(Boolean);
 
       for (const targetPath of bridgeTargets) {
@@ -386,7 +432,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.error('Lỗi lưu trữ dữ liệu:', e);
     }
-  }, [calculateStorage, diskFilePath]);
+  }, [calculateStorage, diskFilePath, activeDataFilePath]);
 
   // Debounce timer ref để tránh ghi đĩa quá nhiều khi database thay đổi liên tục
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1241,6 +1287,244 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // ==================== 4 YÊU CẦU MỚI: LƯU VÀ LẤY DỮ LIỆU ĐƠN GIẢN HÓA ====================
+  const handleUserSaveAs = async (): Promise<{ success: boolean; message: string; filePath?: string }> => {
+    try {
+      // 1. Thử qua Local Storage Bridge (mở hộp thoại SaveFileDialog của Windows trên máy tính)
+      const bridgeDialog = await browseSaveLocationViaBridge(activeDataFilePath || DEFAULT_DISK_PATH);
+      if (bridgeDialog.success && bridgeDialog.filePath) {
+        const chosenPath = bridgeDialog.filePath;
+        const now = new Date();
+        const dbWithMeta: AppDatabase = {
+          ...database,
+          metadata: {
+            ...database.metadata,
+            lastSavedAt: now.toISOString(),
+            totalProjects: database.projects.length,
+          },
+        };
+        const writeRes = await writeDatabaseToFileViaBridge(chosenPath, dbWithMeta);
+        if (writeRes.success) {
+          setActiveDataFilePathState(chosenPath);
+          setDiskFilePath(chosenPath);
+          try {
+            localStorage.setItem(ACTIVE_DATA_FILE_KEY, chosenPath);
+          } catch {}
+          completeOnboarding();
+          const fileName = chosenPath.split(/[\\/]/).pop() || chosenPath;
+          return {
+            success: true,
+            message: `Đã lưu và thiết lập tự động đồng bộ vào tệp "${fileName}".`,
+            filePath: chosenPath,
+          };
+        } else {
+          return {
+            success: false,
+            message: `Không thể ghi vào tệp: ${writeRes.message}`,
+          };
+        }
+      } else if (bridgeDialog.cancelled) {
+        return { success: false, message: 'Đã hủy chọn vị trí lưu.' };
+      }
+
+      // 2. Nếu không qua bridge (web browser / mobile), dùng Web File System Access API
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const windowAny = window as any;
+      if (windowAny.showSaveFilePicker) {
+        try {
+          const handle = await windowAny.showSaveFilePicker({
+            suggestedName: activeDataFileName || 'du_lieu_du_an.json',
+            types: [
+              {
+                description: 'File Dữ Liệu ProjectM (JSON)',
+                accept: { 'application/json': ['.json'] },
+              },
+            ],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(JSON.stringify(database, null, 2));
+          await writable.close();
+          fileHandleRef.current = handle;
+          setIsDirectFileConnected(true);
+          setConnectedFileName(handle.name);
+          setActiveDataFilePathState(handle.name);
+          try {
+            localStorage.setItem(ACTIVE_DATA_FILE_KEY, handle.name);
+          } catch {}
+          completeOnboarding();
+          return {
+            success: true,
+            message: `Đã lưu và kết nối tự động đồng bộ vào tệp "${handle.name}".`,
+            filePath: handle.name,
+          };
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            return { success: false, message: 'Đã hủy chọn vị trí lưu.' };
+          }
+        }
+      }
+
+      // 3. Dự phòng tải file về máy tính cho trình duyệt thông thường
+      await exportDatabaseToJson(activeDataFileName || 'du_lieu_du_an.json');
+      completeOnboarding();
+      return {
+        success: true,
+        message: 'Đã tải tệp dữ liệu về máy tính của bạn.',
+        filePath: activeDataFileName || 'du_lieu_du_an.json',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Lỗi khi lưu tệp: ${err?.message || 'Thao tác không thành công'}`,
+      };
+    }
+  };
+
+  const handleUserOpenFile = async (customFile?: File): Promise<{ success: boolean; message: string; projectCount?: number }> => {
+    try {
+      // Trường hợp 1: Có File object truyền vào (từ input[type=file] trên Web/Mobile hoặc kéo thả)
+      if (customFile) {
+        const ext = customFile.name.split('.').pop()?.toLowerCase();
+        if (ext === 'projectm') {
+          const inspected = await inspectBackupPackage(customFile);
+          if (!inspected.isValid || !inspected.database) {
+            return { success: false, message: inspected.errorMessage || 'Tệp gói sao lưu không hợp lệ.' };
+          }
+          await applyRestoreBackupPackage(inspected);
+          const fileName = customFile.name;
+          setActiveDataFilePathState(fileName);
+          try {
+            localStorage.setItem(ACTIVE_DATA_FILE_KEY, fileName);
+          } catch {}
+          completeOnboarding();
+          return {
+            success: true,
+            message: `Đã nạp thành công ${inspected.stats.projectsCount} dự án từ gói sao lưu "${fileName}".`,
+            projectCount: inspected.stats.projectsCount,
+          };
+        }
+
+        // Xử lý file JSON thông thường
+        const content = await customFile.text();
+        const parsed = JSON.parse(content);
+        if (!parsed || !Array.isArray(parsed.projects)) {
+          return { success: false, message: 'Tệp không đúng định dạng cơ sở dữ liệu ProjectM.' };
+        }
+        const loadedDb: AppDatabase = {
+          metadata: parsed.metadata || getDefaultDatabase().metadata,
+          projects: parsed.projects,
+          projectDetails: parsed.projectDetails || {},
+          estimates: parsed.estimates || {},
+          costPackages: parsed.costPackages || {},
+          inspections: parsed.inspections || {},
+          legalDocs: parsed.legalDocs || {},
+          planTasks: parsed.planTasks || {},
+          costBreakdowns: parsed.costBreakdowns || {},
+          contractAppendices: parsed.contractAppendices || {},
+          companies: parsed.companies || [],
+        };
+        setDatabase(loadedDb);
+        await saveDatabaseToIdb(loadedDb);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(loadedDb));
+        } catch {}
+        const fileName = customFile.name;
+        setActiveDataFilePathState(fileName);
+        try {
+          localStorage.setItem(ACTIVE_DATA_FILE_KEY, fileName);
+        } catch {}
+        completeOnboarding();
+        return {
+          success: true,
+          message: `Đã nạp thành công ${loadedDb.projects.length} dự án từ tệp "${fileName}".`,
+          projectCount: loadedDb.projects.length,
+        };
+      }
+
+      // Trường hợp 2: Chạy trên máy tính có Local Storage Bridge -> Mở hộp thoại OpenFileDialog Windows
+      const bridgeDialog = await browseOpenLocationViaBridge(activeDataFilePath || DEFAULT_DISK_PATH);
+      if (bridgeDialog.success && bridgeDialog.filePath) {
+        const chosenPath = bridgeDialog.filePath;
+        const readRes = await readDatabaseFromFileViaBridge(chosenPath);
+        if (readRes.success && readRes.data && Array.isArray(readRes.data.projects)) {
+          const loadedDb: AppDatabase = {
+            metadata: readRes.data.metadata || getDefaultDatabase().metadata,
+            projects: readRes.data.projects,
+            projectDetails: readRes.data.projectDetails || {},
+            estimates: readRes.data.estimates || {},
+            costPackages: readRes.data.costPackages || {},
+            inspections: readRes.data.inspections || {},
+            legalDocs: readRes.data.legalDocs || {},
+            planTasks: readRes.data.planTasks || {},
+            costBreakdowns: readRes.data.costBreakdowns || {},
+            contractAppendices: readRes.data.contractAppendices || {},
+            companies: readRes.data.companies || [],
+          };
+          setDatabase(loadedDb);
+          await saveDatabaseToIdb(loadedDb);
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(loadedDb));
+          } catch {}
+          setActiveDataFilePathState(chosenPath);
+          setDiskFilePath(chosenPath);
+          try {
+            localStorage.setItem(ACTIVE_DATA_FILE_KEY, chosenPath);
+          } catch {}
+          completeOnboarding();
+          const fileName = chosenPath.split(/[\\/]/).pop() || chosenPath;
+          return {
+            success: true,
+            message: `Đã nạp thành công ${loadedDb.projects.length} dự án từ tệp "${fileName}". Tệp này đã được đặt làm nơi lưu trữ tự động.`,
+            projectCount: loadedDb.projects.length,
+          };
+        } else {
+          return {
+            success: false,
+            message: `Không thể đọc dữ liệu từ tệp: ${readRes.message || 'Dữ liệu không đúng định dạng ProjectM'}`,
+          };
+        }
+      } else if (bridgeDialog.cancelled) {
+        return { success: false, message: 'Đã hủy chọn tệp.' };
+      }
+
+      // Trường hợp 3: Trình duyệt hỗ trợ showOpenFilePicker
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const windowAny = window as any;
+      if (windowAny.showOpenFilePicker) {
+        try {
+          const [handle] = await windowAny.showOpenFilePicker({
+            types: [
+              {
+                description: 'File Dữ Liệu ProjectM (JSON / .projectm)',
+                accept: {
+                  'application/json': ['.json'],
+                  'application/octet-stream': ['.projectm'],
+                },
+              },
+            ],
+            multiple: false,
+          });
+          const file = await handle.getFile();
+          return await handleUserOpenFile(file);
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            return { success: false, message: 'Đã hủy chọn tệp.' };
+          }
+        }
+      }
+
+      return {
+        success: false,
+        message: 'Vui lòng chọn một tệp JSON từ máy tính.',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Lỗi khi mở tệp: ${err?.message || 'Thao tác không thành công'}`,
+      };
+    }
+  };
+
   // ==================== KẾT NỐI FILE TRỰC TIẾP TRÊN ĐĨA (FILE SYSTEM ACCESS API) ====================
   const connectDirectFile = async (): Promise<{ success: boolean; message: string }> => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1656,6 +1940,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         storageSizeKb,
         isDirectFileConnected,
         connectedFileName,
+        activeDataFilePath,
+        activeDataFileName,
+        isFirstRun,
+        completeOnboarding,
+        handleUserSaveAs,
+        handleUserOpenFile,
         diskFilePath,
         setDiskFilePath,
         isBridgeActive,

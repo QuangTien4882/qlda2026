@@ -333,6 +333,68 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
           return;
         }
 
+        // 7. API Mở hộp thoại chọn file dữ liệu đã có (OpenFileDialog của Windows)
+        if (req.url === '/api/storage/browse-open' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', () => {
+            try {
+              let defaultPath = '';
+              try {
+                const parsed = JSON.parse(body || '{}');
+                defaultPath = parsed.defaultPath || '';
+              } catch (_) {}
+
+              let initialDir = '';
+              if (defaultPath) {
+                try {
+                  const resolved = path.resolve(defaultPath);
+                  initialDir = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
+                } catch (_) {}
+              }
+
+              const psScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$dlg = New-Object System.Windows.Forms.OpenFileDialog
+$dlg.Title = "Chọn file cơ sở dữ liệu ProjectM (.json / .projectm)"
+$dlg.Filter = "File dữ liệu ProjectM (*.json;*.projectm)|*.json;*.projectm|Tất cả các file (*.*)|*.*"
+${initialDir && fs.existsSync(initialDir) ? `$dlg.InitialDirectory = "${initialDir.replace(/\\/g, '\\\\')}"` : ''}
+$result = $dlg.ShowDialog()
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+  [Console]::Out.WriteLine($dlg.FileName)
+}
+`;
+              const b64 = Buffer.from(psScript, 'utf16le').toString('base64');
+              exec(
+                `powershell.exe -NoProfile -ExecutionPolicy Bypass -Sta -EncodedCommand ${b64}`,
+                { encoding: 'utf-8' },
+                (err, stdout) => {
+                  res.setHeader('Content-Type', 'application/json');
+                  if (err) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, message: `Lỗi mở hộp thoại Windows: ${err.message}` }));
+                    return;
+                  }
+                  const chosenPath = (stdout || '').trim();
+                  if (chosenPath) {
+                    res.end(JSON.stringify({ success: true, filePath: chosenPath }));
+                  } else {
+                    res.end(JSON.stringify({ success: false, cancelled: true, message: 'Người dùng đã hủy chọn.' }));
+                  }
+                }
+              );
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, message: err?.message }));
+            }
+          });
+          return;
+        }
+
         next();
       });
     },
